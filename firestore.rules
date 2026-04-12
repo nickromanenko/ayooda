@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users can only read/write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Workspace: only the owner can read/write
+    match /workspaces/{workspaceId} {
+      allow read, write: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+
+      match /knowledge/{docId} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+      }
+
+      match /channels/{channelId} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+      }
+
+      match /conversations/{conversationId} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+
+        match /messages/{messageId} {
+          allow read, write: if request.auth != null
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+        }
+      }
+    }
+  }
+}
