@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
+import { triggerScraper } from '../lib/scraper'
+import { namespaceFor } from '../lib/pinecone'
 
 const knowledge = new Hono<{ Variables: AuthVariables }>()
 
@@ -43,8 +45,8 @@ knowledge.post('/scrape', async (c) => {
     indexedAt: null,
   })
 
-  // TODO: trigger Cloud Run scraper job here once deployed
-  // await triggerScraperJob({ workspaceId, docId: docRef.id, url: normalised })
+  // Fire-and-forget: Cloud Run Job in prod, local Bun spawn in dev
+  triggerScraper({ workspaceId, docId: docRef.id, url: normalised })
 
   return c.json({ docId: docRef.id, status: 'pending' }, 201)
 })
@@ -70,12 +72,14 @@ knowledge.delete('/:id', async (c) => {
   const snap = await docRef.get()
   if (!snap.exists) return c.json({ error: 'Not found' }, 404)
 
+  // Delete Pinecone vectors (best-effort — don't block on failure)
+  try {
+    await namespaceFor(workspaceId).deleteMany({ docId })
+  } catch (err) {
+    console.warn(`[knowledge] Pinecone delete failed for doc ${docId}:`, err)
+  }
+
   await docRef.delete()
-
-  // TODO: delete vectors from Pinecone
-  // await pinecone.index(process.env.PINECONE_INDEX!).namespace(`workspace_${workspaceId}`)
-  //   .deleteMany({ filter: { docId } })
-
   return c.json({ ok: true })
 })
 
