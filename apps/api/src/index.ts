@@ -16,15 +16,16 @@ import authRoutes from './routes/auth'
 import workspaceRoutes from './routes/workspace'
 import knowledgeRoutes from './routes/knowledge'
 import channelRoutes from './routes/channels'
+import widgetRoutes from './routes/widget'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
 app.route('/knowledge', knowledgeRoutes)
 app.route('/channels', channelRoutes)
 
-// Routes will be added here:
-// import conversationRoutes from './routes/conversations'
-// import widgetRoutes from './routes/widget'
+// Widget routes are public (called from customer websites) — allow all origins
+app.use('/widget/*', cors({ origin: '*' }))
+app.route('/widget', widgetRoutes)
 
 const port = parseInt(process.env.PORT ?? '3001')
 console.log(`API running on http://localhost:${port}`)

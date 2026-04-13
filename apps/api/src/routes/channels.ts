@@ -51,6 +51,9 @@ channels.post('/web-widget', async (c) => {
   const batch = adminDb.batch()
 
   batch.set(channelRef, {
+    // Store workspaceId + id as fields so widget routes can look up by channelId
+    workspaceId,
+    id: channelId,
     type: 'web_widget',
     config: {
       widgetColor: '#6366f1',
