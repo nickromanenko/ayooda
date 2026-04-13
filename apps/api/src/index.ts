@@ -16,12 +16,14 @@ import authRoutes from './routes/auth'
 import workspaceRoutes from './routes/workspace'
 import knowledgeRoutes from './routes/knowledge'
 import channelRoutes from './routes/channels'
+import conversationRoutes from './routes/conversations'
 import widgetRoutes from './routes/widget'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
 app.route('/knowledge', knowledgeRoutes)
 app.route('/channels', channelRoutes)
+app.route('/conversations', conversationRoutes)
 
 // Widget routes are public (called from customer websites) — allow all origins
 app.use('/widget/*', cors({ origin: '*' }))
