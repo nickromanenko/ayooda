@@ -1,5 +1,13 @@
-// LLM Providers
-export type LLMProvider = 'claude' | 'openai' | 'gemini'
+// LLM Providers (Claude, OpenAI, Gemini planned — Gemini only in v1)
+export type LLMProvider = 'gemini' | 'claude' | 'openai'
+
+// Gemini model options — update IDs to match actual available models
+export const GEMINI_MODELS = [
+  { id: 'gemini-2.5-flash', label: 'Flash', description: 'Fast · Best for most cases' },
+  { id: 'gemini-2.5-pro', label: 'Pro', description: 'Smarter · Better for complex topics' },
+] as const
+
+export type GeminiModelId = (typeof GEMINI_MODELS)[number]['id']
 
 // Knowledge base
 export type KnowledgeDocType = 'webpage' | 'file'
@@ -11,6 +19,9 @@ export type MessageRole = 'user' | 'assistant' | 'operator'
 
 // Channels
 export type ChannelType = 'web_widget' | 'telegram'
+
+// Agent tone used during onboarding to build the system prompt
+export type AgentTone = 'professional' | 'friendly' | 'casual'
 
 // Firestore models
 export interface UserDoc {
@@ -26,9 +37,7 @@ export interface AgentConfig {
   photoURL: string | null
   description: string
   systemPrompt: string
-  llmProvider: LLMProvider
-  llmApiKey: string
-  llmModel: string
+  llmModel: GeminiModelId
 }
 
 export interface WorkspaceUsage {
@@ -40,6 +49,7 @@ export interface WorkspaceDoc {
   name: string
   ownerId: string
   createdAt: Date
+  onboardingComplete: boolean
   agent: AgentConfig
   usage: WorkspaceUsage
 }
@@ -72,7 +82,7 @@ export interface ChannelDoc {
 
 export interface MessageMetadata {
   sources: Array<{ docId: string; source: string; score: number }>
-  llmProvider?: string
+  llmModel?: string
   promptTokens?: number
   completionTokens?: number
 }

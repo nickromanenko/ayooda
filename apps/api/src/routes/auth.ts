@@ -53,14 +53,13 @@ auth.post('/verify', async (c) => {
     name: name ? `${name}'s workspace` : 'My workspace',
     ownerId: uid,
     createdAt: now,
+    onboardingComplete: false,
     agent: {
       name: 'Support Agent',
       photoURL: null,
       description: '',
       systemPrompt: 'You are a helpful customer support agent. Answer questions based on the provided context.',
-      llmProvider: 'claude',
-      llmApiKey: '',
-      llmModel: 'claude-opus-4-6',
+      llmModel: 'gemini-2.5-flash',
     },
     usage: {
       conversationCount: 0,

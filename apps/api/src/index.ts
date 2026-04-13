@@ -13,13 +13,17 @@ app.use('*', cors({
 app.get('/health', (c) => c.json({ ok: true }))
 
 import authRoutes from './routes/auth'
+import workspaceRoutes from './routes/workspace'
+import knowledgeRoutes from './routes/knowledge'
+import channelRoutes from './routes/channels'
+
 app.route('/auth', authRoutes)
+app.route('/workspace', workspaceRoutes)
+app.route('/knowledge', knowledgeRoutes)
+app.route('/channels', channelRoutes)
 
 // Routes will be added here:
-// import workspaceRoutes from './routes/workspace'
-// import knowledgeRoutes from './routes/knowledge'
 // import conversationRoutes from './routes/conversations'
-// import channelRoutes from './routes/channels'
 // import widgetRoutes from './routes/widget'
 
 const port = parseInt(process.env.PORT ?? '3001')
