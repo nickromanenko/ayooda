@@ -1,0 +1,76 @@
+import { Hono } from 'hono'
+import { adminAuth, adminDb } from '../lib/firebase-admin'
+
+const auth = new Hono()
+
+/**
+ * POST /auth/verify
+ * Called by the frontend after Firebase login.
+ * Creates the user document and workspace on first sign-in (idempotent).
+ */
+auth.post('/verify', async (c) => {
+  const authorization = c.req.header('Authorization')
+  if (!authorization?.startsWith('Bearer ')) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const idToken = authorization.slice(7)
+
+  let decodedToken
+  try {
+    decodedToken = await adminAuth.verifyIdToken(idToken)
+  } catch {
+    return c.json({ error: 'Invalid token' }, 401)
+  }
+
+  const { uid, email, name, picture } = decodedToken
+
+  // Check if user already exists
+  const userRef = adminDb.doc(`users/${uid}`)
+  const userSnap = await userRef.get()
+
+  if (userSnap.exists) {
+    const userData = userSnap.data()!
+    return c.json({ workspaceId: userData.workspaceId })
+  }
+
+  // First login — create user + workspace atomically
+  const workspaceRef = adminDb.collection('workspaces').doc()
+  const workspaceId = workspaceRef.id
+  const now = new Date()
+
+  const batch = adminDb.batch()
+
+  batch.set(userRef, {
+    email: email ?? '',
+    displayName: name ?? '',
+    photoURL: picture ?? null,
+    workspaceId,
+    createdAt: now,
+  })
+
+  batch.set(workspaceRef, {
+    name: name ? `${name}'s workspace` : 'My workspace',
+    ownerId: uid,
+    createdAt: now,
+    agent: {
+      name: 'Support Agent',
+      photoURL: null,
+      description: '',
+      systemPrompt: 'You are a helpful customer support agent. Answer questions based on the provided context.',
+      llmProvider: 'claude',
+      llmApiKey: '',
+      llmModel: 'claude-opus-4-6',
+    },
+    usage: {
+      conversationCount: 0,
+      tokenCount: 0,
+    },
+  })
+
+  await batch.commit()
+
+  return c.json({ workspaceId }, 201)
+})
+
+export default auth

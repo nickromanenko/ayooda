@@ -12,8 +12,10 @@ app.use('*', cors({
 
 app.get('/health', (c) => c.json({ ok: true }))
 
+import authRoutes from './routes/auth'
+app.route('/auth', authRoutes)
+
 // Routes will be added here:
-// import authRoutes from './routes/auth'
 // import workspaceRoutes from './routes/workspace'
 // import knowledgeRoutes from './routes/knowledge'
 // import conversationRoutes from './routes/conversations'

@@ -76,6 +76,9 @@ importers:
       firebase:
         specifier: ^11.6.1
         version: 11.10.0
+      firebase-admin:
+        specifier: ^12.2.0
+        version: 12.7.0(encoding@0.1.13)
       lucide-react:
         specifier: ^0.503.0
         version: 0.503.0(react@19.2.4)
