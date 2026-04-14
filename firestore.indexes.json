@@ -17,13 +17,6 @@
       ]
     },
     {
-      "collectionGroup": "channels",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "id", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "knowledge",
       "queryScope": "COLLECTION",
       "fields": [
