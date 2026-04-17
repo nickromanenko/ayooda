@@ -5,7 +5,7 @@ export default defineConfig({
     lib: {
       entry: 'src/index.ts',
       name: 'AyoodaWidget',
-      fileName: 'widget',
+      fileName: () => 'widget.js',
       formats: ['iife'],
     },
     rollupOptions: {
