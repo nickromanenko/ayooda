@@ -6,7 +6,6 @@ import { Check } from 'lucide-react'
 import { StepIdentity, type IdentityData } from './StepIdentity'
 import { StepKnowledge } from './StepKnowledge'
 import { StepDeploy } from './StepDeploy'
-import { cn } from '@/lib/utils'
 
 const STEPS = [
   { label: 'Your agent' },
@@ -35,40 +34,42 @@ export function OnboardingWizard() {
   return (
     <div>
       {/* Step indicator */}
-      <nav className="flex items-center justify-center gap-0 mb-10">
+      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, marginBottom: 40 }}>
         {STEPS.map((s, i) => {
           const num = i + 1
           const done = num < step
           const active = num === step
           return (
-            <div key={s.label} className="flex items-center">
-              <div className="flex flex-col items-center gap-1.5">
-                <div
-                  className={cn(
-                    'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors',
-                    done && 'bg-indigo-600 text-white',
-                    active && 'bg-indigo-600 text-white ring-4 ring-indigo-100',
-                    !done && !active && 'bg-zinc-100 text-zinc-400',
-                  )}
-                >
-                  {done ? <Check size={14} /> : num}
+            <div key={s.label} style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 50,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)',
+                  background: done || active ? 'var(--accent)' : 'var(--panel-2)',
+                  color: done || active ? '#1a0e08' : 'var(--ink-mute)',
+                  boxShadow: active ? '0 0 0 4px var(--accent-soft)' : 'none',
+                  transition: 'all .2s',
+                }}>
+                  {done ? <Check size={14} strokeWidth={2.5} /> : num}
                 </div>
-                <span
-                  className={cn(
-                    'text-xs font-medium',
-                    active ? 'text-zinc-900' : 'text-zinc-400',
-                  )}
-                >
+                <span style={{
+                  fontSize: 11.5,
+                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase' as const,
+                  color: active ? 'var(--ink)' : 'var(--ink-mute)',
+                }}>
                   {s.label}
                 </span>
               </div>
               {i < STEPS.length - 1 && (
-                <div
-                  className={cn(
-                    'w-24 h-px mx-2 mb-5',
-                    num < step ? 'bg-indigo-300' : 'bg-zinc-200',
-                  )}
-                />
+                <div style={{
+                  width: 80, height: 1, margin: '0 8px',
+                  marginBottom: 20,
+                  background: num < step ? 'var(--accent)' : 'var(--line-2)',
+                  transition: 'background .3s',
+                }} />
               )}
             </div>
           )

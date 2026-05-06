@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Loader2, Check } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { apiRequest } from '@/lib/api'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { GEMINI_MODELS, type GeminiModelId, type AgentTone } from '@ayooda/shared'
@@ -30,6 +29,19 @@ function buildSystemPrompt(name: string, description: string, tone: AgentTone): 
   return parts.join('\n\n')
 }
 
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 14px',
+  borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)',
+  background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14,
+  outline: 'none', fontFamily: 'var(--font-sans)', transition: 'border-color .15s',
+  boxSizing: 'border-box',
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: 12, fontFamily: 'var(--font-mono)',
+  letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 8,
+}
+
 export default function AgentPage() {
   const { workspace, loading: wsLoading } = useWorkspace()
 
@@ -41,13 +53,11 @@ export default function AgentPage() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
-  // Pre-populate from workspace
   useEffect(() => {
     if (!workspace) return
     setName(workspace.agent.name)
     setDescription(workspace.agent.description)
     setLlmModel(workspace.agent.llmModel)
-    // Infer tone from system prompt (best-effort)
     const sp = workspace.agent.systemPrompt ?? ''
     if (sp.includes('professional')) setTone('professional')
     else if (sp.includes('casual')) setTone('casual')
@@ -78,69 +88,66 @@ export default function AgentPage() {
 
   if (wsLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-zinc-400 py-12 justify-center">
-        <Loader2 size={16} className="animate-spin" /> Loading…
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink-mute)', padding: '48px 0', justifyContent: 'center' }}>
+        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} /> Loading…
       </div>
     )
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-zinc-900">Agent</h1>
-        <p className="text-sm text-zinc-500 mt-0.5">Configure your AI support agent's identity and model.</p>
+    <div style={{ maxWidth: 640, margin: '0 auto' }}>
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Agent</h1>
+        <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Configure your AI support agent's identity and model.</p>
       </div>
 
-      <form onSubmit={(e) => void handleSubmit(e)} className="bg-white rounded-xl border border-zinc-200 p-6 space-y-6">
+      <form onSubmit={(e) => void handleSubmit(e)} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
         {/* Name */}
         <div>
-          <label htmlFor="agent-name" className="block text-sm font-medium text-zinc-700 mb-1.5">
-            Agent name <span className="text-red-500">*</span>
+          <label htmlFor="agent-name" style={labelStyle}>
+            Agent name <span style={{ color: 'var(--accent)' }}>*</span>
           </label>
           <input
-            id="agent-name"
-            type="text"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            id="agent-name" type="text" required
+            value={name} onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Aria, Max, Support Bot"
-            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            style={inputStyle}
+            onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+            onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
           />
         </div>
 
         {/* Description */}
         <div>
-          <label htmlFor="description" className="block text-sm font-medium text-zinc-700 mb-1.5">
-            What does it help with?
-          </label>
+          <label htmlFor="description" style={labelStyle}>What does it help with?</label>
           <textarea
-            id="description"
-            rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            id="description" rows={2}
+            value={description} onChange={(e) => setDescription(e.target.value)}
             placeholder="e.g. Handles product questions, pricing, and onboarding for Acme SaaS"
-            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-900 resize-none placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            style={{ ...inputStyle, resize: 'none' }}
+            onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+            onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
           />
         </div>
 
         {/* Tone */}
         <div>
-          <p className="text-sm font-medium text-zinc-700 mb-2">Tone</p>
-          <div className="grid grid-cols-3 gap-2">
+          <p style={labelStyle}>Tone</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {TONE_OPTIONS.map((t) => (
               <button
-                key={t.value}
-                type="button"
-                onClick={() => setTone(t.value)}
-                className={cn(
-                  'flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-lg border text-left transition-colors',
-                  tone === t.value
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                    : 'border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50',
-                )}
+                key={t.value} type="button" onClick={() => setTone(t.value)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
+                  padding: '12px 14px', borderRadius: 'var(--r-sm)', textAlign: 'left',
+                  cursor: 'pointer', transition: 'all .15s',
+                  border: `1px solid ${tone === t.value ? 'var(--accent)' : 'var(--line)'}`,
+                  background: tone === t.value ? 'var(--accent-soft)' : 'var(--bg-2)',
+                  color: 'var(--ink)',
+                }}
               >
-                <span className="text-sm font-medium">{t.label}</span>
-                <span className="text-xs opacity-70">{t.hint}</span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{t.label}</span>
+                <span style={{ fontSize: 11.5, color: 'var(--ink-mute)' }}>{t.hint}</span>
               </button>
             ))}
           </div>
@@ -148,42 +155,49 @@ export default function AgentPage() {
 
         {/* Model */}
         <div>
-          <p className="text-sm font-medium text-zinc-700 mb-2">AI model</p>
-          <div className="grid grid-cols-2 gap-2">
+          <p style={labelStyle}>AI model</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
             {GEMINI_MODELS.map((m) => (
               <button
-                key={m.id}
-                type="button"
-                onClick={() => setLlmModel(m.id)}
-                className={cn(
-                  'flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-lg border text-left transition-colors',
-                  llmModel === m.id
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                    : 'border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50',
-                )}
+                key={m.id} type="button" onClick={() => setLlmModel(m.id)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
+                  padding: '12px 14px', borderRadius: 'var(--r-sm)', textAlign: 'left',
+                  cursor: 'pointer', transition: 'all .15s',
+                  border: `1px solid ${llmModel === m.id ? 'var(--accent)' : 'var(--line)'}`,
+                  background: llmModel === m.id ? 'var(--accent-soft)' : 'var(--bg-2)',
+                  color: 'var(--ink)',
+                }}
               >
-                <span className="text-sm font-medium">Gemini {m.label}</span>
-                <span className="text-xs opacity-70">{m.description}</span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>Gemini {m.label}</span>
+                <span style={{ fontSize: 11.5, color: 'var(--ink-mute)' }}>{m.description}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+        {error && (
+          <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13 }}>
+            {error}
+          </div>
+        )}
 
         <button
           type="submit"
           disabled={saving || !name.trim()}
-          className={cn(
-            'w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            saved ? 'bg-emerald-500' : 'bg-indigo-600 hover:bg-indigo-700',
-          )}
+          className="btn btn-primary"
+          style={{
+            justifyContent: 'center', borderRadius: 'var(--r-sm)',
+            opacity: saving || !name.trim() ? 0.5 : 1,
+            cursor: saving || !name.trim() ? 'not-allowed' : 'pointer',
+            background: saved ? 'var(--mint)' : undefined,
+            color: saved ? '#081a10' : undefined,
+          }}
         >
           {saving ? (
-            <span className="flex items-center justify-center gap-2"><Loader2 size={14} className="animate-spin" /> Saving…</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving…</span>
           ) : saved ? (
-            <span className="flex items-center justify-center gap-2"><Check size={14} /> Saved</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Check size={14} /> Saved</span>
           ) : (
             'Save changes'
           )}

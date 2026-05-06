@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { apiRequest } from '@/lib/api'
 import type { KnowledgeDocStatus } from '@ayooda/shared'
 
@@ -15,26 +14,26 @@ interface KnowledgeDoc {
   errorMessage: string | null
 }
 
-const STATUS_CONFIG: Record<KnowledgeDocStatus, { icon: React.ReactNode; label: string; classes: string }> = {
+const STATUS_CONFIG: Record<KnowledgeDocStatus, { icon: React.ReactNode; label: string; style: React.CSSProperties }> = {
   pending: {
-    icon: <Loader2 size={13} className="animate-spin" />,
+    icon: <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />,
     label: 'Queued',
-    classes: 'bg-zinc-100 text-zinc-500',
+    style: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
   },
   processing: {
-    icon: <Loader2 size={13} className="animate-spin" />,
+    icon: <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />,
     label: 'Indexing',
-    classes: 'bg-indigo-50 text-indigo-600',
+    style: { background: 'var(--accent-soft)', color: 'var(--accent)' },
   },
   indexed: {
-    icon: <CheckCircle2 size={13} />,
+    icon: <CheckCircle2 size={12} />,
     label: 'Indexed',
-    classes: 'bg-emerald-50 text-emerald-600',
+    style: { background: 'rgba(52,211,153,0.15)', color: 'var(--mint)' },
   },
   error: {
-    icon: <XCircle size={13} />,
+    icon: <XCircle size={12} />,
     label: 'Error',
-    classes: 'bg-red-50 text-red-600',
+    style: { background: 'rgba(239,68,68,0.1)', color: '#f87171' },
   },
 }
 
@@ -61,12 +60,10 @@ export default function KnowledgePage() {
     }
   }, [])
 
-  // Initial load
   useEffect(() => {
     fetchDocs().finally(() => setLoading(false))
   }, [fetchDocs])
 
-  // Poll every 4s while any job is active
   useEffect(() => {
     if (!hasActiveJobs(docs)) return
     const id = setInterval(fetchDocs, 4000)
@@ -76,14 +73,10 @@ export default function KnowledgePage() {
   async function handleAdd() {
     const trimmed = urlInput.trim()
     if (!trimmed) return
-
-    try {
-      new URL(trimmed)
-    } catch {
+    try { new URL(trimmed) } catch {
       setUrlError('Please enter a valid URL including https://')
       return
     }
-
     setAdding(true)
     setUrlError('')
     try {
@@ -115,95 +108,98 @@ export default function KnowledgePage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-zinc-900">Knowledge base</h1>
-        <p className="text-sm text-zinc-500 mt-0.5">
+    <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Knowledge base</h1>
+        <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>
           Pages your agent can reference when answering questions.
         </p>
       </div>
 
       {/* Add URL */}
-      <div className="bg-white rounded-xl border border-zinc-200 p-4 mb-6">
-        <p className="text-sm font-medium text-zinc-700 mb-3">Add a website URL</p>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 20, marginBottom: 20 }}>
+        <p style={{ fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }}>Add a website URL</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <Globe size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-mute)', pointerEvents: 'none' }} />
             <input
               type="url"
               value={urlInput}
               onChange={(e) => { setUrlInput(e.target.value); setUrlError('') }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAdd() } }}
               placeholder="https://yourwebsite.com"
-              className={cn(
-                'w-full pl-8 pr-3 py-2 rounded-lg border text-sm text-zinc-900',
-                'placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent',
-                urlError ? 'border-red-300' : 'border-zinc-300',
-              )}
+              style={{
+                width: '100%', paddingLeft: 36, paddingRight: 12, paddingTop: 9, paddingBottom: 9,
+                borderRadius: 'var(--r-sm)', border: `1px solid ${urlError ? '#f87171' : 'var(--line-2)'}`,
+                background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14,
+                outline: 'none', fontFamily: 'var(--font-sans)', boxSizing: 'border-box',
+              }}
+              onFocus={e => (e.currentTarget.style.borderColor = urlError ? '#f87171' : 'var(--accent)')}
+              onBlur={e => (e.currentTarget.style.borderColor = urlError ? '#f87171' : 'var(--line-2)')}
             />
           </div>
           <button
             type="button"
             onClick={() => void handleAdd()}
             disabled={adding || !urlInput.trim()}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white bg-indigo-600',
-              'hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
-            )}
+            className="btn btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 'var(--r-sm)', opacity: adding || !urlInput.trim() ? 0.5 : 1, cursor: adding || !urlInput.trim() ? 'not-allowed' : 'pointer' }}
           >
-            {adding ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            {adding ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={14} />}
             {adding ? 'Adding…' : 'Add'}
           </button>
         </div>
         {urlError && (
-          <p className="flex items-center gap-1.5 text-xs text-red-500 mt-2">
+          <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#f87171', marginTop: 8 }}>
             <AlertCircle size={12} /> {urlError}
           </p>
         )}
-        <p className="text-xs text-zinc-400 mt-2">
-          We&apos;ll crawl the page and its linked pages (up to 25 pages).
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 8 }}>
+          We'll crawl the page and its linked pages (up to 25 pages).
         </p>
       </div>
 
       {/* Doc list */}
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-zinc-400 py-8 justify-center">
-          <Loader2 size={16} className="animate-spin" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink-mute)', padding: '32px 0', justifyContent: 'center' }}>
+          <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />
           Loading…
         </div>
       ) : docs.length === 0 ? (
-        <div className="text-center py-16 text-zinc-400">
-          <Globe size={32} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No URLs added yet.</p>
-          <p className="text-xs mt-1">Add your website above to get started.</p>
+        <div style={{ textAlign: 'center', padding: '64px 0', color: 'var(--ink-mute)' }}>
+          <Globe size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+          <p style={{ fontSize: 13, margin: 0 }}>No URLs added yet.</p>
+          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--ink-faint)' }}>Add your website above to get started.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-zinc-200 divide-y divide-zinc-100">
-          {docs.map((doc) => {
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+          {docs.map((doc, i) => {
             const cfg = STATUS_CONFIG[doc.status]
             return (
-              <div key={doc.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-zinc-800 truncate">{doc.source}</p>
+              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{doc.source}</p>
                   {doc.status === 'indexed' && (
-                    <p className="text-xs text-zinc-400 mt-0.5">{doc.chunkCount} chunks indexed</p>
+                    <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>{doc.chunkCount} chunks indexed</p>
                   )}
                   {doc.status === 'error' && doc.errorMessage && (
-                    <p className="text-xs text-red-500 mt-0.5 truncate">{doc.errorMessage}</p>
+                    <p style={{ fontSize: 11, color: '#f87171', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.errorMessage}</p>
                   )}
                 </div>
-                <span className={cn('flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0', cfg.classes)}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, flexShrink: 0, ...cfg.style }}>
                   {cfg.icon} {cfg.label}
                 </span>
                 <button
                   type="button"
                   onClick={() => void handleDelete(doc.id)}
                   disabled={deletingId === doc.id}
-                  className="flex-shrink-0 p-1.5 rounded-md text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                  style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', opacity: deletingId === doc.id ? 0.4 : 1, transition: 'color .15s' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#f87171')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-mute)')}
                   aria-label="Delete"
                 >
                   {deletingId === doc.id
-                    ? <Loader2 size={14} className="animate-spin" />
+                    ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
                     : <Trash2 size={14} />}
                 </button>
               </div>

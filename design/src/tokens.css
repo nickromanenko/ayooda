@@ -1,6 +1,4 @@
-@import "tailwindcss";
-
-/* ─── Ayooda Design Tokens ─── */
+/* Ayooda — design tokens */
 :root {
   /* Surface */
   --bg: #0b0c10;
@@ -16,12 +14,12 @@
   --ink-mute: #8c8c84;
   --ink-faint: #5a5a54;
 
-  /* Accent — amber */
-  --accent: #f5a524;
-  --accent-2: #ffd27a;
-  --accent-soft: rgba(245, 165, 36, 0.14);
+  /* Accent — warm coral/amber, single family */
+  --accent: #ff764d;
+  --accent-2: #ffb38a;
+  --accent-soft: rgba(255, 118, 77, 0.14);
 
-  /* Secondary accents */
+  /* Secondary accents (low chroma) */
   --blue: #7aa2ff;
   --mint: #8be3b5;
   --violet: #b58bff;
@@ -36,25 +34,28 @@
   --shadow-soft: 0 1px 0 rgba(255,255,255,0.04) inset, 0 10px 40px rgba(0,0,0,0.35);
   --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 20px 60px rgba(0,0,0,0.45);
 
-  /* Fonts — set by next/font, fallbacks here */
-  --font-sans: var(--font-geist, "Geist"), ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: var(--font-fraunces, "Fraunces"), ui-serif, Georgia, serif;
-  --font-mono: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Fonts */
+  --font-sans: "Geist", "Inter var", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-display: "Fraunces", "Geist", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-/* Tailwind theme bridge */
-@theme inline {
-  --color-background: var(--bg);
-  --color-foreground: var(--ink);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+[data-theme="light"] {
+  --bg: #f7f5ef;
+  --bg-2: #efece3;
+  --panel: #ffffff;
+  --panel-2: #f4f1e8;
+  --line: rgba(10,10,10,0.08);
+  --line-2: rgba(10,10,10,0.16);
+  --ink: #14141a;
+  --ink-dim: #2a2a33;
+  --ink-mute: #5a5a60;
+  --ink-faint: #8a8a8f;
+  --shadow-soft: 0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 30px rgba(20,20,26,0.06);
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.6) inset, 0 16px 50px rgba(20,20,26,0.08);
 }
 
-html, body {
-  background: var(--bg);
-  color: var(--ink);
-}
-
+html, body { background: var(--bg); color: var(--ink); }
 body {
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11";
@@ -64,6 +65,7 @@ body {
 }
 
 * { box-sizing: border-box; }
+
 a { color: inherit; text-decoration: none; }
 
 .container {
@@ -73,7 +75,6 @@ a { color: inherit; text-decoration: none; }
   padding: 0 28px;
 }
 
-/* ─── Shared UI Components ─── */
 .eyebrow {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -90,9 +91,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: inline-flex; align-items: center; gap: 8px;
   padding: 12px 18px;
   border-radius: 999px;
   font-size: 14px;
@@ -102,8 +101,6 @@ a { color: inherit; text-decoration: none; }
   color: var(--ink);
   cursor: pointer;
   transition: transform .15s ease, background .2s ease, border-color .2s ease, color .2s ease;
-  font-family: var(--font-sans);
-  text-decoration: none;
 }
 .btn:hover { transform: translateY(-1px); }
 .btn-primary {
@@ -112,7 +109,7 @@ a { color: inherit; text-decoration: none; }
   border-color: transparent;
   font-weight: 600;
 }
-.btn-primary:hover { background: var(--accent-2); color: #1a0e08; }
+.btn-primary:hover { background: var(--accent-2); }
 .btn-ghost { border-color: var(--line); color: var(--ink-dim); }
 .btn-ghost:hover { border-color: var(--line-2); color: var(--ink); }
 
@@ -123,9 +120,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: inline-flex; align-items: center; gap: 8px;
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -135,16 +130,14 @@ a { color: inherit; text-decoration: none; }
 }
 
 .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+  width: 6px; height: 6px; border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
 ::selection { background: var(--accent); color: #1a0e08; }
 
-/* ─── Background patterns ─── */
+/* Subtle grid bg */
 .grid-bg {
   background-image:
     linear-gradient(var(--line) 1px, transparent 1px),
@@ -153,19 +146,25 @@ a { color: inherit; text-decoration: none; }
   background-position: -1px -1px;
 }
 
-/* ─── Reveal animations ─── */
+.noise::after {
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Smooth reveals */
 .reveal { opacity: 0; transform: translateY(14px); transition: opacity .9s ease, transform .9s ease; }
 .reveal.in { opacity: 1; transform: none; }
 
-/* ─── Keyframes ─── */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
+/* Keyframes reused */
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 @keyframes pulse-ring {
   0% { box-shadow: 0 0 0 0 var(--accent-soft); }
-  70% { box-shadow: 0 0 0 14px rgba(245,165,36,0); }
-  100% { box-shadow: 0 0 0 0 rgba(245,165,36,0); }
+  70% { box-shadow: 0 0 0 14px rgba(255,118,77,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,118,77,0); }
 }
 @keyframes typing-dot {
   0%, 60%, 100% { transform: translateY(0); opacity: .4; }
@@ -182,33 +181,4 @@ a { color: inherit; text-decoration: none; }
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
-}
-
-/* ─── Dashboard overrides ─── */
-.dash-sidebar {
-  background: var(--panel);
-  border-right: 1px solid var(--line);
-}
-
-.dash-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: var(--r-sm);
-  font-size: 13.5px;
-  color: var(--ink-mute);
-  transition: background .15s, color .15s;
-  text-decoration: none;
-}
-
-.dash-nav-item:hover {
-  background: var(--panel-2);
-  color: var(--ink);
-}
-
-.dash-nav-item.active {
-  background: var(--accent-soft);
-  color: var(--ink);
-  border: 1px solid rgba(245,165,36,0.2);
 }

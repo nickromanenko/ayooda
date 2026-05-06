@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 
@@ -20,15 +21,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
     const workspaceSnap = await db.doc(`workspaces/${workspaceId}`).get()
 
     if (!workspaceSnap.data()?.onboardingComplete) redirect('/onboarding')
-  } catch {
+  } catch (err) {
+    if (isRedirectError(err)) throw err
+    console.error('[dashboard/layout] session verification failed:', err)
     redirect('/login')
   }
 
   return (
-    <div className="flex h-full">
+    <div style={{ display: 'flex', height: '100%' }}>
       <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <main className="flex-1 overflow-y-auto bg-zinc-50 p-6">{children}</main>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-2)', padding: 24 }}>{children}</main>
       </div>
     </div>
   )

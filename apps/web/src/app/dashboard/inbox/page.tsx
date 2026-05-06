@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore'
 import { Loader2, MessageSquare, User, Bot, Send } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { db } from '@/lib/firebase'
 import { apiRequest } from '@/lib/api'
 import { useWorkspace } from '@/hooks/useWorkspace'
@@ -26,10 +25,10 @@ interface Message {
   createdAt: Timestamp | null
 }
 
-const STATUS_BADGE: Record<Conversation['status'], string> = {
-  bot: 'bg-indigo-50 text-indigo-600',
-  human: 'bg-amber-50 text-amber-600',
-  resolved: 'bg-zinc-100 text-zinc-400',
+const STATUS_STYLE: Record<Conversation['status'], React.CSSProperties> = {
+  bot: { background: 'var(--accent-soft)', color: 'var(--accent)' },
+  human: { background: 'rgba(245,165,36,0.18)', color: '#ffd27a' },
+  resolved: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
 }
 
 function formatTime(ts: Timestamp | null): string {
@@ -57,7 +56,6 @@ export default function InboxPage() {
 
   const workspaceId = workspace?.id
 
-  // Real-time conversation list
   useEffect(() => {
     if (!workspaceId) return
     const q = query(
@@ -70,7 +68,6 @@ export default function InboxPage() {
     return unsub
   }, [workspaceId])
 
-  // Real-time messages for selected conversation
   useEffect(() => {
     if (!workspaceId || !selectedId) { setMessages([]); return }
     const q = query(
@@ -83,7 +80,6 @@ export default function InboxPage() {
     return unsub
   }, [workspaceId, selectedId])
 
-  // Scroll to bottom when messages update
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -122,26 +118,26 @@ export default function InboxPage() {
 
   if (wsLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-zinc-400 py-12 justify-center">
-        <Loader2 size={16} className="animate-spin" /> Loading…
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink-mute)', padding: '48px 0', justifyContent: 'center' }}>
+        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} /> Loading…
       </div>
     )
   }
 
   return (
-    <div className="flex h-[calc(100vh-48px)] -m-6 overflow-hidden">
+    <div style={{ display: 'flex', height: 'calc(100vh - 48px)', margin: -24, overflow: 'hidden' }}>
       {/* Conversation list */}
-      <div className="w-72 flex-shrink-0 border-r border-zinc-200 bg-white flex flex-col">
-        <div className="px-4 py-3 border-b border-zinc-200">
-          <h1 className="text-sm font-semibold text-zinc-900">Inbox</h1>
-          <p className="text-xs text-zinc-400 mt-0.5">{conversations.length} conversations</p>
+      <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+          <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>Inbox</h1>
+          <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>{conversations.length} conversations</p>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div style={{ flex: 1, overflowY: 'auto' }}>
           {conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-400 gap-2 px-6 text-center">
-              <MessageSquare size={28} className="opacity-30" />
-              <p className="text-sm">No conversations yet.</p>
-              <p className="text-xs">They'll appear here when visitors start chatting.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ink-mute)', gap: 8, padding: '0 24px', textAlign: 'center' }}>
+              <MessageSquare size={28} style={{ opacity: 0.3 }} />
+              <p style={{ fontSize: 13, margin: 0 }}>No conversations yet.</p>
+              <p style={{ fontSize: 12, margin: 0, color: 'var(--ink-faint)' }}>They'll appear here when visitors start chatting.</p>
             </div>
           ) : (
             conversations.map((conv) => (
@@ -149,21 +145,24 @@ export default function InboxPage() {
                 key={conv.id}
                 type="button"
                 onClick={() => setSelectedId(conv.id)}
-                className={cn(
-                  'w-full text-left px-4 py-3 border-b border-zinc-100 hover:bg-zinc-50 transition-colors',
-                  selectedId === conv.id && 'bg-indigo-50 border-l-2 border-l-indigo-500',
-                )}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '12px 16px',
+                  borderBottom: '1px solid var(--line)',
+                  borderLeft: selectedId === conv.id ? '2px solid var(--accent)' : '2px solid transparent',
+                  background: selectedId === conv.id ? 'var(--accent-soft)' : 'transparent',
+                  cursor: 'pointer', transition: 'background .15s',
+                }}
+                onMouseEnter={e => { if (selectedId !== conv.id) (e.currentTarget as HTMLButtonElement).style.background = 'var(--panel-2)' }}
+                onMouseLeave={e => { if (selectedId !== conv.id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-zinc-600 truncate max-w-[120px]">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
                     {conv.visitorId.slice(0, 8)}…
                   </span>
-                  <span className="text-[10px] text-zinc-400 flex-shrink-0">
-                    {formatTime(conv.updatedAt)}
-                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--ink-faint)', flexShrink: 0 }}>{formatTime(conv.updatedAt)}</span>
                 </div>
-                <p className="text-xs text-zinc-500 truncate mb-1.5">{conv.lastMessage}</p>
-                <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', STATUS_BADGE[conv.status])}>
+                <p style={{ fontSize: 12, color: 'var(--ink-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '0 0 6px' }}>{conv.lastMessage}</p>
+                <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, ...STATUS_STYLE[conv.status] }}>
                   {conv.status}
                 </span>
               </button>
@@ -174,26 +173,31 @@ export default function InboxPage() {
 
       {/* Message thread */}
       {selectedId && selectedConv ? (
-        <div className="flex-1 flex flex-col bg-zinc-50">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-2)' }}>
           {/* Thread header */}
-          <div className="bg-white border-b border-zinc-200 px-5 py-3 flex items-center justify-between flex-shrink-0">
+          <div style={{ background: 'var(--panel)', borderBottom: '1px solid var(--line)', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div>
-              <p className="text-sm font-medium text-zinc-900">
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>
                 Visitor {selectedConv.visitorId.slice(0, 8)}…
               </p>
-              <p className="text-xs text-zinc-400">
-                Status: <span className="capitalize">{selectedConv.status}</span>
+              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+                Status: <span style={{ textTransform: 'capitalize' }}>{selectedConv.status}</span>
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {selectedConv.status === 'bot' && (
                 <button
                   type="button"
                   onClick={() => void handleTakeover()}
                   disabled={takingOver}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-amber-500 hover:bg-amber-600 transition-colors disabled:opacity-50"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                    background: 'var(--accent)', color: '#1a0e08', border: 'none', cursor: 'pointer',
+                    opacity: takingOver ? 0.5 : 1, transition: 'opacity .15s',
+                  }}
                 >
-                  {takingOver ? <Loader2 size={12} className="animate-spin" /> : <User size={12} />}
+                  {takingOver ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <User size={12} />}
                   Take over
                 </button>
               )}
@@ -201,7 +205,11 @@ export default function InboxPage() {
                 <button
                   type="button"
                   onClick={() => void handleResolve()}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-600 bg-zinc-100 hover:bg-zinc-200 transition-colors"
+                  style={{
+                    padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                    background: 'var(--panel-2)', color: 'var(--ink-dim)',
+                    border: '1px solid var(--line)', cursor: 'pointer',
+                  }}
                 >
                   Mark resolved
                 </button>
@@ -210,33 +218,39 @@ export default function InboxPage() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={cn(
-                  'flex gap-2 max-w-[75%]',
-                  msg.role === 'user' ? 'flex-row-reverse ml-auto' : 'flex-row',
-                )}
+                style={{
+                  display: 'flex', gap: 8, maxWidth: '75%',
+                  flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
+                  marginLeft: msg.role === 'user' ? 'auto' : undefined,
+                }}
               >
-                <div className={cn(
-                  'w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
-                  msg.role === 'user' ? 'bg-zinc-200' : msg.role === 'operator' ? 'bg-amber-100' : 'bg-indigo-100',
-                )}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2,
+                  background: msg.role === 'user' ? 'var(--panel-2)'
+                    : msg.role === 'operator' ? 'var(--accent-soft)'
+                    : 'rgba(99,102,241,0.15)',
+                }}>
                   {msg.role === 'user'
-                    ? <User size={12} className="text-zinc-500" />
+                    ? <User size={12} style={{ color: 'var(--ink-mute)' }} />
                     : msg.role === 'operator'
-                      ? <User size={12} className="text-amber-600" />
-                      : <Bot size={12} className="text-indigo-600" />}
+                      ? <User size={12} style={{ color: 'var(--accent)' }} />
+                      : <Bot size={12} style={{ color: '#818cf8' }} />}
                 </div>
-                <div className={cn(
-                  'px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap',
-                  msg.role === 'user'
-                    ? 'bg-zinc-200 text-zinc-800 rounded-tr-sm'
-                    : msg.role === 'operator'
-                      ? 'bg-amber-500 text-white rounded-tl-sm'
-                      : 'bg-white text-zinc-800 border border-zinc-200 rounded-tl-sm',
-                )}>
+                <div style={{
+                  padding: '8px 12px', borderRadius: 16, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap',
+                  borderTopRightRadius: msg.role === 'user' ? 4 : 16,
+                  borderTopLeftRadius: msg.role !== 'user' ? 4 : 16,
+                  background: msg.role === 'user' ? 'var(--panel-2)'
+                    : msg.role === 'operator' ? 'var(--accent)'
+                    : 'var(--panel)',
+                  color: msg.role === 'operator' ? '#1a0e08' : 'var(--ink-dim)',
+                  border: msg.role === 'assistant' ? '1px solid var(--line)' : 'none',
+                }}>
                   {msg.content}
                 </div>
               </div>
@@ -244,11 +258,11 @@ export default function InboxPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Reply input — only when operator has taken over */}
+          {/* Reply input */}
           {selectedConv.status === 'human' && (
             <form
               onSubmit={(e) => void handleSendReply(e)}
-              className="bg-white border-t border-zinc-200 px-4 py-3 flex gap-2 items-end flex-shrink-0"
+              style={{ background: 'var(--panel)', borderTop: '1px solid var(--line)', padding: '12px 16px', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}
             >
               <textarea
                 rows={1}
@@ -258,22 +272,33 @@ export default function InboxPage() {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSendReply(e as unknown as React.FormEvent) }
                 }}
                 placeholder="Reply as operator…"
-                className="flex-1 resize-none rounded-xl border border-zinc-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent max-h-28"
+                style={{
+                  flex: 1, resize: 'none', borderRadius: 12,
+                  border: '1px solid var(--line-2)', padding: '8px 12px',
+                  fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink)',
+                  outline: 'none', maxHeight: 112, fontFamily: 'var(--font-sans)',
+                }}
+                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
               />
               <button
                 type="submit"
                 disabled={sending || !reply.trim()}
-                className="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50 flex-shrink-0"
+                style={{
+                  padding: 10, borderRadius: 12, background: 'var(--accent)', border: 'none',
+                  color: '#1a0e08', cursor: 'pointer', flexShrink: 0,
+                  opacity: sending || !reply.trim() ? 0.5 : 1, transition: 'opacity .15s',
+                }}
               >
-                {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                {sending ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />}
               </button>
             </form>
           )}
           {selectedConv.status === 'bot' && (
-            <div className="bg-white border-t border-zinc-200 px-4 py-3 flex-shrink-0">
-              <p className="text-xs text-zinc-400 text-center">
+            <div style={{ background: 'var(--panel)', borderTop: '1px solid var(--line)', padding: '12px 16px', flexShrink: 0 }}>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', margin: 0 }}>
                 The bot is handling this conversation.{' '}
-                <button type="button" onClick={() => void handleTakeover()} className="text-amber-500 hover:underline font-medium">
+                <button type="button" onClick={() => void handleTakeover()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontWeight: 500, padding: 0, fontSize: 12 }}>
                   Take over
                 </button>{' '}
                 to reply.
@@ -282,10 +307,10 @@ export default function InboxPage() {
           )}
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center text-zinc-400 bg-zinc-50">
-          <div className="text-center">
-            <MessageSquare size={36} className="mx-auto mb-3 opacity-20" />
-            <p className="text-sm">Select a conversation to view messages</p>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-mute)', background: 'var(--bg-2)' }}>
+          <div style={{ textAlign: 'center' }}>
+            <MessageSquare size={36} style={{ margin: '0 auto 12px', opacity: 0.2 }} />
+            <p style={{ fontSize: 13, margin: 0 }}>Select a conversation to view messages</p>
           </div>
         </div>
       )}

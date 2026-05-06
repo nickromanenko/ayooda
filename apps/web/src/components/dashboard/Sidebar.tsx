@@ -12,7 +12,6 @@ import {
   LogOut,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
-import { cn } from '@/lib/utils'
 
 const navItems = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
@@ -36,64 +35,138 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-56 flex-shrink-0 flex flex-col bg-zinc-900 text-zinc-100 h-full">
+    <aside style={{
+      width: 220, flexShrink: 0,
+      display: 'flex', flexDirection: 'column',
+      background: 'var(--panel)',
+      borderRight: '1px solid var(--line)',
+      height: '100%',
+    }}>
       {/* Logo */}
-      <div className="px-4 py-5 border-b border-zinc-800">
-        <span className="text-base font-semibold tracking-tight text-white">Ayooda</span>
+      <div style={{ padding: '18px 16px 16px', borderBottom: '1px solid var(--line)' }}>
+        <Link href="/dashboard" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          color: 'var(--ink)', textDecoration: 'none',
+        }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
+            <circle cx="12" cy="12" r="4" fill="var(--accent)" />
+            <path d="M2.5 12h6M15.5 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 16 }}>Ayooda</span>
+        </Link>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-              isActive(item)
-                ? 'bg-zinc-700 text-white'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800',
-            )}
-          >
-            <item.icon size={16} />
-            {item.label}
-          </Link>
-        ))}
+      <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {navItems.map(item => {
+          const active = isActive(item)
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '8px 12px', borderRadius: 'var(--r-sm)',
+                fontSize: 13.5, fontWeight: active ? 500 : 400,
+                color: active ? 'var(--ink)' : 'var(--ink-mute)',
+                background: active ? 'var(--accent-soft)' : 'transparent',
+                border: active ? '1px solid rgba(245,165,36,0.18)' : '1px solid transparent',
+                textDecoration: 'none',
+                transition: 'background .15s, color .15s',
+              }}
+              onMouseEnter={e => {
+                if (!active) {
+                  e.currentTarget.style.background = 'var(--panel-2)'
+                  e.currentTarget.style.color = 'var(--ink)'
+                }
+              }}
+              onMouseLeave={e => {
+                if (!active) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = 'var(--ink-mute)'
+                }
+              }}
+            >
+              <item.icon size={15} strokeWidth={active ? 2 : 1.5} />
+              {item.label}
+            </Link>
+          )
+        })}
       </nav>
 
       {/* Bottom */}
-      <div className="px-2 py-4 border-t border-zinc-800 space-y-0.5">
-        {bottomItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-              isActive(item)
-                ? 'bg-zinc-700 text-white'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800',
-            )}
-          >
-            <item.icon size={16} />
-            {item.label}
-          </Link>
-        ))}
+      <div style={{ padding: '8px 8px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {bottomItems.map(item => {
+          const active = isActive(item)
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '8px 12px', borderRadius: 'var(--r-sm)',
+                fontSize: 13.5, fontWeight: active ? 500 : 400,
+                color: active ? 'var(--ink)' : 'var(--ink-mute)',
+                background: active ? 'var(--accent-soft)' : 'transparent',
+                border: active ? '1px solid rgba(245,165,36,0.18)' : '1px solid transparent',
+                textDecoration: 'none',
+                transition: 'background .15s, color .15s',
+              }}
+              onMouseEnter={e => {
+                if (!active) {
+                  e.currentTarget.style.background = 'var(--panel-2)'
+                  e.currentTarget.style.color = 'var(--ink)'
+                }
+              }}
+              onMouseLeave={e => {
+                if (!active) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = 'var(--ink-mute)'
+                }
+              }}
+            >
+              <item.icon size={15} strokeWidth={active ? 2 : 1.5} />
+              {item.label}
+            </Link>
+          )
+        })}
 
         {/* User + sign out */}
-        <div className="pt-2 mt-2 border-t border-zinc-800">
-          <div className="flex items-center gap-2 px-3 py-1.5 mb-1">
-            <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
+        <div style={{ marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px 8px' }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: 50,
+              background: 'var(--accent)', display: 'grid', placeItems: 'center',
+              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: '#1a0e08',
+              flexShrink: 0,
+            }}>
               {user?.displayName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
             </div>
-            <span className="text-xs text-zinc-400 truncate">
+            <span style={{ fontSize: 12.5, color: 'var(--ink-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user?.displayName ?? user?.email ?? 'Account'}
             </span>
           </div>
           <button
             onClick={signOut}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            style={{
+              all: 'unset', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 12px', borderRadius: 'var(--r-sm)',
+              fontSize: 13.5, color: 'var(--ink-mute)',
+              width: '100%', boxSizing: 'border-box',
+              transition: 'background .15s, color .15s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'var(--panel-2)'
+              e.currentTarget.style.color = 'var(--ink)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.color = 'var(--ink-mute)'
+            }}
           >
-            <LogOut size={16} />
+            <LogOut size={15} strokeWidth={1.5} />
             Sign out
           </button>
         </div>

@@ -2,17 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { Check, Copy, Loader2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { apiRequest } from '@/lib/api'
 import type { IdentityData } from './StepIdentity'
 
-export function StepDeploy({
-  identity,
-  onDone,
-}: {
-  identity: IdentityData
-  onDone: () => void
-}) {
+export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDone: () => void }) {
   const [embedCode, setEmbedCode] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
@@ -39,73 +32,85 @@ export function StepDeploy({
   }
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-900">
-          {identity.name} is ready to deploy 🎉
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)' }}>
+          {identity.name} is ready to deploy
         </h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Paste this script tag into the <code className="text-zinc-700 font-mono text-xs bg-zinc-100 px-1 py-0.5 rounded">&lt;head&gt;</code> or before the closing{' '}
-          <code className="text-zinc-700 font-mono text-xs bg-zinc-100 px-1 py-0.5 rounded">&lt;/body&gt;</code> tag of your website.
+        <p style={{ fontSize: 14, color: 'var(--ink-mute)', marginTop: 6 }}>
+          Paste this script tag into the{' '}
+          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent)' }}>&lt;head&gt;</code>
+          {' '}or before the closing{' '}
+          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent)' }}>&lt;/body&gt;</code>
+          {' '}tag of your website.
         </p>
       </div>
 
-      {/* Embed code box */}
+      {/* Embed code */}
       {embedCode ? (
-        <div className="relative">
-          <pre className="bg-zinc-900 text-zinc-100 text-xs font-mono rounded-xl p-4 pr-12 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
+        <div style={{ position: 'relative' }}>
+          <pre style={{
+            background: 'var(--bg)', color: 'var(--ink-dim)',
+            fontFamily: 'var(--font-mono)', fontSize: 12.5,
+            borderRadius: 'var(--r-md)', padding: '16px 48px 16px 16px',
+            border: '1px solid var(--line-2)',
+            overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+            lineHeight: 1.6, margin: 0,
+          }}>
             {embedCode}
           </pre>
           <button
-            type="button"
-            onClick={handleCopy}
-            className={cn(
-              'absolute top-3 right-3 p-1.5 rounded-lg transition-colors',
-              copied
-                ? 'bg-emerald-500 text-white'
-                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600',
-            )}
+            type="button" onClick={() => void handleCopy()}
+            style={{
+              position: 'absolute', top: 12, right: 12,
+              padding: '6px', borderRadius: 8, cursor: 'pointer',
+              background: copied ? 'var(--mint)' : 'var(--panel-2)',
+              border: '1px solid var(--line)',
+              color: copied ? '#081a10' : 'var(--ink-dim)',
+              display: 'flex', transition: 'all .15s',
+            }}
           >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
+            {copied ? <Check size={13} /> : <Copy size={13} />}
           </button>
         </div>
       ) : error ? (
-        <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+        <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13 }}>
+          {error}
+        </div>
       ) : (
-        <div className="flex items-center gap-2 text-sm text-zinc-500 py-4">
-          <Loader2 size={16} className="animate-spin" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--ink-mute)', padding: '16px 0' }}>
+          <Loader2 size={15} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />
           Generating your widget…
         </div>
       )}
 
-      {/* Instructions */}
+      {/* Install steps */}
       {embedCode && (
-        <div className="bg-zinc-50 rounded-xl border border-zinc-200 p-4 space-y-2.5">
-          <p className="text-sm font-medium text-zinc-700">How to install</p>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', margin: 0 }}>How to install</p>
           {[
             'Copy the script tag above',
-            'Paste it into your website\'s HTML — inside <head> or before </body>',
+            "Paste it into your website's HTML — inside <head> or before </body>",
             'The widget will appear automatically on every page',
-          ].map((step, i) => (
-            <div key={i} className="flex items-start gap-2.5">
-              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-medium flex items-center justify-center mt-0.5">
-                {i + 1}
-              </span>
-              <p className="text-sm text-zinc-600">{step}</p>
+          ].map((s, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <span style={{
+                flexShrink: 0, width: 22, height: 22, borderRadius: 50,
+                background: 'var(--accent-soft)', border: '1px solid rgba(245,165,36,0.25)',
+                color: 'var(--accent)', fontSize: 11, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'var(--font-mono)',
+              }}>{i + 1}</span>
+              <p style={{ fontSize: 13.5, color: 'var(--ink-dim)', margin: 0, lineHeight: 1.5 }}>{s}</p>
             </div>
           ))}
         </div>
       )}
 
       <button
-        type="button"
-        onClick={onDone}
-        disabled={!embedCode}
-        className={cn(
-          'w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white',
-          'bg-indigo-600 hover:bg-indigo-700 transition-colors',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-        )}
+        type="button" onClick={onDone} disabled={!embedCode}
+        className="btn btn-primary"
+        style={{ justifyContent: 'center', borderRadius: 'var(--r-sm)', opacity: !embedCode ? 0.5 : 1, cursor: !embedCode ? 'not-allowed' : 'pointer' }}
       >
         Go to dashboard →
       </button>

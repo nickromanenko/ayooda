@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ayooda — The AI support agent for modern teams</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Instrument+Serif:ital@0;1&family=Playfair+Display:ital,wght@0,400..700;1,400..700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="src/tokens.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="src/core.jsx"></script>
+  <script type="text/babel" src="src/sections_a.jsx"></script>
+  <script type="text/babel" src="src/sections_b.jsx"></script>
+  <script type="text/babel" src="src/sections_c.jsx"></script>
+  <script type="text/babel" src="src/tweaks.jsx"></script>
+
+  <script type="text/babel">
+    const { Nav, Hero, Logo, Reveal } = window.AyoodaCore;
+    const { LogoStrip, Why, SolutionsBand } = window.AyoodaSections1;
+    const { Features, HowItWorks, Integrations } = window.AyoodaSections2;
+    const { Testimonials, Pricing, FAQ, FinalCTA, Footer } = window.AyoodaSections3;
+    const { TweaksPanel, applyTweaks } = window.AyoodaTweaks;
+    // Share Reveal globally (sections reference it)
+    window.Reveal = Reveal;
+
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "theme": "dark",
+      "accent": "amber",
+      "fonts": "fraunces-geist",
+      "heroPct": "80"
+    }/*EDITMODE-END*/;
+
+    function App() {
+      const [tweaks, setTweaks] = React.useState(TWEAK_DEFAULTS);
+      const [tweaksOpen, setTweaksOpen] = React.useState(false);
+
+      // Tweaks host integration
+      React.useEffect(() => {
+        const handler = (e) => {
+          if (!e.data) return;
+          if (e.data.type === '__activate_edit_mode') setTweaksOpen(true);
+          if (e.data.type === '__deactivate_edit_mode') setTweaksOpen(false);
+        };
+        window.addEventListener('message', handler);
+        window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+        return () => window.removeEventListener('message', handler);
+      }, []);
+
+      React.useEffect(() => {
+        applyTweaks(tweaks);
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits: tweaks }, '*');
+      }, [tweaks]);
+
+      return (
+        <>
+          <Nav />
+          <main>
+            <Hero heroPct={tweaks.heroPct} />
+            <LogoStrip />
+            <Why />
+            <SolutionsBand />
+            <Features />
+            <HowItWorks />
+            <Integrations />
+            <Testimonials />
+            <Pricing />
+            <FAQ />
+            <FinalCTA />
+          </main>
+          <Footer />
+          <TweaksPanel
+            tweaks={tweaks}
+            setTweaks={setTweaks}
+            visible={tweaksOpen}
+            onClose={() => setTweaksOpen(false)}
+          />
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
