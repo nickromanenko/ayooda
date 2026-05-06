@@ -230,7 +230,7 @@ function ChatDemo() {
         </div>
       </div>
 
-      <div style={{ minHeight: 360, padding: '8px 14px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ height: 360, padding: '8px 14px 18px', display: 'flex', flexDirection: 'column', gap: 14, overflow: 'hidden', justifyContent: 'flex-end' }}>
         {visible.map((m, i) => <ChatBubble key={i} m={m} />)}
         {typing && <TypingIndicator />}
       </div>
@@ -345,19 +345,7 @@ function LogoStrip() {
         }}>
           Trusted by modern support teams at 10,000+ companies
         </p>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-          gap: '18px 36px', opacity: 0.7,
-        }}>
-          {companies.map(c => (
-            <div key={c} style={{
-              textAlign: 'center',
-              fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500,
-              color: 'var(--ink-dim)', letterSpacing: '-0.02em',
-            }}>{c}</div>
-          ))}
-        </div>
+        {/* logo grid hidden until real logos are ready */}
       </div>
     </section>
   )
@@ -898,7 +886,7 @@ function Integrations() {
 
 // ─── Testimonials ─────────────────────────────────────────────────────────────
 
-function QuoteCard({ q, name, role, company, idx }: { q: string; name: string; role: string; company: string; idx: number }) {
+function QuoteCard({ q, name, role, company, photo }: { q: string; name: string; role: string; company: string; photo: string }) {
   return (
     <article style={{
       padding: '28px 28px 24px', borderRadius: 'var(--r-lg)',
@@ -907,9 +895,9 @@ function QuoteCard({ q, name, role, company, idx }: { q: string; name: string; r
       position: 'relative', overflow: 'hidden',
     }}>
       <div style={{ position: 'absolute', top: -10, right: 22, fontFamily: 'var(--font-display)', fontSize: 110, color: 'var(--accent-soft)', lineHeight: 1, pointerEvents: 'none' }}>"</div>
-      <div style={{ width: '100%', height: 130, borderRadius: 12, marginBottom: 22, background: `linear-gradient(135deg, oklch(70% 0.12 ${40 + idx * 80}), oklch(85% 0.08 ${100 + idx * 60}))`, position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0 12px, transparent 12px 24px)' }} />
-        <div style={{ position: 'absolute', bottom: 10, left: 12, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>portrait · {company}</div>
+      <div style={{ width: '100%', height: 200, borderRadius: 12, marginBottom: 22, overflow: 'hidden', flexShrink: 0 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }} />
       </div>
       <p style={{ fontSize: 15.5, lineHeight: 1.6, color: 'var(--ink)', margin: 0, flex: 1, textWrap: 'pretty' as CSSProperties['textWrap'] }}>"{q}"</p>
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 22, paddingTop: 16 }}>
@@ -922,9 +910,9 @@ function QuoteCard({ q, name, role, company, idx }: { q: string; name: string; r
 
 function Testimonials() {
   const quotes = [
-    { q: "Around 60% of our tickets are now resolved without a human touching them. Ayooda handles them end-to-end — routing, lookups, even refunds.", name: 'Antonia Renard', role: 'Marketing Director', company: 'AFS Foil' },
-    { q: "The impact was immediate. Ayooda now handles all incoming chats and autonomously resolves about 40% of them, freeing the team for real problems.", name: 'Geoff Sarem', role: 'Head of Operations', company: 'Emmatt' },
-    { q: "Roughly 40% of requests are fully automated. The rest escalate cleanly to us — with summaries — so quality never slips even as we scale.", name: 'Jim Cohen', role: 'CEO', company: 'Spidervo' },
+    { q: "Around 60% of our tickets are now resolved without a human touching them. Ayooda handles them end-to-end — routing, lookups, even refunds.", name: 'Antonia Renard', role: 'Marketing Director', company: 'AFS Foil', photo: '/testimonials/antonia.jpg' },
+    { q: "The impact was immediate. Ayooda now handles all incoming chats and autonomously resolves about 40% of them, freeing the team for real problems.", name: 'Geoff Sarem', role: 'Head of Operations', company: 'Emmatt', photo: '/testimonials/geoff.jpg' },
+    { q: "Roughly 40% of requests are fully automated. The rest escalate cleanly to us — with summaries — so quality never slips even as we scale.", name: 'Jim Cohen', role: 'CEO', company: 'Spidervo', photo: '/testimonials/jim.jpg' },
   ]
   return (
     <section id="cases" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
@@ -940,7 +928,7 @@ function Testimonials() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
           {quotes.map((t, i) => (
             <Reveal key={i} delay={i * 90}>
-              <QuoteCard {...t} idx={i} />
+              <QuoteCard {...t} />
             </Reveal>
           ))}
         </div>
@@ -951,18 +939,78 @@ function Testimonials() {
 
 // ─── Pricing ──────────────────────────────────────────────────────────────────
 
-function PlanCard({ plan }: { plan: { name: string; price: number; color: string; feats: string[]; featured?: boolean } }) {
+const PLANS = [
+  {
+    name: 'Lite', price: 25, featured: false,
+    gradient: 'linear-gradient(135deg, #60a5fa 0%, #2563eb 100%)',
+    gradientSoft: 'linear-gradient(180deg, rgba(96,165,250,0.12) 0%, transparent 100%)',
+    borderActive: '#60a5fa',
+    textColor: '#fff',
+    aiCredit: 5, includedConvos: 100,
+    feats: [
+      'Collaborative inbox for all customer emails',
+      '$5 of AI conversations included',
+      'Let the AI handle and resolve tickets end-to-end',
+    ],
+  },
+  {
+    name: 'Core', price: 55, featured: true,
+    gradient: 'linear-gradient(135deg, #f5a524 0%, #b45309 100%)',
+    gradientSoft: 'linear-gradient(180deg, rgba(245,165,36,0.14) 0%, transparent 100%)',
+    borderActive: 'var(--accent)',
+    textColor: '#1a0e08',
+    aiCredit: 25, includedConvos: 500,
+    feats: [
+      'Organize and utilize customer information effectively',
+      '$25 of AI conversations included',
+      'Let the AI handle and resolve tickets end-to-end',
+    ],
+  },
+  {
+    name: 'Max', price: 195, featured: false,
+    gradient: 'linear-gradient(135deg, #c084fc 0%, #7c3aed 100%)',
+    gradientSoft: 'linear-gradient(180deg, rgba(192,132,252,0.12) 0%, transparent 100%)',
+    borderActive: '#c084fc',
+    textColor: '#fff',
+    aiCredit: 75, includedConvos: 1500,
+    feats: [
+      'AI-powered tools for maximum team productivity',
+      '$75 of AI conversations included',
+      'Let the AI handle and resolve tickets end-to-end',
+    ],
+  },
+] as const
+
+const SLIDER_STEPS = [50, 100, 250, 500, 750, 1000, 2500, 5000] as const
+
+function getPlanForConvos(convos: number) {
+  if (convos >= 1000) return PLANS[2]
+  if (convos >= 500) return PLANS[1]
+  return PLANS[0]
+}
+
+function getPayAsYouGo(convos: number) {
+  const plan = getPlanForConvos(convos)
+  const extra = Math.max(0, convos - plan.includedConvos)
+  return extra * 0.05
+}
+
+function PlanCard({ plan, active }: { plan: typeof PLANS[number]; active?: boolean }) {
+  const borderColor = active ? plan.borderActive : plan.featured ? plan.borderActive : 'var(--line)'
+  const glowColor = active ? plan.borderActive : 'transparent'
   return (
     <div style={{
       padding: '28px 26px 24px', borderRadius: 'var(--r-lg)',
-      border: `1px solid ${plan.featured ? 'var(--accent)' : 'var(--line)'}`,
-      background: plan.featured ? 'linear-gradient(180deg, var(--accent-soft), var(--panel))' : 'var(--panel)',
+      border: `1px solid ${borderColor}`,
+      background: `${plan.gradientSoft}, var(--panel)`,
       position: 'relative', display: 'flex', flexDirection: 'column', height: '100%',
+      transition: 'border-color .25s, box-shadow .25s',
+      boxShadow: active ? `0 0 0 3px ${glowColor}33` : 'none',
     }}>
       {plan.featured && (
-        <span style={{ position: 'absolute', top: -10, right: 18, padding: '3px 10px', borderRadius: 999, background: 'var(--accent)', color: '#1a0e08', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em' }}>MOST POPULAR</span>
+        <span style={{ position: 'absolute', top: -10, right: 18, padding: '3px 10px', borderRadius: 999, background: plan.gradient, color: plan.textColor, fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em' }}>MOST POPULAR</span>
       )}
-      <div style={{ width: 42, height: 42, borderRadius: 12, background: plan.color, marginBottom: 16, opacity: 0.9 }} />
+      <div style={{ width: 42, height: 42, borderRadius: 12, background: plan.gradient, marginBottom: 16 }} />
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 4 }}>Membership</div>
       <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, margin: 0, letterSpacing: '-0.02em' }}>{plan.name}</h3>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, margin: '14px 0 18px' }}>
@@ -972,7 +1020,7 @@ function PlanCard({ plan }: { plan: { name: string; price: number; color: string
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8, flex: 1 }}>
         {plan.feats.map(f => (
           <li key={f} style={{ display: 'flex', gap: 10, fontSize: 14, color: 'var(--ink-dim)' }}>
-            <span style={{ color: 'var(--accent)', flexShrink: 0 }}>✓</span>{f}
+            <span style={{ flexShrink: 0, background: plan.gradient, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>✓</span>{f}
           </li>
         ))}
       </ul>
@@ -984,13 +1032,11 @@ function PlanCard({ plan }: { plan: { name: string; price: number; color: string
 }
 
 function Pricing() {
-  const [convos, setConvos] = useState(500)
-  const cost = (convos * 0.05).toFixed(2)
-  const plans = [
-    { name: 'Mini', price: 45, color: 'var(--blue)', feats: ['Collaborative inbox', '$5 AI conversations', 'Email + live chat', '1 agent seat'] },
-    { name: 'Essentials', price: 95, color: 'var(--accent)', feats: ['Everything in Mini', '$25 AI conversations', 'Helpdesk + macros', 'Up to 4 seats'], featured: true },
-    { name: 'Plus', price: 295, color: 'var(--violet)', feats: ['Everything in Essentials', '$95 AI conversations', 'MCP + workflows', 'Unlimited seats + SSO'] },
-  ]
+  const [stepIdx, setStepIdx] = useState(0) // starts at 50 (index 0)
+  const convos = SLIDER_STEPS[stepIdx]
+  const activePlan = getPlanForConvos(convos)
+  const payg = getPayAsYouGo(convos)
+
   return (
     <section id="pricing" style={{ padding: '100px 0' }}>
       <div className="container">
@@ -1003,14 +1049,14 @@ function Pricing() {
           </Reveal>
           <Reveal delay={160}>
             <p style={{ color: 'var(--ink-dim)', fontSize: 17, maxWidth: 560, margin: 0 }}>
-              Pay a simple monthly membership, then usage-based AI pricing at $0.05 per resolved conversation.
+              Pay a simple monthly membership. AI conversations are included — extra usage billed at $0.05 each.
             </p>
           </Reveal>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginBottom: 36 }}>
-          {plans.map((p, i) => (
+          {PLANS.map((p, i) => (
             <Reveal key={p.name} delay={i * 90}>
-              <PlanCard plan={p} />
+              <PlanCard plan={p} active={activePlan.name === p.name} />
             </Reveal>
           ))}
         </div>
@@ -1018,19 +1064,42 @@ function Pricing() {
           <div style={{ padding: '26px 28px', borderRadius: 'var(--r-lg)', border: '1px solid var(--line)', background: 'var(--panel)', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 40, alignItems: 'center' }}>
             <div>
               <div className="eyebrow" style={{ marginBottom: 10 }}>Estimate your bill</div>
-              <h4 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500, margin: '0 0 16px', letterSpacing: '-0.01em' }}>
+              <h4 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500, margin: '0 0 20px', letterSpacing: '-0.01em' }}>
                 Drag to estimate your monthly AI conversations.
               </h4>
-              <input type="range" min="50" max="5000" step="10" value={convos} onChange={e => setConvos(+e.target.value)}
-                style={{ width: '100%', accentColor: 'var(--accent)', height: 6 }} />
+              <input
+                type="range" min={0} max={SLIDER_STEPS.length - 1} step={1} value={stepIdx}
+                onChange={e => setStepIdx(+e.target.value)}
+                style={{ width: '100%', accentColor: 'var(--accent)', height: 6 }}
+              />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
-                <span>50</span><span>5,000+</span>
+                {SLIDER_STEPS.map((s, i) => (
+                  <span key={s} style={{ color: i === stepIdx ? 'var(--accent)' : undefined, fontWeight: i === stepIdx ? 700 : undefined }}>
+                    {s >= 1000 ? `${s / 1000}k` : s}{s === 5000 ? '+' : ''}
+                  </span>
+                ))}
               </div>
             </div>
-            <div style={{ padding: '24px 28px', borderRadius: 14, background: 'linear-gradient(135deg, var(--accent) 0%, color-mix(in oklab, var(--accent) 60%, #000) 100%)', color: '#1a0e08', textAlign: 'center' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.75 }}>Estimated monthly</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 56, letterSpacing: '-0.03em', fontWeight: 500, marginTop: 4 }}>${cost}</div>
-              <div style={{ fontSize: 12.5, opacity: 0.8 }}>{convos.toLocaleString()} conversations · $0.05 each</div>
+            <div style={{ padding: '24px 28px', borderRadius: 14, background: activePlan.gradient, color: activePlan.textColor, transition: 'background .35s' }}>
+              {/* Plan badge */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.65 }}>
+                  {convos.toLocaleString()} conversations / mo
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', background: 'rgba(0,0,0,0.18)', padding: '3px 9px', borderRadius: 999 }}>
+                  {activePlan.name}
+                </span>
+              </div>
+              {/* Membership price */}
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 56, letterSpacing: '-0.03em', fontWeight: 500, lineHeight: 1 }}>
+                ${activePlan.price}
+                <span style={{ fontSize: 16, fontFamily: 'var(--font-sans)', fontWeight: 400, opacity: 0.65, marginLeft: 4 }}>/mo</span>
+              </div>
+              {/* Pay as you go row — always rendered to reserve space */}
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(0,0,0,0.15)', display: 'flex', justifyContent: 'space-between', fontSize: 13, opacity: payg > 0 ? 0.85 : 0, transition: 'opacity .2s' }}>
+                <span>Pay as you go:</span>
+                <span style={{ fontWeight: 600 }}>${payg % 1 === 0 ? payg.toFixed(0) : payg.toFixed(2)}</span>
+              </div>
             </div>
           </div>
         </Reveal>
