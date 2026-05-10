@@ -5,12 +5,15 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
   updateProfile,
+  type AuthCredential,
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { useAuth } from '@/components/providers/AuthProvider'
+import {
+  googleSignInOrPrepareLink,
+  completeGoogleLinkWithPassword,
+} from '@/lib/auth-linking'
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -53,6 +56,16 @@ function friendlyError(err: unknown): string {
       return ''
     case 'auth/popup-blocked':
       return 'Pop-up was blocked by your browser. Allow pop-ups for this site and try again.'
+    case 'auth/account-exists-with-different-credential':
+      return ''
+    case 'auth/credential-already-in-use':
+      return 'This Google account is already linked to another user.'
+    case 'auth/provider-already-linked':
+      return ''
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Incorrect email or password.'
     default:
       return err instanceof Error ? err.message : 'Something went wrong. Please try again.'
   }
@@ -67,18 +80,26 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [linkingState, setLinkingState] = useState<
+    null | { email: string; pendingCred: AuthCredential }
+  >(null)
+  const [linkPassword, setLinkPassword] = useState('')
 
   async function handleGoogleSignUp() {
     setLoading(true)
     setError('')
     try {
-      const provider = new GoogleAuthProvider()
-      const result = await signInWithPopup(auth, provider)
-      await createSession(result.user)
-      router.push('/dashboard')
-    } catch (err: unknown) {
-      const msg = friendlyError(err)
-      if (msg) setError(msg)
+      const outcome = await googleSignInOrPrepareLink()
+      if (outcome.kind === 'success') {
+        await createSession(outcome.user)
+        router.push('/dashboard')
+      } else if (outcome.kind === 'needs-link') {
+        setLinkingState({ email: outcome.email, pendingCred: outcome.pendingCred })
+      } else if (outcome.kind === 'error') {
+        const msg = friendlyError({ code: outcome.code })
+        if (msg) setError(msg)
+        else setError(outcome.message)
+      }
     } finally {
       setLoading(false)
     }
@@ -100,6 +121,32 @@ export default function SignupPage() {
     }
   }
 
+  async function handleLinkSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!linkingState) return
+    setLoading(true)
+    setError('')
+    try {
+      const linkedUser = await completeGoogleLinkWithPassword(
+        linkingState.email,
+        linkPassword,
+        linkingState.pendingCred,
+      )
+      await createSession(linkedUser)
+      router.push('/dashboard')
+    } catch (err: unknown) {
+      setError(friendlyError(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function cancelLinking() {
+    setLinkingState(null)
+    setLinkPassword('')
+    setError('')
+  }
+
   return (
     <div style={{
       background: 'var(--panel)',
@@ -108,103 +155,154 @@ export default function SignupPage() {
       padding: '32px 28px',
       boxShadow: 'var(--shadow-card)',
     }}>
-      <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', margin: '0 0 4px' }}>
-        Create an account
-      </h1>
-      <p style={{ color: 'var(--ink-mute)', fontSize: 14, margin: '0 0 24px' }}>
-        Start supporting your customers with AI — free for 14 days.
-      </p>
+      {linkingState ? (
+        <>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500, letterSpacing: '-0.02em', margin: '0 0 4px' }}>
+            You already have an account
+          </h1>
+          <p style={{ color: 'var(--ink-mute)', fontSize: 14, margin: '0 0 24px', lineHeight: 1.5 }}>
+            An account already exists for <strong style={{ color: 'var(--ink)' }}>{linkingState.email}</strong>. Enter your password to link Google sign-in to it.
+          </p>
 
-      {/* Google */}
-      <button
-        type="button"
-        onClick={handleGoogleSignUp}
-        disabled={loading}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          gap: 10, padding: '10px 16px',
-          borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)',
-          background: 'var(--bg-2)', color: 'var(--ink)',
-          fontSize: 14, fontWeight: 500, cursor: 'pointer',
-          transition: 'background .15s, border-color .15s',
-          fontFamily: 'var(--font-sans)',
-          opacity: loading ? 0.5 : 1,
-        }}
-        onMouseEnter={e => { if (!loading) e.currentTarget.style.background = 'var(--panel-2)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-2)' }}
-      >
-        <GoogleIcon />
-        Continue with Google
-      </button>
+          <form onSubmit={handleLinkSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label htmlFor="link-password" style={labelStyle}>Password</label>
+              <input
+                id="link-password" type="password" autoComplete="current-password" required autoFocus
+                value={linkPassword} onChange={e => setLinkPassword(e.target.value)}
+                placeholder="••••••••"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
+              />
+            </div>
 
-      <div style={{ position: 'relative', margin: '20px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-faint)', letterSpacing: '0.1em' }}>OR</span>
-        <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-      </div>
+            {error && (
+              <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13 }}>
+                {error}
+              </div>
+            )}
 
-      <form onSubmit={handleEmailSignUp} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div>
-          <label htmlFor="name" style={labelStyle}>Name</label>
-          <input
-            id="name" type="text" autoComplete="name"
-            value={name} onChange={e => setName(e.target.value)}
-            placeholder="Your name"
-            style={inputStyle}
-            onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-            onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
-          />
-        </div>
+            <button
+              type="submit" disabled={loading}
+              className="btn btn-primary"
+              style={{ justifyContent: 'center', opacity: loading ? 0.6 : 1, borderRadius: 'var(--r-sm)' }}
+            >
+              {loading ? 'Linking…' : 'Link & continue'}
+            </button>
 
-        <div>
-          <label htmlFor="email" style={labelStyle}>Email</label>
-          <input
-            id="email" type="email" autoComplete="email" required
-            value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            style={inputStyle}
-            onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-            onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
-          />
-        </div>
+            <button
+              type="button" onClick={cancelLinking} disabled={loading}
+              style={{
+                background: 'none', border: 'none', color: 'var(--ink-mute)',
+                fontSize: 13, cursor: 'pointer', padding: 4, fontFamily: 'var(--font-sans)',
+              }}
+            >
+              Use a different account
+            </button>
+          </form>
+        </>
+      ) : (
+        <>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', margin: '0 0 4px' }}>
+            Create an account
+          </h1>
+          <p style={{ color: 'var(--ink-mute)', fontSize: 14, margin: '0 0 24px' }}>
+            Start supporting your customers with AI — free for 14 days.
+          </p>
 
-        <div>
-          <label htmlFor="password" style={labelStyle}>Password</label>
-          <input
-            id="password" type="password" autoComplete="new-password" required minLength={8}
-            value={password} onChange={e => setPassword(e.target.value)}
-            placeholder="Min. 8 characters"
-            style={inputStyle}
-            onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-            onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
-          />
-        </div>
+          {/* Google */}
+          <button
+            type="button"
+            onClick={handleGoogleSignUp}
+            disabled={loading}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 10, padding: '10px 16px',
+              borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)',
+              background: 'var(--bg-2)', color: 'var(--ink)',
+              fontSize: 14, fontWeight: 500, cursor: 'pointer',
+              transition: 'background .15s, border-color .15s',
+              fontFamily: 'var(--font-sans)',
+              opacity: loading ? 0.5 : 1,
+            }}
+            onMouseEnter={e => { if (!loading) e.currentTarget.style.background = 'var(--panel-2)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-2)' }}
+          >
+            <GoogleIcon />
+            Continue with Google
+          </button>
 
-        {error && (
-          <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13 }}>
-            {error}
+          <div style={{ position: 'relative', margin: '20px 0', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-faint)', letterSpacing: '0.1em' }}>OR</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
           </div>
-        )}
 
-        <button
-          type="submit" disabled={loading}
-          className="btn btn-primary"
-          style={{ justifyContent: 'center', opacity: loading ? 0.6 : 1, borderRadius: 'var(--r-sm)' }}
-        >
-          {loading ? 'Creating account…' : 'Create account'}
-        </button>
-      </form>
+          <form onSubmit={handleEmailSignUp} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label htmlFor="name" style={labelStyle}>Name</label>
+              <input
+                id="name" type="text" autoComplete="name"
+                value={name} onChange={e => setName(e.target.value)}
+                placeholder="Your name"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
+              />
+            </div>
 
-      <p style={{ marginTop: 20, textAlign: 'center', fontSize: 13, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>
-        NO CREDIT CARD REQUIRED · 14-DAY FREE TRIAL
-      </p>
+            <div>
+              <label htmlFor="email" style={labelStyle}>Email</label>
+              <input
+                id="email" type="email" autoComplete="email" required
+                value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
+              />
+            </div>
 
-      <p style={{ marginTop: 12, textAlign: 'center', fontSize: 13.5, color: 'var(--ink-mute)' }}>
-        Already have an account?{' '}
-        <Link href="/login" style={{ color: 'var(--accent)', fontWeight: 500 }}>
-          Sign in
-        </Link>
-      </p>
+            <div>
+              <label htmlFor="password" style={labelStyle}>Password</label>
+              <input
+                id="password" type="password" autoComplete="new-password" required minLength={8}
+                value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="Min. 8 characters"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
+              />
+            </div>
+
+            {error && (
+              <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13 }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit" disabled={loading}
+              className="btn btn-primary"
+              style={{ justifyContent: 'center', opacity: loading ? 0.6 : 1, borderRadius: 'var(--r-sm)' }}
+            >
+              {loading ? 'Creating account…' : 'Create account'}
+            </button>
+          </form>
+
+          <p style={{ marginTop: 20, textAlign: 'center', fontSize: 13, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>
+            NO CREDIT CARD REQUIRED · 14-DAY FREE TRIAL
+          </p>
+
+          <p style={{ marginTop: 12, textAlign: 'center', fontSize: 13.5, color: 'var(--ink-mute)' }}>
+            Already have an account?{' '}
+            <Link href="/login" style={{ color: 'var(--accent)', fontWeight: 500 }}>
+              Sign in
+            </Link>
+          </p>
+        </>
+      )}
     </div>
   )
 }
