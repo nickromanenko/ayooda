@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "ayooda-1791f"
+  },
+  "targets": {
+    "ayooda-1791f": {
+      "hosting": {
+        "widget": ["ayooda-widget"],
+        "api": ["ayooda-api"]
+      }
+    }
   }
 }

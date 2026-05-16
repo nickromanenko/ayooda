@@ -1,17 +1,31 @@
 {
-  "hosting": {
-    "public": "apps/widget/dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "headers": [
-      {
-        "source": "/widget.js",
-        "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=86400" },
-          { "key": "Access-Control-Allow-Origin", "value": "*" }
-        ]
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "widget",
+      "public": "apps/widget/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "headers": [
+        {
+          "source": "/widget.js",
+          "headers": [
+            { "key": "Cache-Control", "value": "public, max-age=86400" },
+            { "key": "Access-Control-Allow-Origin", "value": "*" }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "api",
+      "public": "apps/api/hosting",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        {
+          "source": "**",
+          "run": { "serviceId": "ayooda-api", "region": "us-central1" }
+        }
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

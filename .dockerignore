@@ -1,0 +1,46 @@
+# Used by `docker build` in the deploy-api workflow (build context = repo root).
+# Keep the upload small and avoid leaking local state into the image.
+
+# Dependencies (re-installed inside the image)
+**/node_modules
+.pnpm-store
+
+# Build outputs
+**/dist
+**/.next
+**/out
+**/.turbo
+**/tsconfig.tsbuildinfo
+
+# Environment files & secrets
+.env
+.env.*
+service-account.json
+*.key.json
+gh-deployer-key.json
+
+# Firebase local state
+.firebase
+firebase-debug.log
+firestore-debug.log
+
+# Apps not built into this image
+apps/web
+apps/widget
+apps/scraper
+
+# VCS, OS, editor cruft
+.git
+.gitignore
+.github
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+.claude
+.playwright-mcp
+
+# Docs & generated assets
+docs
+design
+generated-images

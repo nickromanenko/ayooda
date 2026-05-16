@@ -47,9 +47,9 @@ env:
       - BUILD
       - RUNTIME
 
-  # ── API URL (update after deploying the API Cloud Run service) ───────────
+  # ── API URL (served via Firebase Hosting rewrite to Cloud Run) ───────────
   - variable: NEXT_PUBLIC_API_URL
-    value: https://ayooda-api-PLACEHOLDER-uc.a.run.app
+    value: https://api.ayooda.live
     availability:
       - BUILD
       - RUNTIME
