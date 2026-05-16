@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { MessageSquare, BookOpen, Bot, Zap } from 'lucide-react'
+import { GetStartedStep } from '@/components/dashboard/GetStartedStep'
 
 const stats = [
   { label: 'Total conversations', value: '—', icon: MessageSquare, accent: 'var(--blue)' },
@@ -54,42 +54,11 @@ export default function DashboardPage() {
           Get started
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Step number={1} title="Configure your agent" description="Give your agent a name, avatar, and personality." href="/dashboard/agent" done={false} />
-          <Step number={2} title="Add your knowledge base" description="Paste your website URL or upload documents." href="/dashboard/knowledge" done={false} />
-          <Step number={3} title="Deploy the widget" description="Copy a script tag and paste it into your website." href="/dashboard/channels" done={false} />
+          <GetStartedStep number={1} title="Configure your agent" description="Give your agent a name, avatar, and personality." href="/dashboard/agent" done={false} />
+          <GetStartedStep number={2} title="Add your knowledge base" description="Paste your website URL or upload documents." href="/dashboard/knowledge" done={false} />
+          <GetStartedStep number={3} title="Deploy the widget" description="Copy a script tag and paste it into your website." href="/dashboard/channels" done={false} />
         </div>
       </div>
     </div>
-  )
-}
-
-function Step({ number, title, description, href, done }: {
-  number: number; title: string; description: string; href: string; done: boolean
-}) {
-  return (
-    <Link href={href} style={{
-      display: 'flex', alignItems: 'flex-start', gap: 14, padding: '12px 14px',
-      borderRadius: 'var(--r-sm)', textDecoration: 'none',
-      transition: 'background .15s',
-    }}
-      onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-2)')}
-      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-    >
-      <span style={{
-        flexShrink: 0, width: 24, height: 24, borderRadius: 50,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 11, fontWeight: 700, marginTop: 1,
-        background: done ? 'var(--mint)' : 'var(--accent-soft)',
-        border: done ? 'none' : '1px solid rgba(245,165,36,0.25)',
-        color: done ? '#081a10' : 'var(--accent)',
-        fontFamily: 'var(--font-mono)',
-      }}>
-        {done ? '✓' : number}
-      </span>
-      <div>
-        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>{title}</p>
-        <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 2 }}>{description}</p>
-      </div>
-    </Link>
   )
 }
