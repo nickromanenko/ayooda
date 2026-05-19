@@ -11,6 +11,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { adminDb } from '../lib/firebase-admin'
 import { embedText } from '../lib/gemini'
+import { getLangfuse } from '../lib/langfuse'
 import { namespaceFor } from '../lib/pinecone'
 
 const widget = new Hono()
@@ -81,6 +82,14 @@ widget.post('/chat', async (c) => {
   const systemPrompt: string = agent.systemPrompt
   const llmModel: string = agent.llmModel ?? 'gemini-2.5-flash'
 
+  const trace = getLangfuse().trace({
+    name: 'widget-chat',
+    sessionId: conversationId,
+    userId: visitorId,
+    input: { message: message.trim() },
+    metadata: { workspaceId, channelId, llmModel },
+  })
+
   // 2. Get or create conversation
   const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
   const convSnap = await convRef.get()
@@ -113,9 +122,14 @@ widget.post('/chat', async (c) => {
   let sources: Array<{ docId: string; source: string; score: number }> = []
 
   try {
-    const queryEmbedding = await embedText(message.trim())
+    const queryEmbedding = await embedText(message.trim(), trace)
+    const retrievalSpan = trace.span({
+      name: 'pinecone-query',
+      input: { topK: 5 },
+    })
     const ns = namespaceFor(workspaceId)
     const results = await ns.query({ vector: queryEmbedding, topK: 5, includeMetadata: true })
+    retrievalSpan.end({ output: { matches: results.matches?.length ?? 0 } })
 
     sources = (results.matches ?? [])
       .filter((m) => (m.score ?? 0) > 0.6)
@@ -154,6 +168,11 @@ widget.post('/chat', async (c) => {
   let reply = ''
   let promptTokens = 0
   let completionTokens = 0
+  const generation = trace.generation({
+    name: 'gemini-chat',
+    model: llmModel,
+    input: { system: fullSystemPrompt, messages: contents },
+  })
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
     const model = genAI.getGenerativeModel({
@@ -164,8 +183,21 @@ widget.post('/chat', async (c) => {
     reply = result.response.text().trim()
     promptTokens = result.response.usageMetadata?.promptTokenCount ?? 0
     completionTokens = result.response.usageMetadata?.candidatesTokenCount ?? 0
+    generation.end({
+      output: reply,
+      usage: {
+        input: promptTokens,
+        output: completionTokens,
+        total: promptTokens + completionTokens,
+      },
+    })
   } catch (err) {
     console.error('[widget/chat] Gemini call failed:', err)
+    generation.end({
+      level: 'ERROR',
+      statusMessage: err instanceof Error ? err.message : String(err),
+    })
+    trace.update({ output: { error: 'gemini_failed' } })
     return c.json({ error: 'Failed to generate response' }, 502)
   }
 
@@ -183,6 +215,8 @@ widget.post('/chat', async (c) => {
     updatedAt: FieldValue.serverTimestamp(),
     lastMessage: reply.slice(0, 200),
   })
+
+  trace.update({ output: { message: reply, sources } })
 
   return c.json({ conversationId, message: reply, sources })
 })

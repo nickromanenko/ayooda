@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { getLangfuse } from './lib/langfuse'
 
 const app = new Hono()
 
@@ -31,6 +32,14 @@ app.route('/widget', widgetRoutes)
 
 const port = parseInt(process.env.PORT ?? '3001')
 console.log(`API running on http://localhost:${port}`)
+
+const shutdown = async (signal: string) => {
+  console.log(`[shutdown] received ${signal}, flushing Langfuse...`)
+  await getLangfuse().shutdownAsync()
+  process.exit(0)
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
 
 export default {
   port,

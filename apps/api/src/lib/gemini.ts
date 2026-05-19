@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import type { LangfuseTrace } from './langfuse'
 
 let _genAI: GoogleGenerativeAI | null = null
 
@@ -15,27 +16,49 @@ const EMBEDDING_MODEL = 'text-embedding-004'
  * Embed a single text string.
  * Returns a 768-dimension float array.
  */
-export async function embedText(text: string): Promise<number[]> {
-  const model = getGenAI().getGenerativeModel({ model: EMBEDDING_MODEL })
-  const result = await model.embedContent(text)
-  return result.embedding.values
+export async function embedText(text: string, trace?: LangfuseTrace): Promise<number[]> {
+  const generation = trace?.generation({
+    name: 'embed-text',
+    model: EMBEDDING_MODEL,
+    input: text,
+  })
+  try {
+    const model = getGenAI().getGenerativeModel({ model: EMBEDDING_MODEL })
+    const result = await model.embedContent(text)
+    generation?.end({ output: { dimensions: result.embedding.values.length } })
+    return result.embedding.values
+  } catch (err) {
+    generation?.end({ level: 'ERROR', statusMessage: err instanceof Error ? err.message : String(err) })
+    throw err
+  }
 }
 
 /**
  * Embed multiple texts in one batched API call.
  * Splits into chunks of 100 (API limit) and concatenates.
  */
-export async function embedBatch(texts: string[]): Promise<number[][]> {
+export async function embedBatch(texts: string[], trace?: LangfuseTrace): Promise<number[][]> {
   const model = getGenAI().getGenerativeModel({ model: EMBEDDING_MODEL })
   const BATCH_SIZE = 100
   const results: number[][] = []
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE)
-    const res = await model.batchEmbedContents({
-      requests: batch.map((text) => ({ content: { parts: [{ text }], role: 'user' } })),
+    const generation = trace?.generation({
+      name: 'embed-batch',
+      model: EMBEDDING_MODEL,
+      input: { count: batch.length, offset: i },
     })
-    results.push(...res.embeddings.map((e) => e.values))
+    try {
+      const res = await model.batchEmbedContents({
+        requests: batch.map((text) => ({ content: { parts: [{ text }], role: 'user' } })),
+      })
+      results.push(...res.embeddings.map((e) => e.values))
+      generation?.end({ output: { embedded: res.embeddings.length } })
+    } catch (err) {
+      generation?.end({ level: 'ERROR', statusMessage: err instanceof Error ? err.message : String(err) })
+      throw err
+    }
   }
 
   return results
