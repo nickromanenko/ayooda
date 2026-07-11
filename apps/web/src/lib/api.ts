@@ -8,10 +8,11 @@ export async function apiRequest(path: string, init: RequestInit = {}): Promise<
 
   const idToken = await user.getIdToken()
 
+  const isFormData = init.body instanceof FormData
   return fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       Authorization: `Bearer ${idToken}`,
       ...(init.headers ?? {}),
     },

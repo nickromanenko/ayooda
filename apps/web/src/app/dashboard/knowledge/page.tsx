@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle } from 'lucide-react'
+import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle, FileText } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
 import type { KnowledgeDocStatus } from '@ayooda/shared'
 
 interface KnowledgeDoc {
@@ -112,7 +113,7 @@ export default function KnowledgePage() {
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Knowledge base</h1>
         <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>
-          Pages your agent can reference when answering questions.
+          Pages and documents your agent can reference when answering questions.
         </p>
       </div>
 
@@ -157,6 +158,9 @@ export default function KnowledgePage() {
         <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 8 }}>
           We'll crawl the page and its linked pages (up to 25 pages).
         </p>
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
+          <KnowledgeUpload onUploaded={() => void fetchDocs()} />
+        </div>
       </div>
 
       {/* Doc list */}
@@ -177,6 +181,7 @@ export default function KnowledgePage() {
             const cfg = STATUS_CONFIG[doc.status]
             return (
               <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
+                {doc.type === 'file' ? <FileText size={14} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} /> : <Globe size={14} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 13, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{doc.source}</p>
                   {doc.status === 'indexed' && (
