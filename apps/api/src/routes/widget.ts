@@ -7,6 +7,7 @@
  */
 
 import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
 import { FieldValue } from 'firebase-admin/firestore'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { adminDb } from '../lib/firebase-admin'
@@ -168,66 +169,78 @@ widget.post('/chat', async (c) => {
   // Add current user message
   contents.push({ role: 'user', parts: [{ text: message.trim() }] })
 
-  // 7. Call Gemini
-  let reply = ''
-  let promptTokens = 0
-  let completionTokens = 0
+  // 7. Stream Gemini response as SSE
   const generation = trace.generation({
     name: 'gemini-chat',
     model: llmModel,
     input: { system: fullSystemPrompt, messages: contents },
   })
-  try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-    const model = genAI.getGenerativeModel({
-      model: llmModel,
-      systemInstruction: fullSystemPrompt,
-    })
-    const result = await model.generateContent({ contents })
-    reply = result.response.text().trim()
-    promptTokens = result.response.usageMetadata?.promptTokenCount ?? 0
-    completionTokens = result.response.usageMetadata?.candidatesTokenCount ?? 0
-    generation.end({
-      output: reply,
-      usage: {
-        input: promptTokens,
-        output: completionTokens,
-        total: promptTokens + completionTokens,
-      },
-    })
-  } catch (err) {
-    console.error('[widget/chat] Gemini call failed:', err)
-    generation.end({
-      level: 'ERROR',
-      statusMessage: err instanceof Error ? err.message : String(err),
-    })
-    trace.update({ output: { error: 'gemini_failed' } })
-    return c.json({ error: 'Failed to generate response' }, 502)
-  }
 
-  // 8. Save assistant message
+  return streamSSE(c, async (stream) => {
+    let reply = ''
+    try {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+      const model = genAI.getGenerativeModel({
+        model: llmModel,
+        systemInstruction: fullSystemPrompt,
+      })
+      const result = await model.generateContentStream({ contents })
 
-  await messagesRef.add({
-    role: 'assistant',
-    content: reply,
-    createdAt: FieldValue.serverTimestamp(),
-    metadata: { sources, llmModel, promptTokens, completionTokens },
+      for await (const chunk of result.stream) {
+        const text = chunk.text()
+        if (!text) continue
+        reply += text
+        await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text }) })
+      }
+
+      const response = await result.response
+      reply = reply.trim()
+      const promptTokens = response.usageMetadata?.promptTokenCount ?? 0
+      const completionTokens = response.usageMetadata?.candidatesTokenCount ?? 0
+      generation.end({
+        output: reply,
+        usage: {
+          input: promptTokens,
+          output: completionTokens,
+          total: promptTokens + completionTokens,
+        },
+      })
+
+      // 8. Save assistant message
+      const messageRef = await messagesRef.add({
+        role: 'assistant',
+        content: reply,
+        createdAt: FieldValue.serverTimestamp(),
+        metadata: { sources, llmModel, promptTokens, completionTokens },
+      })
+
+      // 9. Update conversation + usage counters
+      await convRef.update({
+        updatedAt: FieldValue.serverTimestamp(),
+        lastMessage: reply.slice(0, 200),
+      })
+      await workspaceRef.update({
+        'usage.messageCount': FieldValue.increment(2), // user + assistant
+        'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
+      })
+
+      trace.update({ output: { message: reply, sources } })
+      await stream.writeSSE({
+        event: 'done',
+        data: JSON.stringify({ conversationId, messageId: messageRef.id, sources }),
+      })
+    } catch (err) {
+      console.error('[widget/chat] Gemini stream failed:', err)
+      generation.end({
+        level: 'ERROR',
+        statusMessage: err instanceof Error ? err.message : String(err),
+      })
+      trace.update({ output: { error: 'gemini_failed' } })
+      await stream
+        .writeSSE({ event: 'error', data: JSON.stringify({ error: 'Failed to generate response' }) })
+        .catch(() => {})
+    }
   })
-
-  // 9. Update conversation
-  await convRef.update({
-    updatedAt: FieldValue.serverTimestamp(),
-    lastMessage: reply.slice(0, 200),
-  })
-
-  await workspaceRef.update({
-    'usage.messageCount': FieldValue.increment(2), // user + assistant
-    'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
-  })
-
-  trace.update({ output: { message: reply, sources } })
-
-  return c.json({ conversationId, message: reply, sources })
 })
 
 export default widget
