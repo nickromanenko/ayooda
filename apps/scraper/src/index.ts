@@ -2,9 +2,11 @@
  * Ayooda Scraper — Cloud Run Job entry point
  *
  * Required env vars:
- *   WORKSPACE_ID, DOC_ID, URL
+ *   WORKSPACE_ID, DOC_ID, DOC_TYPE (webpage|file)
+ *   URL (webpage) or STORAGE_PATH (file)
  *   FIREBASE_PROJECT_ID
  *   GOOGLE_APPLICATION_CREDENTIALS  (or FIREBASE_SERVICE_ACCOUNT_KEY for inline JSON)
+ *   FIREBASE_STORAGE_BUCKET  (optional; defaults to `${FIREBASE_PROJECT_ID}.firebasestorage.app`)
  *   PINECONE_API_KEY, PINECONE_INDEX
  *   GEMINI_API_KEY
  */
@@ -12,8 +14,10 @@
 import puppeteer from 'puppeteer'
 import { initializeApp, getApps, cert, type AppOptions } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getStorage } from 'firebase-admin/storage'
 import { Pinecone } from '@pinecone-database/pinecone'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { extractText } from './extract'
 
 // ---------------------------------------------------------------------------
 // Firebase Admin
@@ -21,7 +25,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 
 function initFirebase() {
   if (getApps().length > 0) return
-  const options: AppOptions = { projectId: process.env.FIREBASE_PROJECT_ID }
+  const options: AppOptions = {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    storageBucket:
+      process.env.FIREBASE_STORAGE_BUCKET ?? `${process.env.FIREBASE_PROJECT_ID}.firebasestorage.app`,
+  }
   if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     options.credential = cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY))
   }
@@ -224,10 +232,20 @@ async function upsertVectors(
 async function main() {
   const workspaceId = process.env.WORKSPACE_ID
   const docId = process.env.DOC_ID
+  const docType = process.env.DOC_TYPE ?? 'webpage'
   const url = process.env.URL
+  const storagePath = process.env.STORAGE_PATH
 
-  if (!workspaceId || !docId || !url) {
-    console.error('Missing required env vars: WORKSPACE_ID, DOC_ID, URL')
+  if (!workspaceId || !docId) {
+    console.error('Missing required env vars: WORKSPACE_ID, DOC_ID')
+    process.exit(1)
+  }
+  if (docType === 'webpage' && !url) {
+    console.error('DOC_TYPE=webpage requires URL')
+    process.exit(1)
+  }
+  if (docType === 'file' && !storagePath) {
+    console.error('DOC_TYPE=file requires STORAGE_PATH')
     process.exit(1)
   }
 
@@ -238,22 +256,31 @@ async function main() {
   try {
     // Mark as processing
     await docRef.update({ status: 'processing' })
-    console.log(`[scraper] Processing ${url}`)
+    console.log(`[scraper] Processing ${docType === 'file' ? storagePath : url}`)
 
-    // Crawl
-    const pages = await crawl(url)
-    console.log(`[scraper] Crawled ${pages.size} pages`)
-
-    // Chunk
     const allChunks: string[] = []
-    for (const [pageUrl, text] of pages) {
-      const chunks = chunkText(text)
-      console.log(`[scraper] ${pageUrl}: ${chunks.length} chunks`)
-      allChunks.push(...chunks)
+    let source: string
+
+    if (docType === 'file') {
+      source = storagePath!.split('/').pop()!
+      console.log(`[ingestor] Downloading ${storagePath}`)
+      const [buffer] = await getStorage().bucket().file(storagePath!).download()
+      const text = await extractText(source, buffer)
+      allChunks.push(...chunkText(text))
+      console.log(`[ingestor] ${source}: ${allChunks.length} chunks`)
+    } else {
+      source = url!
+      const pages = await crawl(url!)
+      console.log(`[ingestor] Crawled ${pages.size} pages`)
+      for (const [pageUrl, text] of pages) {
+        const chunks = chunkText(text)
+        console.log(`[ingestor] ${pageUrl}: ${chunks.length} chunks`)
+        allChunks.push(...chunks)
+      }
     }
 
     if (allChunks.length === 0) {
-      throw new Error('No text content found on the page')
+      throw new Error('No text content found')
     }
 
     // Embed
@@ -263,7 +290,7 @@ async function main() {
     // Upsert to Pinecone
     console.log(`[scraper] Upserting to Pinecone…`)
     const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! })
-    await upsertVectors(pinecone, workspaceId, docId, url, allChunks, embeddings)
+    await upsertVectors(pinecone, workspaceId, docId, source, allChunks, embeddings)
 
     // Mark as indexed
     await docRef.update({
