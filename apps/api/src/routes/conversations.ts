@@ -62,6 +62,7 @@ conversations.post('/:id/takeover', async (c) => {
   await convRef.update({
     status: 'human',
     operatorId: uid,
+    hadTakeover: true,
     updatedAt: FieldValue.serverTimestamp(),
   })
 
@@ -110,6 +111,10 @@ conversations.post('/:id/messages', async (c) => {
     updatedAt: FieldValue.serverTimestamp(),
     lastMessage: body.content.trim().slice(0, 200),
   })
+
+  await adminDb
+    .doc(`workspaces/${workspaceId}`)
+    .update({ 'usage.messageCount': FieldValue.increment(1) })
 
   return c.json({ messageId: messageRef.id }, 201)
 })

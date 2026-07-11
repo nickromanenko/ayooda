@@ -63,6 +63,7 @@ auth.post('/verify', async (c) => {
     },
     usage: {
       conversationCount: 0,
+      messageCount: 0,
       tokenCount: 0,
     },
   })

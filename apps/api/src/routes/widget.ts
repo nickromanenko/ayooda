@@ -77,6 +77,8 @@ widget.post('/chat', async (c) => {
   const workspaceSnap = await adminDb.doc(`workspaces/${workspaceId}`).get()
   if (!workspaceSnap.exists) return c.json({ error: 'Workspace not found' }, 404)
 
+  const workspaceRef = adminDb.doc(`workspaces/${workspaceId}`)
+
   const workspaceData = workspaceSnap.data()!
   const agent = workspaceData.agent
   const systemPrompt: string = agent.systemPrompt
@@ -103,6 +105,8 @@ widget.post('/chat', async (c) => {
       updatedAt: FieldValue.serverTimestamp(),
       lastMessage: message.trim(),
     })
+
+    await workspaceRef.update({ 'usage.conversationCount': FieldValue.increment(1) })
   }
 
   // 3. Save user message
@@ -214,6 +218,11 @@ widget.post('/chat', async (c) => {
   await convRef.update({
     updatedAt: FieldValue.serverTimestamp(),
     lastMessage: reply.slice(0, 200),
+  })
+
+  await workspaceRef.update({
+    'usage.messageCount': FieldValue.increment(2), // user + assistant
+    'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
   })
 
   trace.update({ output: { message: reply, sources } })
