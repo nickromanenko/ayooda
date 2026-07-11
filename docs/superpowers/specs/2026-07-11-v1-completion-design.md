@@ -100,7 +100,7 @@ Branch on `DOC_TYPE` in [apps/scraper/src/index.ts](../../../apps/scraper/src/in
 ### 3a. Write path (in `POST /widget/chat`)
 
 - On conversation **creation** (the `!convSnap.exists` branch): `usage.conversationCount` `FieldValue.increment(1)` on the workspace doc.
-- After each assistant message: `usage.tokenCount` `increment(promptTokens + completionTokens)`.
+- After each assistant message: `usage.tokenCount` `increment(promptTokens + completionTokens)` and `usage.messageCount` `increment(2)` (user + assistant); operator replies increment `usage.messageCount` by 1. (`messageCount` is a new `WorkspaceUsage` field, seeded to 0 for new workspaces; `FieldValue.increment` creates it on existing ones.)
 - `POST /conversations/:id/takeover` additionally sets `hadTakeover: true` on the conversation doc (new field, added to `ConversationDoc`).
 
 ### 3b. Read path: `dashboard/page.tsx` becomes a server component
@@ -109,8 +109,8 @@ It already runs inside a layout that verifies the session and loads the workspac
 
 - **Total conversations** and per-status counts — Firestore `count()` aggregates on the `conversations` subcollection.
 - **Automation rate** — `resolved && !hadTakeover` count ÷ resolved count (shown as "—" until ≥1 resolved conversation). Pre-existing conversations lack `hadTakeover`; treat missing as `false`.
-- **Avg messages per conversation** — total messages (collection-group `count()` scoped by workspace path) ÷ total conversations. (The plan's "response time" is not measurable without per-message latency capture; this is the agreed substitute.)
-- **Knowledge health** — knowledge doc count + `sum('chunkCount')` aggregate.
+- **Avg messages per conversation** — `usage.messageCount ÷ usage.conversationCount` from the workspace doc (no collection-group query needed). (The plan's "response time" is not measurable without per-message latency capture; this is the agreed substitute.)
+- **Knowledge health** — fetch the workspace's knowledge docs (small collection, already fetched wholesale by `GET /knowledge`) and count/sum `chunkCount` in JS.
 - **Recent activity** — last 5 conversations by `updatedAt`, linking to `/dashboard/inbox`.
 - **Get-started checklist** — real `done` flags: agent configured (`agent.description` or non-default `systemPrompt` set), ≥1 `indexed` knowledge doc, ≥1 channel, ≥1 conversation.
 - **Agent status card** — "Active" when a channel exists and ≥1 indexed doc, else "Setup incomplete".
@@ -128,7 +128,7 @@ It already runs inside a layout that verifies the session and loads the workspac
 - Both SSE endpoints always terminate with a final `done`/`error` event or clean close; the widget never waits forever (first-chunk timeout of 30s aborts and shows the standard error bubble).
 - Firestore listeners on the events endpoint are detached on client disconnect.
 - Upload validation happens before any Firestore/Storage write; ingestion failures use the existing `status:'error'` + `errorMessage` surface, shown in the existing UI.
-- Metrics reads degrade per-card: one failed aggregate renders "—" for that card, not a broken page.
+- Metrics are read server-side in one pass; a failed Firestore aggregate (rare) surfaces via the route's error boundary. Cards that are merely *empty* (no resolved conversations yet) render "—".
 
 ## Testing & verification
 
