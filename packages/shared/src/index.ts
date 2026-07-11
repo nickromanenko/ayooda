@@ -42,6 +42,7 @@ export interface AgentConfig {
 
 export interface WorkspaceUsage {
   conversationCount: number
+  messageCount: number
   tokenCount: number
 }
 
@@ -57,6 +58,7 @@ export interface WorkspaceDoc {
 export interface KnowledgeDoc {
   type: KnowledgeDocType
   source: string
+  storagePath?: string
   status: KnowledgeDocStatus
   chunkCount: number
   errorMessage: string | null
@@ -98,6 +100,7 @@ export interface ConversationDoc {
   channelId: string
   visitorId: string
   status: ConversationStatus
+  hadTakeover?: boolean
   operatorId: string | null
   createdAt: Date
   updatedAt: Date
@@ -106,7 +109,7 @@ export interface ConversationDoc {
 
 // API types
 export interface ChatRequest {
-  agentId: string
+  channelId: string
   conversationId: string
   message: string
   visitorId: string
@@ -119,3 +122,46 @@ export interface WidgetConfigResponse {
   widgetPosition: 'bottom-right' | 'bottom-left'
   welcomeMessage: string
 }
+
+// ---------------------------------------------------------------------------
+// Knowledge file uploads
+// ---------------------------------------------------------------------------
+
+export const KNOWLEDGE_FILE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.csv', '.md'] as const
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+export function validateKnowledgeFile(
+  filename: string,
+  sizeBytes: number,
+): { ok: true } | { ok: false; error: string } {
+  const dot = filename.lastIndexOf('.')
+  const ext = dot === -1 ? '' : filename.slice(dot).toLowerCase()
+  if (!(KNOWLEDGE_FILE_EXTENSIONS as readonly string[]).includes(ext)) {
+    return {
+      ok: false,
+      error: `Unsupported file type "${ext || filename}". Allowed: ${KNOWLEDGE_FILE_EXTENSIONS.join(', ')}`,
+    }
+  }
+  if (sizeBytes > MAX_UPLOAD_BYTES) {
+    return { ok: false, error: 'File is too large. Maximum size is 10 MB.' }
+  }
+  return { ok: true }
+}
+
+// ---------------------------------------------------------------------------
+// SSE events (widget <-> API)
+// ---------------------------------------------------------------------------
+
+export type ChatStreamEvent =
+  | { type: 'chunk'; text: string }
+  | {
+      type: 'done'
+      conversationId: string
+      messageId: string
+      sources: Array<{ docId: string; source: string; score: number }>
+    }
+  | { type: 'error'; error: string }
+
+export type ConversationEvent =
+  | { type: 'message'; id: string; role: MessageRole; content: string }
+  | { type: 'status'; status: ConversationStatus }
