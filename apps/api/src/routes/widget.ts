@@ -251,4 +251,90 @@ widget.post('/chat', async (c) => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// GET /widget/conversations/:conversationId/events
+// ---------------------------------------------------------------------------
+
+const HEARTBEAT_MS = 25_000
+
+widget.get('/conversations/:conversationId/events', async (c) => {
+  const conversationId = c.req.param('conversationId')
+  const channelId = c.req.query('channelId')
+  const visitorId = c.req.query('visitorId')
+  if (!channelId || !visitorId) {
+    return c.json({ error: 'channelId and visitorId are required' }, 400)
+  }
+
+  const channelDoc = await findChannel(channelId)
+  if (!channelDoc) return c.json({ error: 'Not found' }, 404)
+
+  const workspaceId: string = channelDoc.data().workspaceId
+  const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
+  const convSnap = await convRef.get()
+  // visitorId must match — conversation IDs are client-generated; this prevents
+  // one visitor subscribing to another visitor's conversation.
+  if (!convSnap.exists || convSnap.data()!.visitorId !== visitorId) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+
+  const connectedAt = new Date()
+  let lastStatus: string = convSnap.data()!.status
+
+  return streamSSE(c, async (stream) => {
+    let closed = false
+
+    const unsubConv = convRef.onSnapshot(
+      (snap) => {
+        const status = snap.data()?.status
+        if (status && status !== lastStatus) {
+          lastStatus = status
+          stream.writeSSE({ event: 'status', data: JSON.stringify({ status }) }).catch(() => {})
+        }
+      },
+      (err) => console.warn('[widget/events] conversation listener error:', err),
+    )
+
+    const unsubMessages = convRef
+      .collection('messages')
+      .where('createdAt', '>', connectedAt)
+      .orderBy('createdAt', 'asc')
+      .onSnapshot(
+        (snap) => {
+          for (const change of snap.docChanges()) {
+            if (change.type !== 'added') continue
+            const data = change.doc.data()
+            if (data.role === 'user') continue // the visitor typed it themselves
+            stream
+              .writeSSE({
+                event: 'message',
+                data: JSON.stringify({ id: change.doc.id, role: data.role, content: data.content }),
+              })
+              .catch(() => {})
+          }
+        },
+        (err) => console.warn('[widget/events] messages listener error:', err),
+      )
+
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      unsubConv()
+      unsubMessages()
+    }
+    stream.onAbort(cleanup)
+
+    try {
+      while (!closed) {
+        await stream.sleep(HEARTBEAT_MS)
+        if (closed) break
+        await stream.writeSSE({ event: 'ping', data: '' })
+      }
+    } catch {
+      // client went away mid-write
+    } finally {
+      cleanup()
+    }
+  })
+})
+
 export default widget
