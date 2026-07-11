@@ -2,23 +2,25 @@ import { spawn } from 'child_process'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-interface ScraperJobParams {
+interface IngestionJobParams {
   workspaceId: string
   docId: string
-  url: string
+  docType: 'webpage' | 'file'
+  url?: string
+  storagePath?: string
 }
 
 /**
- * Trigger the scraper for a given knowledge doc.
+ * Trigger ingestion for a given knowledge doc (webpage scrape or file processing).
  *
  * Production (SCRAPER_JOB_URL is set):
  *   Executes a Cloud Run Job via the Cloud Run v2 Jobs API.
- *   The Job container reads WORKSPACE_ID / DOC_ID / URL from the override env.
+ *   The Job container reads WORKSPACE_ID / DOC_ID / DOC_TYPE / URL / STORAGE_PATH from the override env.
  *
  * Local dev (SCRAPER_JOB_URL is empty):
  *   Spawns the scraper TypeScript entry point directly with Bun (fire-and-forget).
  */
-export function triggerScraper(params: ScraperJobParams): void {
+export function triggerIngestion(params: IngestionJobParams): void {
   const jobUrl = process.env.SCRAPER_JOB_URL
 
   if (jobUrl) {
@@ -30,16 +32,20 @@ export function triggerScraper(params: ScraperJobParams): void {
   }
 }
 
-async function triggerCloudRunJob(jobUrl: string, params: ScraperJobParams): Promise<void> {
+async function triggerCloudRunJob(jobUrl: string, params: IngestionJobParams): Promise<void> {
+  const jobEnv = [
+    { name: 'WORKSPACE_ID', value: params.workspaceId },
+    { name: 'DOC_ID', value: params.docId },
+    { name: 'DOC_TYPE', value: params.docType },
+    ...(params.url ? [{ name: 'URL', value: params.url }] : []),
+    ...(params.storagePath ? [{ name: 'STORAGE_PATH', value: params.storagePath }] : []),
+  ]
+
   const body = {
     overrides: {
       containerOverrides: [
         {
-          env: [
-            { name: 'WORKSPACE_ID', value: params.workspaceId },
-            { name: 'DOC_ID', value: params.docId },
-            { name: 'URL', value: params.url },
-          ],
+          env: jobEnv,
         },
       ],
     },
@@ -60,7 +66,7 @@ async function triggerCloudRunJob(jobUrl: string, params: ScraperJobParams): Pro
   }
 }
 
-function triggerLocal(params: ScraperJobParams): void {
+function triggerLocal(params: IngestionJobParams): void {
   // Resolve path to scraper entry relative to this file's location:
   //   apps/api/src/lib/scraper.ts  →  ../../..  →  apps/
   //   then ../scraper/src/index.ts
@@ -71,7 +77,9 @@ function triggerLocal(params: ScraperJobParams): void {
     ...process.env,
     WORKSPACE_ID: params.workspaceId,
     DOC_ID: params.docId,
-    URL: params.url,
+    DOC_TYPE: params.docType,
+    ...(params.url ? { URL: params.url } : {}),
+    ...(params.storagePath ? { STORAGE_PATH: params.storagePath } : {}),
   }
 
   console.log(`[scraper-trigger] Spawning local scraper for docId=${params.docId}`)
