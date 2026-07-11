@@ -178,6 +178,7 @@ widget.post('/chat', async (c) => {
 
   return streamSSE(c, async (stream) => {
     let reply = ''
+    let generationEnded = false
     try {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
       const model = genAI.getGenerativeModel({
@@ -205,6 +206,7 @@ widget.post('/chat', async (c) => {
           total: promptTokens + completionTokens,
         },
       })
+      generationEnded = true
 
       // 8. Save assistant message
       const messageRef = await messagesRef.add({
@@ -214,27 +216,33 @@ widget.post('/chat', async (c) => {
         metadata: { sources, llmModel, promptTokens, completionTokens },
       })
 
-      // 9. Update conversation + usage counters
-      await convRef.update({
-        updatedAt: FieldValue.serverTimestamp(),
-        lastMessage: reply.slice(0, 200),
-      })
-      await workspaceRef.update({
-        'usage.messageCount': FieldValue.increment(2), // user + assistant
-        'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
-      })
-
       trace.update({ output: { message: reply, sources } })
       await stream.writeSSE({
         event: 'done',
         data: JSON.stringify({ conversationId, messageId: messageRef.id, sources }),
       })
+
+      // Best-effort bookkeeping — the client already has its reply
+      try {
+        await convRef.update({
+          updatedAt: FieldValue.serverTimestamp(),
+          lastMessage: reply.slice(0, 200),
+        })
+        await workspaceRef.update({
+          'usage.messageCount': FieldValue.increment(2), // user + assistant
+          'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
+        })
+      } catch (err) {
+        console.warn('[widget/chat] post-reply bookkeeping failed:', err)
+      }
     } catch (err) {
       console.error('[widget/chat] Gemini stream failed:', err)
-      generation.end({
-        level: 'ERROR',
-        statusMessage: err instanceof Error ? err.message : String(err),
-      })
+      if (!generationEnded) {
+        generation.end({
+          level: 'ERROR',
+          statusMessage: err instanceof Error ? err.message : String(err),
+        })
+      }
       trace.update({ output: { error: 'gemini_failed' } })
       await stream
         .writeSSE({ event: 'error', data: JSON.stringify({ error: 'Failed to generate response' }) })
