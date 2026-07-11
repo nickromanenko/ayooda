@@ -270,6 +270,13 @@ function buildCSS(color: string): string {
       color: #dc2626;
       border-bottom-left-radius: 4px;
     }
+    .msg.system {
+      align-self: center;
+      background: transparent;
+      color: #a1a1aa;
+      font-size: 12px;
+      padding: 2px 8px;
+    }
 
     /* Typing indicator */
     .typing {
@@ -384,6 +391,10 @@ class AyoodaWidget {
   private visitorId: string
   private config: WidgetConfig
   private renderedIds = new Set<string>()
+  private eventSource: EventSource | null = null
+  private reconnectDelay = 1000
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private feedSuspended = false // set on immediate failure (conversation may not exist yet)
 
   constructor(host: HTMLElement, config: WidgetConfig) {
     this.config = config
@@ -465,7 +476,71 @@ class AyoodaWidget {
     if (this.open) {
       this.input.focus()
       this.scrollToBottom()
+      this.openFeed()
+    } else {
+      this.closeFeed()
     }
+  }
+
+  private openFeed() {
+    if (this.eventSource || this.feedSuspended || !this.open) return
+    const url =
+      `${API_BASE}/widget/conversations/${this.conversationId}/events` +
+      `?channelId=${encodeURIComponent(CHANNEL_ID)}&visitorId=${encodeURIComponent(this.visitorId)}`
+    const es = new EventSource(url)
+    this.eventSource = es
+
+    es.onopen = () => {
+      this.reconnectDelay = 1000
+    }
+
+    es.addEventListener('message', (e: MessageEvent) => {
+      const msg = JSON.parse(e.data) as { id: string; role: string; content: string }
+      if (this.renderedIds.has(msg.id)) return
+      this.renderedIds.add(msg.id)
+      this.appendBotMessage(msg.content)
+    })
+
+    es.addEventListener('status', (e: MessageEvent) => {
+      const { status } = JSON.parse(e.data) as { status: string }
+      if (status === 'human') this.appendSystemNote("You're now chatting with a human")
+      else if (status === 'resolved') this.appendSystemNote('This conversation has been resolved')
+    })
+
+    es.onerror = () => {
+      // Read readyState before we close() it ourselves — close() forces CLOSED
+      // synchronously, which would erase the signal. Per spec, a fatal error
+      // (e.g. 404 — no conversation yet) leaves readyState CLOSED when `error`
+      // fires; a transient/retryable error leaves it CONNECTING.
+      const wasFatal = es.readyState === EventSource.CLOSED
+      es.close()
+      this.eventSource = null
+      if (wasFatal && this.reconnectDelay === 1000) {
+        // never connected (e.g. 404 — no conversation yet): wait for the next send
+        this.feedSuspended = true
+        return
+      }
+      if (!this.open) return
+      this.reconnectTimer = setTimeout(() => this.openFeed(), this.reconnectDelay)
+      this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000)
+    }
+  }
+
+  private closeFeed() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    this.eventSource?.close()
+    this.eventSource = null
+  }
+
+  private appendSystemNote(text: string) {
+    const div = document.createElement('div')
+    div.className = 'msg system'
+    div.textContent = text
+    this.messages.appendChild(div)
+    this.scrollToBottom()
   }
 
   private appendMessage(text: string, role: 'user' | 'bot' | 'error'): HTMLElement {
@@ -521,6 +596,8 @@ class AyoodaWidget {
         },
         onDone: (done) => {
           this.renderedIds.add(done.messageId)
+          this.feedSuspended = false
+          this.openFeed()
           if (!bubble) {
             // model produced no chunks (empty reply) — show something sane
             typingEl.remove()
