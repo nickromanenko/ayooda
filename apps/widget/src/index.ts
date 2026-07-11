@@ -92,44 +92,52 @@ async function sendMessageStream(
     FIRST_CHUNK_TIMEOUT_MS,
   )
 
-  const res = await fetch(`${API_BASE}/widget/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId: CHANNEL_ID, conversationId, message, visitorId }),
-    signal: controller.signal,
-  })
-  if (!res.ok || !res.body || !res.headers.get('content-type')?.includes('text/event-stream')) {
-    throw new Error('Failed to send message')
-  }
-
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let finished = false
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const { messages, rest } = extractSSEMessages(buffer)
-    buffer = rest
-    for (const msg of messages) {
-      if (timeout) {
-        clearTimeout(timeout) // first frame arrived — stop the watchdog
-        timeout = null
-      }
-      if (msg.event === 'chunk') {
-        handlers.onChunk((JSON.parse(msg.data) as { text: string }).text)
-      } else if (msg.event === 'done') {
-        finished = true
-        handlers.onDone(JSON.parse(msg.data) as ChatDone)
-      } else if (msg.event === 'error') {
-        throw new Error((JSON.parse(msg.data) as { error: string }).error)
-      }
+  try {
+    const res = await fetch(`${API_BASE}/widget/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId: CHANNEL_ID, conversationId, message, visitorId }),
+      signal: controller.signal,
+    })
+    if (!res.ok || !res.body || !res.headers.get('content-type')?.includes('text/event-stream')) {
+      throw new Error('Failed to send message')
     }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finished = false
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const { messages, rest } = extractSSEMessages(buffer)
+        buffer = rest
+        for (const msg of messages) {
+          if (timeout) {
+            clearTimeout(timeout) // first frame arrived — stop the watchdog
+            timeout = null
+          }
+          if (msg.event === 'chunk') {
+            handlers.onChunk((JSON.parse(msg.data) as { text: string }).text)
+          } else if (msg.event === 'done') {
+            finished = true
+            handlers.onDone(JSON.parse(msg.data) as ChatDone)
+          } else if (msg.event === 'error') {
+            throw new Error((JSON.parse(msg.data) as { error: string }).error)
+          }
+        }
+      }
+    } finally {
+      reader.cancel().catch(() => {}) // release the connection on every exit path
+    }
+
+    if (!finished) throw new Error('Stream ended without completion')
+  } finally {
+    if (timeout) clearTimeout(timeout)
   }
-  if (timeout) clearTimeout(timeout)
-  if (!finished) throw new Error('Stream ended without completion')
 }
 
 // ---------------------------------------------------------------------------
