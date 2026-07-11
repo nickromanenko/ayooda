@@ -248,6 +248,10 @@ async function main() {
     console.error('DOC_TYPE=file requires STORAGE_PATH')
     process.exit(1)
   }
+  if (docType !== 'webpage' && docType !== 'file') {
+    console.error(`Unknown DOC_TYPE: ${docType}`)
+    process.exit(1)
+  }
 
   initFirebase()
   const db = getFirestore()
