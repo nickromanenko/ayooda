@@ -283,7 +283,16 @@ widget.get('/conversations/:conversationId/events', async (c) => {
   return streamSSE(c, async (stream) => {
     let closed = false
 
-    const unsubConv = convRef.onSnapshot(
+    let unsubConv: (() => void) | null = null
+    let unsubMessages: (() => void) | null = null
+    const cleanup = () => {
+      if (closed) return
+      closed = true
+      unsubConv?.()
+      unsubMessages?.()
+    }
+
+    unsubConv = convRef.onSnapshot(
       (snap) => {
         const status = snap.data()?.status
         if (status && status !== lastStatus) {
@@ -291,10 +300,13 @@ widget.get('/conversations/:conversationId/events', async (c) => {
           stream.writeSSE({ event: 'status', data: JSON.stringify({ status }) }).catch(() => {})
         }
       },
-      (err) => console.warn('[widget/events] conversation listener error:', err),
+      (err) => {
+        console.warn('[widget/events] conversation listener error:', err)
+        cleanup() // end the stream so the client reconnects instead of hanging
+      },
     )
 
-    const unsubMessages = convRef
+    unsubMessages = convRef
       .collection('messages')
       .where('createdAt', '>', connectedAt)
       .orderBy('createdAt', 'asc')
@@ -312,15 +324,12 @@ widget.get('/conversations/:conversationId/events', async (c) => {
               .catch(() => {})
           }
         },
-        (err) => console.warn('[widget/events] messages listener error:', err),
+        (err) => {
+          console.warn('[widget/events] messages listener error:', err)
+          cleanup() // end the stream so the client reconnects instead of hanging
+        },
       )
 
-    const cleanup = () => {
-      if (closed) return
-      closed = true
-      unsubConv()
-      unsubMessages()
-    }
     stream.onAbort(cleanup)
 
     try {
