@@ -15,6 +15,7 @@ export function KnowledgeUpload({
   const [error, setError] = useState('')
 
   async function handleFile(file: File) {
+    if (inputRef.current) inputRef.current.value = '' // allow re-selecting the same file
     const validation = validateKnowledgeFile(file.name, file.size)
     if (!validation.ok) {
       setError(validation.error)
