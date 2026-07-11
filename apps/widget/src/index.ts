@@ -8,6 +8,8 @@
  *           async></script>
  */
 
+import { extractSSEMessages } from './sse'
+
 // ---------------------------------------------------------------------------
 // Bootstrap — read attributes synchronously before any async work
 // ---------------------------------------------------------------------------
@@ -36,9 +38,9 @@ interface WidgetConfig {
   welcomeMessage: string
 }
 
-interface ChatResponse {
+interface ChatDone {
   conversationId: string
-  message: string
+  messageId: string
   sources: Array<{ docId: string; source: string; score: number }>
 }
 
@@ -76,18 +78,58 @@ async function fetchConfig(): Promise<WidgetConfig> {
   return res.json()
 }
 
-async function sendMessage(
+const FIRST_CHUNK_TIMEOUT_MS = 30_000
+
+async function sendMessageStream(
   message: string,
   conversationId: string,
   visitorId: string,
-): Promise<ChatResponse> {
+  handlers: { onChunk: (text: string) => void; onDone: (done: ChatDone) => void },
+): Promise<void> {
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | null = setTimeout(
+    () => controller.abort(),
+    FIRST_CHUNK_TIMEOUT_MS,
+  )
+
   const res = await fetch(`${API_BASE}/widget/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ channelId: CHANNEL_ID, conversationId, message, visitorId }),
+    signal: controller.signal,
   })
-  if (!res.ok) throw new Error('Failed to send message')
-  return res.json()
+  if (!res.ok || !res.body || !res.headers.get('content-type')?.includes('text/event-stream')) {
+    throw new Error('Failed to send message')
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finished = false
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const { messages, rest } = extractSSEMessages(buffer)
+    buffer = rest
+    for (const msg of messages) {
+      if (timeout) {
+        clearTimeout(timeout) // first frame arrived — stop the watchdog
+        timeout = null
+      }
+      if (msg.event === 'chunk') {
+        handlers.onChunk((JSON.parse(msg.data) as { text: string }).text)
+      } else if (msg.event === 'done') {
+        finished = true
+        handlers.onDone(JSON.parse(msg.data) as ChatDone)
+      } else if (msg.event === 'error') {
+        throw new Error((JSON.parse(msg.data) as { error: string }).error)
+      }
+    }
+  }
+  if (timeout) clearTimeout(timeout)
+  if (!finished) throw new Error('Stream ended without completion')
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +375,7 @@ class AyoodaWidget {
   private conversationId: string
   private visitorId: string
   private config: WidgetConfig
+  private renderedIds = new Set<string>()
 
   constructor(host: HTMLElement, config: WidgetConfig) {
     this.config = config
@@ -456,14 +499,30 @@ class AyoodaWidget {
 
     this.appendMessage(text, 'user')
     const typingEl = this.showTyping()
+    let bubble: HTMLElement | null = null
 
     try {
-      const res = await sendMessage(text, this.conversationId, this.visitorId)
-      typingEl.remove()
-      this.appendBotMessage(res.message)
+      await sendMessageStream(text, this.conversationId, this.visitorId, {
+        onChunk: (chunk) => {
+          if (!bubble) {
+            typingEl.remove()
+            bubble = this.appendBotMessage('')
+          }
+          bubble.textContent += chunk
+          this.scrollToBottom()
+        },
+        onDone: (done) => {
+          this.renderedIds.add(done.messageId)
+          if (!bubble) {
+            // model produced no chunks (empty reply) — show something sane
+            typingEl.remove()
+            this.appendMessage('Sorry, I could not generate a response.', 'error')
+          }
+        },
+      })
     } catch {
       typingEl.remove()
-      this.appendMessage('Sorry, something went wrong. Please try again.', 'error')
+      if (!bubble) this.appendMessage('Sorry, something went wrong. Please try again.', 'error')
     } finally {
       this.sending = false
       this.sendBtn.disabled = !this.input.value.trim()
