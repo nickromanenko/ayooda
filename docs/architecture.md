@@ -167,10 +167,19 @@ workspaces/
       systemPrompt: string
       llmModel: string           ← OpenRouter slug, e.g. 'anthropic/claude-sonnet-4.5', 'google/gemini-2.5-flash' (provider derived from slug)
     openRouterKey: string | undefined  ← workspace's own OpenRouter key, AES-256-GCM encrypted (API_KEY_ENCRYPTION_SECRET), server-only, never returned
+    subscription:
+      status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired'
+      tier: 'lite' | 'core' | 'max' | null
+      trialEndsAt: Timestamp | null        ← 14 days from workspace creation; trial lives in Firestore only, no Stripe object yet
+      currentPeriodEnd: Timestamp | null
+      stripeCustomerId: string | null      ← server-only, never returned to clients
+      stripeSubscriptionId: string | null  ← server-only, never returned to clients
     usage:
       conversationCount: number
       messageCount: number
       tokenCount: number
+      periodConversationCount: number      ← resets each billing/trial period; checked against the tier/trial cap for entitlement
+      periodStart: Timestamp
 
   {workspaceId}/knowledge/
     {docId}
@@ -265,14 +274,18 @@ Vector metadata per chunk:
 | POST | `/conversations/:id/resolve` | Mark conversation as resolved |
 | GET | `/channels` | List channels for workspace |
 | POST | `/channels/web-widget` | Create or update web widget channel |
+| POST | `/billing/checkout` | Create a Stripe Checkout session for the selected tier, returns the hosted URL |
+| POST | `/billing/portal` | Create a Stripe Customer Portal session, returns the hosted URL |
+| GET | `/billing` | Current plan, usage, and entitlement status (no Stripe IDs) |
 
 ### Public endpoints (no auth, validated by agentId)
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/widget/config/:agentId` | Fetch agent appearance config for widget |
-| POST | `/widget/chat` | Send message, receive AI response as an SSE stream (`chunk` / `done` / `error` events) |
+| POST | `/widget/chat` | Send message, receive AI response as an SSE stream (`chunk` / `done` / `error` events); gated for new conversations, see [Billing](#billing) |
 | GET | `/widget/conversations/:id/events` | SSE feed of operator messages + status changes; requires `channelId` & `visitorId` query params |
+| POST | `/billing/webhook` | Stripe webhook, signature-verified — syncs `subscription` state to Firestore |
 
 ---
 
@@ -314,6 +327,32 @@ POST /widget/chat
 
 ---
 
+## Billing
+
+### Model
+- Three subscription tiers, billed monthly via Stripe: **Lite** ($25, 100 conversations/mo), **Core** ($55, 500 conversations/mo), **Max** ($195, 1500 conversations/mo)
+- 14-day free trial, no card required — tracked entirely in Firestore (`subscription.trialEndsAt`), not in Stripe; trial conversation cap is 50
+- Stripe Checkout (hosted) starts a subscription; Stripe Customer Portal (hosted) handles plan changes and cancellation
+- A signed Stripe webhook (`POST /billing/webhook`) syncs `workspaces/{id}.subscription` from Stripe events
+- Metered overage billing is out of scope for v1 (future)
+
+### Entitlement
+Resolved server-side on each gated request, no Stripe secrets exposed:
+- `active` / `past_due` → the tier's monthly conversation cap applies
+- `trialing` and within `trialEndsAt` → trial cap (50)
+- Over the applicable cap, or trial/subscription expired → not entitled
+- `active` subscription whose `tier` hasn't synced from Stripe yet → fail-open (avoids false gating on webhook lag)
+- Stripe `unpaid` / `incomplete` statuses → fail closed
+
+### Gate
+`POST /widget/chat` hard-gates NEW conversations only: when the workspace is not entitled, it returns a pre-stream JSON `402` before any tokens stream. In-progress conversations are never gated mid-stream. The widget surfaces its generic error bubble on `402` — visitors never see billing-specific copy.
+
+### Setup scripts (one-time, `apps/api/scripts/`)
+- `setup-stripe.ts` — creates the Lite/Core/Max Stripe products and prices
+- `backfill-trials.ts` — grants existing workspaces a fresh 14-day trial
+
+---
+
 ## Security Model
 
 ### API Authentication
@@ -337,6 +376,11 @@ POST /widget/chat
 - Never returned in any API response — `GET /workspace` exposes only `hasOpenRouterKey: boolean`; set/cleared via `PUT /workspace/key` / `DELETE /workspace/key`
 - Resolution: workspace's own key covers all models; otherwise the platform `OPENROUTER_API_KEY` is used for Gemini-family models only; non-Gemini models with no key configured return a pre-stream JSON 502
 - Possible future upgrade: move to Cloud KMS-backed envelope encryption
+
+### Billing (Stripe)
+- `POST /billing/webhook` is public but signature-verified: Stripe's async `constructEventAsync` checks the signature against the raw request body and `STRIPE_WEBHOOK_SECRET`
+- The webhook resolves the target workspace via `metadata.workspaceId` (subscription events) or `client_reference_id` (checkout session events)
+- `stripeCustomerId` / `stripeSubscriptionId` are never returned in any API response; `GET /billing` returns plan, usage, and entitlement only
 
 ---
 
@@ -371,6 +415,13 @@ GEMINI_API_KEY                ← for embeddings
 OPENROUTER_API_KEY            ← platform fallback, used for Gemini-family models when a workspace has no key of its own
 API_KEY_ENCRYPTION_SECRET     ← encrypts/decrypts customer OpenRouter keys (AES-256-GCM)
 SCRAPER_JOB_URL               ← Cloud Run Job trigger URL
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+STRIPE_PRICE_LITE
+STRIPE_PRICE_CORE
+STRIPE_PRICE_MAX
+BILLING_SUCCESS_URL           ← Checkout/Portal return URL on success
+BILLING_CANCEL_URL            ← Checkout return URL on cancel
 ```
 
 **apps/web (Firebase App Hosting env):**
