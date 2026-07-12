@@ -14,8 +14,25 @@ import { adminDb } from '../lib/firebase-admin'
 import { embedText, LEGACY_MODEL_MAP } from '../lib/gemini'
 import { getLangfuse } from '../lib/langfuse'
 import { namespaceFor } from '../lib/pinecone'
+import { rateLimit } from '../lib/rate-limit'
 
 const widget = new Hono()
+
+// ---------------------------------------------------------------------------
+// Rate limiting
+// ---------------------------------------------------------------------------
+
+const RATE_WINDOW_MS = 60_000
+const CHAT_LIMIT_PER_CHANNEL = 60
+const CHAT_LIMIT_PER_IP = 30
+const EVENTS_LIMIT_PER_IP = 20
+
+/** Best-effort client IP from Cloud Run's forwarding headers. */
+function clientIp(c: { req: { header: (name: string) => string | undefined } }): string {
+  const xff = c.req.header('x-forwarded-for')
+  if (xff) return xff.split(',')[0]!.trim()
+  return c.req.header('x-real-ip') ?? 'unknown'
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -68,6 +85,16 @@ widget.post('/chat', async (c) => {
 
   if (!channelId || !conversationId || !message?.trim() || !visitorId) {
     return c.json({ error: 'channelId, conversationId, message, and visitorId are required' }, 400)
+  }
+
+  // Rate limit before any Firestore/LLM work
+  const ip = clientIp(c)
+  const chLimit = rateLimit(`chat:ch:${channelId}`, CHAT_LIMIT_PER_CHANNEL, RATE_WINDOW_MS)
+  const ipLimit = rateLimit(`chat:ip:${ip}`, CHAT_LIMIT_PER_IP, RATE_WINDOW_MS)
+  const worst = !chLimit.ok ? chLimit : !ipLimit.ok ? ipLimit : null
+  if (worst) {
+    c.header('Retry-After', String(Math.ceil(worst.retryAfterMs / 1000)))
+    return c.json({ error: 'Too many requests' }, 429)
   }
 
   // 1. Look up channel → get workspaceId + agent config
@@ -269,6 +296,13 @@ widget.get('/conversations/:conversationId/events', async (c) => {
   const visitorId = c.req.query('visitorId')
   if (!channelId || !visitorId) {
     return c.json({ error: 'channelId and visitorId are required' }, 400)
+  }
+
+  const ip = clientIp(c)
+  const evLimit = rateLimit(`events:ip:${ip}`, EVENTS_LIMIT_PER_IP, RATE_WINDOW_MS)
+  if (!evLimit.ok) {
+    c.header('Retry-After', String(Math.ceil(evLimit.retryAfterMs / 1000)))
+    return c.json({ error: 'Too many requests' }, 429)
   }
 
   const channelDoc = await findChannel(channelId)
