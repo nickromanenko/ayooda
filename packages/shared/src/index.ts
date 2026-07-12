@@ -64,6 +64,8 @@ export interface WorkspaceUsage {
   conversationCount: number
   messageCount: number
   tokenCount: number
+  periodConversationCount: number
+  periodStart: Date | null
 }
 
 export interface WorkspaceDoc {
@@ -73,6 +75,7 @@ export interface WorkspaceDoc {
   onboardingComplete: boolean
   agent: AgentConfig
   usage: WorkspaceUsage
+  subscription?: Subscription
   openRouterKey?: string // encrypted; server-only, never returned
 }
 
@@ -171,6 +174,42 @@ export function validateKnowledgeFile(
     return { ok: false, error: 'File is too large. Maximum size is 10 MB.' }
   }
   return { ok: true }
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired'
+export type PlanTier = 'lite' | 'core' | 'max'
+
+export interface Subscription {
+  status: SubscriptionStatus
+  tier: PlanTier | null
+  trialEndsAt: Date | null
+  currentPeriodEnd: Date | null
+  stripeCustomerId: string | null
+  stripeSubscriptionId: string | null
+}
+
+export interface PlanDef {
+  tier: PlanTier
+  name: string
+  priceUsd: number
+  conversationCap: number
+}
+
+export const PLANS: readonly PlanDef[] = [
+  { tier: 'lite', name: 'Lite', priceUsd: 25, conversationCap: 100 },
+  { tier: 'core', name: 'Core', priceUsd: 55, conversationCap: 500 },
+  { tier: 'max', name: 'Max', priceUsd: 195, conversationCap: 1500 },
+]
+
+export const TRIAL_DAYS = 14
+export const TRIAL_CONVERSATION_CAP = 50
+
+export function planFor(tier: PlanTier | null): PlanDef | undefined {
+  return tier ? PLANS.find((p) => p.tier === tier) : undefined
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { validateKnowledgeFile, MAX_UPLOAD_BYTES, LLM_MODELS, GEMINI_MODELS, findModel, providerOf } from './index'
+import { validateKnowledgeFile, MAX_UPLOAD_BYTES, LLM_MODELS, GEMINI_MODELS, findModel, providerOf, PLANS, planFor, TRIAL_DAYS, TRIAL_CONVERSATION_CAP } from './index'
 
 describe('validateKnowledgeFile', () => {
   test('accepts allowed extensions under the size cap', () => {
@@ -55,5 +55,21 @@ describe('LLM catalog', () => {
   test('providerOf returns undefined for an unknown slug', () => {
     expect(providerOf('nope/nope')).toBeUndefined()
     expect(findModel('nope/nope')).toBeUndefined()
+  })
+})
+
+describe('billing plans', () => {
+  test('three tiers with the agreed caps and prices', () => {
+    expect(PLANS.map((p) => p.tier)).toEqual(['lite', 'core', 'max'])
+    expect(PLANS.map((p) => p.conversationCap)).toEqual([100, 500, 1500])
+    expect(PLANS.map((p) => p.priceUsd)).toEqual([25, 55, 195])
+  })
+  test('planFor resolves a tier, undefined for null/unknown', () => {
+    expect(planFor('core')?.conversationCap).toBe(500)
+    expect(planFor(null)).toBeUndefined()
+  })
+  test('trial constants', () => {
+    expect(TRIAL_DAYS).toBe(14)
+    expect(TRIAL_CONVERSATION_CAP).toBe(50)
   })
 })
