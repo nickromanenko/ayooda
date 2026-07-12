@@ -8,6 +8,7 @@ import {
   BookOpen,
   Bot,
   Radio,
+  CreditCard,
   Settings,
   LogOut,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ const navItems = [
 ]
 
 const bottomItems = [
+  { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 

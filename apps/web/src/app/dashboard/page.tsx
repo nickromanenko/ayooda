@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { MessageSquare, BookOpen, Bot, Zap } from 'lucide-react'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin'
 import { GetStartedStep } from '@/components/dashboard/GetStartedStep'
+import { BillingBanner } from '@/components/dashboard/BillingBanner'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,6 +111,7 @@ export default async function DashboardPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      <BillingBanner />
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)' }}>Overview</h1>
         <p style={{ fontSize: 14, color: 'var(--ink-mute)', marginTop: 4 }}>
