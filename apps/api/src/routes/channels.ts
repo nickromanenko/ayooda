@@ -113,8 +113,7 @@ channels.post('/telegram', async (c) => {
   const channelId = channelRef.id
   const webhookSecret = randomBytes(24).toString('hex')
 
-  await setWebhook(botToken, `${apiBase}/telegram/webhook/${channelId}`, webhookSecret)
-
+  // Write the channel doc FIRST
   await channelRef.set({
     workspaceId,
     id: channelId,
@@ -125,6 +124,14 @@ channels.post('/telegram', async (c) => {
     isActive: true,
     createdAt: new Date(),
   })
+
+  // THEN register the webhook, rolling back on failure
+  try {
+    await setWebhook(botToken, `${apiBase}/telegram/webhook/${channelId}`, webhookSecret)
+  } catch {
+    await channelRef.delete().catch(() => {})
+    return c.json({ error: 'Could not register the Telegram webhook. Check the token and try again.' }, 502)
+  }
 
   return c.json({ channelId, botUsername: bot.username })
 })
