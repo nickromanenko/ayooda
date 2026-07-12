@@ -16,7 +16,7 @@ billing.post('/webhook', async (c) => {
   const raw = await c.req.text()
   let event
   try {
-    event = getStripe().webhooks.constructEvent(raw, sig, secret)
+    event = await getStripe().webhooks.constructEventAsync(raw, sig, secret)
   } catch (err) {
     console.warn('[billing/webhook] signature verification failed:', err)
     return c.json({ error: 'Invalid signature' }, 400)
