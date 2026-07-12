@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import Link from 'next/link'
 import { MessageSquare, BookOpen, Bot, Zap } from 'lucide-react'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin'
@@ -12,55 +13,65 @@ async function loadOverview() {
   const sessionCookie = cookieStore.get('__session')?.value
   if (!sessionCookie) redirect('/login')
 
-  const decoded = await getAdminAuth().verifySessionCookie(sessionCookie, true)
-  const db = getAdminDb()
-  const userSnap = await db.doc(`users/${decoded.uid}`).get()
-  const { workspaceId } = userSnap.data()!
-  const workspaceSnap = await db.doc(`workspaces/${workspaceId}`).get()
-  const workspace = workspaceSnap.data()!
+  try {
+    const decoded = await getAdminAuth().verifySessionCookie(sessionCookie, true)
+    const db = getAdminDb()
+    const userSnap = await db.doc(`users/${decoded.uid}`).get()
+    if (!userSnap.exists) redirect('/login')
 
-  const convCol = db.collection(`workspaces/${workspaceId}/conversations`)
-  const knowledgeCol = db.collection(`workspaces/${workspaceId}/knowledge`)
-  const channelsCol = db.collection(`workspaces/${workspaceId}/channels`)
+    const { workspaceId } = userSnap.data()!
+    const workspaceSnap = await db.doc(`workspaces/${workspaceId}`).get()
+    if (!workspaceSnap.exists) redirect('/onboarding')
 
-  const [totalConvAgg, resolvedAgg, resolvedTakeoverAgg, knowledgeSnap, channelsAgg, recentSnap] =
-    await Promise.all([
-      convCol.count().get(),
-      convCol.where('status', '==', 'resolved').count().get(),
-      convCol.where('status', '==', 'resolved').where('hadTakeover', '==', true).count().get(),
-      knowledgeCol.get(),
-      channelsCol.count().get(),
-      convCol.orderBy('updatedAt', 'desc').limit(5).get(),
-    ])
+    const workspace = workspaceSnap.data()!
 
-  const totalConversations = totalConvAgg.data().count
-  const resolved = resolvedAgg.data().count
-  const resolvedWithTakeover = resolvedTakeoverAgg.data().count
-  const knowledgeDocs = knowledgeSnap.docs.map((d) => d.data())
-  const indexedDocs = knowledgeDocs.filter((d) => d.status === 'indexed')
-  const chunkCount = indexedDocs.reduce((sum, d) => sum + (d.chunkCount ?? 0), 0)
-  const channelCount = channelsAgg.data().count
-  const usage = workspace.usage ?? { conversationCount: 0, messageCount: 0, tokenCount: 0 }
+    const convCol = db.collection(`workspaces/${workspaceId}/conversations`)
+    const knowledgeCol = db.collection(`workspaces/${workspaceId}/knowledge`)
+    const channelsCol = db.collection(`workspaces/${workspaceId}/channels`)
 
-  return {
-    totalConversations,
-    automationRate: resolved > 0 ? Math.round(((resolved - resolvedWithTakeover) / resolved) * 100) : null,
-    avgMessages:
-      usage.conversationCount > 0 ? (usage.messageCount ?? 0) / usage.conversationCount : null,
-    knowledgeDocCount: knowledgeDocs.length,
-    indexedDocCount: indexedDocs.length,
-    chunkCount,
-    channelCount,
-    agentConfigured: Boolean(workspace.agent?.description),
-    recent: recentSnap.docs.map((d) => {
-      const data = d.data()
-      return {
-        id: d.id,
-        lastMessage: (data.lastMessage as string) ?? '',
-        status: data.status as string,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() ?? null,
-      }
-    }),
+    const [totalConvAgg, resolvedAgg, resolvedTakeoverAgg, knowledgeSnap, channelsAgg, recentSnap] =
+      await Promise.all([
+        convCol.count().get(),
+        convCol.where('status', '==', 'resolved').count().get(),
+        convCol.where('status', '==', 'resolved').where('hadTakeover', '==', true).count().get(),
+        knowledgeCol.get(),
+        channelsCol.count().get(),
+        convCol.orderBy('updatedAt', 'desc').limit(5).get(),
+      ])
+
+    const totalConversations = totalConvAgg.data().count
+    const resolved = resolvedAgg.data().count
+    const resolvedWithTakeover = resolvedTakeoverAgg.data().count
+    const knowledgeDocs = knowledgeSnap.docs.map((d) => d.data())
+    const indexedDocs = knowledgeDocs.filter((d) => d.status === 'indexed')
+    const chunkCount = indexedDocs.reduce((sum, d) => sum + (d.chunkCount ?? 0), 0)
+    const channelCount = channelsAgg.data().count
+    const usage = workspace.usage ?? { conversationCount: 0, messageCount: 0, tokenCount: 0 }
+
+    return {
+      totalConversations,
+      automationRate: resolved > 0 ? Math.round(((resolved - resolvedWithTakeover) / resolved) * 100) : null,
+      avgMessages:
+        usage.conversationCount > 0 ? (usage.messageCount ?? 0) / usage.conversationCount : null,
+      knowledgeDocCount: knowledgeDocs.length,
+      indexedDocCount: indexedDocs.length,
+      chunkCount,
+      channelCount,
+      agentConfigured: Boolean(workspace.agent?.description),
+      recent: recentSnap.docs.map((d) => {
+        const data = d.data()
+        return {
+          id: d.id,
+          lastMessage: (data.lastMessage as string) ?? '',
+          status: data.status as string,
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() ?? null,
+        }
+      }),
+    }
+  } catch (err) {
+    if (isRedirectError(err)) throw err
+    console.error('[dashboard/page] session verification failed:', err)
+    redirect('/login')
   }
 }
 
