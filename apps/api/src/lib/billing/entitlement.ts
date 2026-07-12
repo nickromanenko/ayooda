@@ -22,10 +22,16 @@ export function checkEntitlement(input: EntitlementInput): EntitlementResult {
 
   // Active or past_due (grace) subscription
   if (status === 'active' || status === 'past_due') {
-    const plan = planFor(sub!.tier)
-    const cap = plan?.conversationCap ?? 0
-    if (used >= cap) return { entitled: false, reason: 'over_cap', cap, tier: sub!.tier }
-    return { entitled: true, reason: status === 'past_due' ? 'past_due' : 'ok', cap, tier: sub!.tier }
+    const s = sub as Subscription
+    const plan = planFor(s.tier)
+    const reason: GateReason = status === 'past_due' ? 'past_due' : 'ok'
+    // Unknown tier on an active subscription (transient sync state): fail open — never
+    // wrongfully lock out a paying customer.
+    if (!plan) return { entitled: true, reason, cap: 0, tier: s.tier }
+    if (used >= plan.conversationCap) {
+      return { entitled: false, reason: 'over_cap', cap: plan.conversationCap, tier: s.tier }
+    }
+    return { entitled: true, reason, cap: plan.conversationCap, tier: s.tier }
   }
 
   // Trial
@@ -49,8 +55,9 @@ export function shouldResetPeriod(
 ): boolean {
   if (!periodStart) return true
   // Subscribers: reset when the Stripe billing period rolls over
-  if ((subscription?.status === 'active' || subscription?.status === 'past_due') && subscription.currentPeriodEnd) {
-    return now >= subscription.currentPeriodEnd
+  if (subscription?.status === 'active' || subscription?.status === 'past_due') {
+    // Billing period is authoritative for subscribers. If it's not known yet, don't reset.
+    return subscription.currentPeriodEnd ? now >= subscription.currentPeriodEnd : false
   }
   // Trial / no subscription: reset on calendar-month change
   return (

@@ -41,6 +41,10 @@ describe('checkEntitlement', () => {
     const r = checkEntitlement({ subscription: undefined, periodConversationCount: 0, workspaceCreatedAt: created, now: new Date('2026-03-01T00:00:00Z') })
     expect(r.entitled).toBe(false); expect(r.reason).toBe('trial_expired')
   })
+  test('active subscription with unknown tier fails open (no wrongful lockout)', () => {
+    const r = checkEntitlement({ subscription: base({ status: 'active', tier: null }), periodConversationCount: 0, workspaceCreatedAt: created, now: new Date() })
+    expect(r.entitled).toBe(true); expect(r.reason).toBe('ok')
+  })
 })
 
 describe('shouldResetPeriod', () => {
@@ -58,5 +62,8 @@ describe('shouldResetPeriod', () => {
   })
   test('subscriber: now before currentPeriodEnd → false', () => {
     expect(shouldResetPeriod(new Date('2026-01-01'), new Date('2026-01-20'), base({ status: 'active', currentPeriodEnd: new Date('2026-02-01') }))).toBe(false)
+  })
+  test('subscriber with unknown currentPeriodEnd does not calendar-reset', () => {
+    expect(shouldResetPeriod(new Date('2026-01-28'), new Date('2026-02-05'), base({ status: 'active', currentPeriodEnd: null }))).toBe(false)
   })
 })
