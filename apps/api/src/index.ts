@@ -6,6 +6,11 @@ import { getLangfuse } from './lib/langfuse'
 const app = new Hono()
 
 app.use('*', logger())
+
+// Widget routes are public (called from customer websites) — allow all origins.
+// Must register before the global CORS: preflights are answered by the first matching middleware.
+app.use('/widget/*', cors({ origin: '*' }))
+
 app.use('*', cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3000'],
   credentials: true,
@@ -26,8 +31,6 @@ app.route('/knowledge', knowledgeRoutes)
 app.route('/channels', channelRoutes)
 app.route('/conversations', conversationRoutes)
 
-// Widget routes are public (called from customer websites) — allow all origins
-app.use('/widget/*', cors({ origin: '*' }))
 app.route('/widget', widgetRoutes)
 
 const port = parseInt(process.env.PORT ?? '3001')
