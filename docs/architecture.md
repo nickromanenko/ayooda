@@ -64,8 +64,8 @@ Ayooda is a multi-tenant SaaS platform that lets companies deploy an AI-powered 
         │  Pinecone  │  │ Gemini API │  │  LLM APIs  │
         │            │  │            │  │            │
         │ Vector DB  │  │ Embeddings │  │ Claude /   │
-        │ Per-workspace  text-        │  │ GPT-4o /  │
-        │ namespace  │  embedding-004│  │ Gemini     │
+        │ Per-workspace  gemini-      │  │ GPT-4o /  │
+        │ namespace  │  embedding-001│  │ Gemini     │
         └────────────┘  └────────────┘  └────────────┘
                                          (customer's own API key)
 ```
@@ -117,12 +117,14 @@ A self-contained TypeScript bundle compiled with Vite. No runtime framework depe
 
 ### apps/scraper — Puppeteer Job (Cloud Run Job)
 
-A Cloud Run Job (not a continuous service) triggered by the main API. Scrapes a website, extracts text, chunks it, generates embeddings, and upserts into Pinecone.
+A Cloud Run Job (not a continuous service) triggered by the main API. Now a general ingestor — scrapes a website or extracts text from an uploaded file, chunks it, generates embeddings, and upserts into Pinecone.
 
 - **Runtime**: Node.js (or Bun)
-- **Scraping**: Puppeteer + crawlee for multi-page crawl
+- **Ingestion mode**: `DOC_TYPE` env var selects `webpage` (uses `URL`) or `file` (uses `STORAGE_PATH`, a Firebase Storage object path)
+- **Scraping**: Puppeteer + crawlee for multi-page crawl (`webpage` mode)
+- **File text extraction**: pdf-parse (PDF), mammoth (DOCX), UTF-8 read (txt/csv/md) (`file` mode)
 - **Chunking**: Recursive text splitter (~500 tokens, 50-token overlap)
-- **Embeddings**: Google `text-embedding-004` via `@google/generative-ai`
+- **Embeddings**: Google `gemini-embedding-001` via `@google/generative-ai` (768-dim via `outputDimensionality`)
 - **Vector storage**: Pinecone client
 
 ### packages/shared — TypeScript Types
@@ -166,6 +168,7 @@ workspaces/
       llmModel: string           ← e.g. 'claude-opus-4-6', 'gpt-4o', 'gemini-2.0-flash'
     usage:
       conversationCount: number
+      messageCount: number
       tokenCount: number
 
   {workspaceId}/knowledge/
@@ -197,6 +200,7 @@ workspaces/
       visitorId: string          ← anonymous ID set by widget
       status: 'bot' | 'human' | 'resolved'
       operatorId: string | null  ← userId of operator if status = 'human'
+      hadTakeover: boolean       ← set true on operator takeover; used for dashboard automation rate
       createdAt: Timestamp
       updatedAt: Timestamp
       lastMessage: string        ← preview of last message content
@@ -219,7 +223,7 @@ workspaces/
 
 - **Index**: One index per Ayooda environment (`ayooda-prod`, `ayooda-dev`)
 - **Namespace**: One namespace per workspace — `workspace_{workspaceId}`
-- **Dimensions**: 768 (Google `text-embedding-004`)
+- **Dimensions**: 768 (Google `gemini-embedding-001`, truncated via `outputDimensionality`)
 - **Metric**: cosine
 
 Vector metadata per chunk:
@@ -246,7 +250,7 @@ Vector metadata per chunk:
 | PUT | `/workspace/agent` | Update agent identity and LLM config |
 | PUT | `/workspace` | Update workspace name |
 | POST | `/knowledge/scrape` | Trigger scraper job for a URL |
-| POST | `/knowledge/upload` | Upload file, chunk & embed |
+| POST | `/knowledge/upload` | Multipart file upload (pdf/docx/txt/csv/md, max 10 MB) → Firebase Storage → ingestion job |
 | GET | `/knowledge` | List knowledge base documents |
 | DELETE | `/knowledge/:id` | Delete doc + Pinecone vectors |
 | GET | `/conversations` | List conversations (filter by status, channel) |
@@ -261,7 +265,8 @@ Vector metadata per chunk:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/widget/config/:agentId` | Fetch agent appearance config for widget |
-| POST | `/widget/chat` | Send message, receive AI response (SSE stream) |
+| POST | `/widget/chat` | Send message, receive AI response as an SSE stream (`chunk` / `done` / `error` events) |
+| GET | `/widget/conversations/:id/events` | SSE feed of operator messages + status changes; requires `channelId` & `visitorId` query params |
 
 ---
 
@@ -278,7 +283,7 @@ POST /widget/chat
        │
        ├─ 2. Fetch workspace agent config (LLM provider, API key, model, systemPrompt)
        │
-       ├─ 3. Embed message → Google text-embedding-004 (768-dim vector)
+       ├─ 3. Embed message → Google gemini-embedding-001 (768-dim vector via outputDimensionality)
        │
        ├─ 4. Query Pinecone (namespace: workspace_{id}, top-k: 5)
        │
@@ -348,6 +353,7 @@ GitHub main branch
 ```
 FIREBASE_PROJECT_ID
 FIREBASE_SERVICE_ACCOUNT_KEY  ← JSON, stored as Cloud Run secret
+FIREBASE_STORAGE_BUCKET       ← optional, defaults to <project-id>.firebasestorage.app
 PINECONE_API_KEY
 PINECONE_INDEX
 GEMINI_API_KEY                ← for embeddings
@@ -366,6 +372,7 @@ NEXT_PUBLIC_API_URL           ← Cloud Run API URL
 ```
 FIREBASE_PROJECT_ID
 FIREBASE_SERVICE_ACCOUNT_KEY
+FIREBASE_STORAGE_BUCKET       ← optional, defaults to <project-id>.firebasestorage.app
 PINECONE_API_KEY
 PINECONE_INDEX
 GEMINI_API_KEY
