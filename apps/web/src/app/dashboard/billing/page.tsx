@@ -18,6 +18,7 @@ export default function BillingPage() {
   const [data, setData] = useState<BillingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string>('')
+  const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -29,18 +30,22 @@ export default function BillingPage() {
 
   async function upgrade(tier: string) {
     setBusy(tier)
+    setError('')
     try {
       const res = await apiRequest('/billing/checkout', { method: 'POST', body: JSON.stringify({ tier }) })
-      const { url } = await res.json() as { url?: string }
-      if (url) window.location.href = url
+      const body = await res.json().catch(() => ({})) as { url?: string; error?: string }
+      if (!res.ok || !body.url) { setError(body.error ?? 'Could not start checkout. Please try again.'); return }
+      window.location.href = body.url
     } finally { setBusy('') }
   }
   async function manage() {
     setBusy('manage')
+    setError('')
     try {
       const res = await apiRequest('/billing/portal', { method: 'POST' })
-      const { url } = await res.json() as { url?: string }
-      if (url) window.location.href = url
+      const body = await res.json().catch(() => ({})) as { url?: string; error?: string }
+      if (!res.ok || !body.url) { setError(body.error ?? 'Could not open the billing portal.'); return }
+      window.location.href = body.url
     } finally { setBusy('') }
   }
 
@@ -59,6 +64,10 @@ export default function BillingPage() {
         <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Billing</h1>
         <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Your plan and usage.</p>
       </div>
+
+      {error && (
+        <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13, marginBottom: 20 }}>{error}</div>
+      )}
 
       {/* Current status */}
       <div style={card}>
