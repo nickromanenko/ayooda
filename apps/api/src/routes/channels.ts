@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
+import { randomBytes } from 'crypto'
 import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
+import { encryptSecret } from '../lib/crypto'
+import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
 
 const channels = new Hono<{ Variables: AuthVariables }>()
 
@@ -16,7 +19,10 @@ channels.get('/', async (c) => {
     .orderBy('createdAt', 'desc')
     .get()
 
-  return c.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+  return c.json(snap.docs.map((d) => {
+    const { botTokenEnc, webhookSecret, ...safe } = d.data() as Record<string, unknown>
+    return { id: d.id, ...safe }
+  }))
 })
 
 /**
@@ -75,6 +81,76 @@ channels.post('/web-widget', async (c) => {
   await batch.commit()
 
   return c.json({ channelId, embedCode }, 201)
+})
+
+/** POST /channels/telegram — connect a workspace's Telegram bot */
+channels.post('/telegram', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const body = await c.req.json<{ botToken?: string }>()
+  const botToken = body.botToken?.trim()
+  if (!botToken) return c.json({ error: 'botToken is required' }, 400)
+
+  const apiBase = process.env.API_PUBLIC_URL
+  if (!apiBase) return c.json({ error: 'Server not configured for webhooks (API_PUBLIC_URL)' }, 500)
+
+  // Validate the token
+  let bot
+  try {
+    bot = await getMe(botToken)
+  } catch {
+    return c.json({ error: 'Invalid bot token' }, 400)
+  }
+
+  // One telegram channel per workspace: reuse the existing doc id if present
+  const existing = await adminDb
+    .collection(`workspaces/${workspaceId}/channels`)
+    .where('type', '==', 'telegram')
+    .limit(1)
+    .get()
+  const channelRef = existing.empty
+    ? adminDb.collection(`workspaces/${workspaceId}/channels`).doc()
+    : existing.docs[0].ref
+  const channelId = channelRef.id
+  const webhookSecret = randomBytes(24).toString('hex')
+
+  await setWebhook(botToken, `${apiBase}/telegram/webhook/${channelId}`, webhookSecret)
+
+  await channelRef.set({
+    workspaceId,
+    id: channelId,
+    type: 'telegram',
+    botTokenEnc: encryptSecret(botToken),
+    webhookSecret,
+    telegram: { botUsername: bot.username, botId: bot.id },
+    isActive: true,
+    createdAt: new Date(),
+  })
+
+  return c.json({ channelId, botUsername: bot.username })
+})
+
+/** DELETE /channels/telegram — disconnect the bot */
+channels.delete('/telegram', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const existing = await adminDb
+    .collection(`workspaces/${workspaceId}/channels`)
+    .where('type', '==', 'telegram')
+    .limit(1)
+    .get()
+  if (existing.empty) return c.json({ ok: true })
+
+  const doc = existing.docs[0]
+  const enc = doc.data().botTokenEnc as string | undefined
+  if (enc) {
+    try {
+      const { decryptSecret } = await import('../lib/crypto')
+      await deleteWebhook(decryptSecret(enc))
+    } catch (err) {
+      console.warn('[channels/telegram] deleteWebhook failed:', err)
+    }
+  }
+  await doc.ref.delete()
+  return c.json({ ok: true })
 })
 
 export default channels
