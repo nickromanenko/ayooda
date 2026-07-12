@@ -3,6 +3,7 @@ import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { getStripe, PRICE_BY_TIER, tierForPrice } from '../lib/billing/stripe'
 import { checkEntitlement } from '../lib/billing/entitlement'
+import { subscriptionPeriodEnd, subscriptionPriceId } from '../lib/billing/stripe-sync'
 import { PLANS, planFor, type PlanTier, type Subscription } from '@ayooda/shared'
 
 const billing = new Hono<{ Variables: AuthVariables }>()
@@ -46,10 +47,10 @@ billing.post('/webhook', async (c) => {
 /** Map a Stripe subscription object onto the workspace's `subscription` field. */
 async function applySubscription(
   workspaceId: string,
-  sub: { status: string; items?: { data: Array<{ price?: { id?: string } }> }; current_period_end?: number; id?: string },
+  sub: { status: string; items?: { data?: Array<{ price?: { id?: string }; current_period_end?: number }> }; current_period_end?: number; id?: string },
   customerId: string | null,
 ): Promise<void> {
-  const priceId = sub.items?.data?.[0]?.price?.id
+  const priceId = subscriptionPriceId(sub)
   const tier: PlanTier | null = priceId ? tierForPrice(priceId) : null
   const status: Subscription['status'] =
     sub.status === 'active' || sub.status === 'trialing' ? 'active'
@@ -66,7 +67,7 @@ async function applySubscription(
   await workspaceRef.update({
     'subscription.status': status,
     'subscription.tier': tier,
-    'subscription.currentPeriodEnd': sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
+    'subscription.currentPeriodEnd': subscriptionPeriodEnd(sub),
     'subscription.stripeCustomerId': customerId,
     'subscription.stripeSubscriptionId': sub.id ?? null,
   })
