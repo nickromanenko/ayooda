@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle, FileText } from 'lucide-react'
+import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle, FileText, RotateCw } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
 import type { KnowledgeDocStatus } from '@ayooda/shared'
@@ -49,6 +49,7 @@ export default function KnowledgePage() {
   const [adding, setAdding] = useState(false)
   const [urlError, setUrlError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [reindexingId, setReindexingId] = useState<string | null>(null)
 
   const fetchDocs = useCallback(async () => {
     try {
@@ -105,6 +106,16 @@ export default function KnowledgePage() {
       setDocs((prev) => prev.filter((d) => d.id !== id))
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function handleReindex(id: string) {
+    setReindexingId(id)
+    try {
+      await apiRequest(`/knowledge/${id}/reindex`, { method: 'POST' })
+      await fetchDocs()
+    } finally {
+      setReindexingId(null)
     }
   }
 
@@ -194,6 +205,21 @@ export default function KnowledgePage() {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, flexShrink: 0, ...cfg.style }}>
                   {cfg.icon} {cfg.label}
                 </span>
+                {(doc.status === 'indexed' || doc.status === 'error') && (
+                  <button
+                    type="button"
+                    onClick={() => void handleReindex(doc.id)}
+                    disabled={reindexingId === doc.id}
+                    style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', opacity: reindexingId === doc.id ? 0.4 : 1, transition: 'color .15s' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-mute)')}
+                    aria-label="Re-index"
+                  >
+                    {reindexingId === doc.id
+                      ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                      : <RotateCw size={14} />}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void handleDelete(doc.id)}

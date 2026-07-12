@@ -101,6 +101,48 @@ knowledge.post('/upload', async (c) => {
   return c.json({ docId: docRef.id, status: 'pending' }, 201)
 })
 
+/** POST /knowledge/:id/reindex — clear vectors and re-run ingestion for an existing doc */
+knowledge.post('/:id/reindex', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const docId = c.req.param('id')
+
+  const docRef = adminDb.doc(`workspaces/${workspaceId}/knowledge/${docId}`)
+  const snap = await docRef.get()
+  if (!snap.exists) return c.json({ error: 'Not found' }, 404)
+
+  const data = snap.data() as {
+    type: 'webpage' | 'file'
+    source: string
+    storagePath?: string
+  }
+
+  if (data.type === 'file' && !data.storagePath) {
+    return c.json({ error: 'This file cannot be re-indexed (no stored file).' }, 409)
+  }
+
+  // Best-effort clear existing vectors (same as delete)
+  try {
+    await namespaceFor(workspaceId).deleteMany({ docId })
+  } catch (err) {
+    console.warn(`[knowledge] Pinecone clear failed for reindex ${docId}:`, err)
+  }
+
+  await docRef.update({
+    status: 'pending',
+    chunkCount: 0,
+    errorMessage: null,
+    indexedAt: null,
+  })
+
+  triggerIngestion(
+    data.type === 'file'
+      ? { workspaceId, docId, docType: 'file', storagePath: data.storagePath }
+      : { workspaceId, docId, docType: 'webpage', url: data.source },
+  )
+
+  return c.json({ ok: true, status: 'pending' })
+})
+
 /** GET /knowledge — list all knowledge docs for the workspace */
 knowledge.get('/', async (c) => {
   const workspaceId = c.get('workspaceId')
