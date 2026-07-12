@@ -1,8 +1,10 @@
 import { Hono } from 'hono'
+import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from '../lib/firebase-admin'
 import { LEGACY_MODEL_MAP } from '../lib/gemini'
+import { encryptSecret } from '../lib/crypto'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
-import { GEMINI_MODELS } from '@ayooda/shared'
+import { LLM_MODELS } from '@ayooda/shared'
 
 const workspace = new Hono<{ Variables: AuthVariables }>()
 
@@ -28,6 +30,7 @@ workspace.get('/', async (c) => {
       llmModel: LEGACY_MODEL_MAP[data.agent.llmModel] ?? data.agent.llmModel,
     },
     usage: data.usage,
+    hasOpenRouterKey: Boolean(data.openRouterKey),
   })
 })
 
@@ -53,7 +56,7 @@ workspace.put('/agent', async (c) => {
     llmModel?: string
   }>()
 
-  if (body.llmModel !== undefined && !GEMINI_MODELS.some((m) => m.id === body.llmModel)) {
+  if (body.llmModel !== undefined && !LLM_MODELS.some((m) => m.id === body.llmModel)) {
     return c.json({ error: 'Invalid llmModel' }, 400)
   }
 
@@ -68,6 +71,25 @@ workspace.put('/agent', async (c) => {
   }
 
   await adminDb.doc(`workspaces/${workspaceId}`).update(update)
+  return c.json({ ok: true })
+})
+
+/** PUT /workspace/key — store the workspace's OpenRouter API key (encrypted) */
+workspace.put('/key', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const body = await c.req.json<{ apiKey?: string }>()
+  const apiKey = body.apiKey?.trim()
+  if (!apiKey || apiKey.length > 500) {
+    return c.json({ error: 'apiKey is required (max 500 chars)' }, 400)
+  }
+  await adminDb.doc(`workspaces/${workspaceId}`).update({ openRouterKey: encryptSecret(apiKey) })
+  return c.json({ ok: true })
+})
+
+/** DELETE /workspace/key — remove the stored key */
+workspace.delete('/key', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  await adminDb.doc(`workspaces/${workspaceId}`).update({ openRouterKey: FieldValue.delete() })
   return c.json({ ok: true })
 })
 

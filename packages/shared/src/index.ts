@@ -73,6 +73,7 @@ export interface WorkspaceDoc {
   onboardingComplete: boolean
   agent: AgentConfig
   usage: WorkspaceUsage
+  openRouterKey?: string // encrypted; server-only, never returned
 }
 
 export interface KnowledgeDoc {
