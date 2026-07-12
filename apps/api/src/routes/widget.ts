@@ -9,10 +9,12 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { FieldValue } from 'firebase-admin/firestore'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { providerOf } from '@ayooda/shared'
 import { adminDb } from '../lib/firebase-admin'
 import { embedText, LEGACY_MODEL_MAP } from '../lib/gemini'
 import { getLangfuse } from '../lib/langfuse'
+import { streamChat } from '../lib/llm/openrouter'
+import { resolveOpenRouterKey } from '../lib/llm/resolve'
 import { namespaceFor } from '../lib/pinecone'
 import { rateLimit } from '../lib/rate-limit'
 
@@ -193,6 +195,25 @@ widget.post('/chat', async (c) => {
     console.warn('[widget/chat] RAG retrieval failed:', err)
   }
 
+  // Resolve provider + key before any streaming (pre-stream errors stay JSON)
+  const provider = providerOf(llmModel) ?? 'gemini'
+  let keyResult: ReturnType<typeof resolveOpenRouterKey>
+  try {
+    keyResult = resolveOpenRouterKey(provider, workspaceData.openRouterKey)
+  } catch (err) {
+    console.error('[widget/chat] key resolution failed:', err)
+    return c.json(
+      { error: "This agent's AI model needs an OpenRouter API key. Add one in Settings." },
+      502,
+    )
+  }
+  if (!keyResult.ok) {
+    return c.json(
+      { error: "This agent's AI model needs an OpenRouter API key. Add one in Settings." },
+      502,
+    )
+  }
+
   // 6. Build prompt
   const contextSection =
     contextBlocks.length > 0
@@ -201,50 +222,48 @@ widget.post('/chat', async (c) => {
 
   const fullSystemPrompt = systemPrompt + contextSection
 
-  // Build Gemini contents array from history
-  const contents = history.slice(0, -1).map((msg) => ({
-    role: msg.role === 'user' ? 'user' : ('model' as 'user' | 'model'),
-    parts: [{ text: msg.content }],
-  }))
-  // Add current user message
-  contents.push({ role: 'user', parts: [{ text: message.trim() }] })
-
-  // 7. Stream Gemini response as SSE
+  // 7. Stream LLM response as SSE
   const generation = trace.generation({
-    name: 'gemini-chat',
+    name: 'llm-chat',
     model: llmModel,
-    input: { system: fullSystemPrompt, messages: contents },
+    input: { system: fullSystemPrompt, messages: history },
   })
 
   return streamSSE(c, async (stream) => {
     let reply = ''
     let generationEnded = false
     try {
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-      const model = genAI.getGenerativeModel({
+      // Build message history for the LLM (exclude the just-added user msg's duplicate)
+      const chatMessages = history.slice(0, -1).map((m) => ({
+        role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
+        content: m.content,
+      }))
+      chatMessages.push({ role: 'user', content: message.trim() })
+
+      const gen = streamChat({
         model: llmModel,
-        systemInstruction: fullSystemPrompt,
+        systemPrompt: fullSystemPrompt,
+        messages: chatMessages,
+        apiKey: keyResult.apiKey,
       })
-      const result = await model.generateContentStream({ contents })
 
-      for await (const chunk of result.stream) {
-        const text = chunk.text()
-        if (!text) continue
-        reply += text
-        await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text }) })
+      let promptTokens = 0
+      let completionTokens = 0
+      while (true) {
+        const next = await gen.next()
+        if (next.done) {
+          promptTokens = next.value.promptTokens
+          completionTokens = next.value.completionTokens
+          break
+        }
+        reply += next.value.text
+        await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: next.value.text }) })
       }
-
-      const response = await result.response
       reply = reply.trim()
-      const promptTokens = response.usageMetadata?.promptTokenCount ?? 0
-      const completionTokens = response.usageMetadata?.candidatesTokenCount ?? 0
+
       generation.end({
         output: reply,
-        usage: {
-          input: promptTokens,
-          output: completionTokens,
-          total: promptTokens + completionTokens,
-        },
+        usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens },
       })
       generationEnded = true
 
@@ -276,14 +295,14 @@ widget.post('/chat', async (c) => {
         console.warn('[widget/chat] post-reply bookkeeping failed:', err)
       }
     } catch (err) {
-      console.error('[widget/chat] Gemini stream failed:', err)
+      console.error('[widget/chat] LLM stream failed:', err)
       if (!generationEnded) {
         generation.end({
           level: 'ERROR',
           statusMessage: err instanceof Error ? err.message : String(err),
         })
       }
-      trace.update({ output: { error: 'gemini_failed' } })
+      trace.update({ output: { error: 'llm_failed' } })
       await stream
         .writeSSE({ event: 'error', data: JSON.stringify({ error: 'Failed to generate response' }) })
         .catch(() => {})
