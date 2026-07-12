@@ -8,15 +8,8 @@
 
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import { FieldValue } from 'firebase-admin/firestore'
-import { providerOf } from '@ayooda/shared'
-import { checkEntitlement, shouldResetPeriod } from '../lib/billing/entitlement'
 import { adminDb } from '../lib/firebase-admin'
-import { embedText, LEGACY_MODEL_MAP } from '../lib/gemini'
-import { getLangfuse } from '../lib/langfuse'
 import { streamChat } from '../lib/llm/openrouter'
-import { resolveOpenRouterKey } from '../lib/llm/resolve'
-import { namespaceFor } from '../lib/pinecone'
 import { rateLimit } from '../lib/rate-limit'
 
 const widget = new Hono()
@@ -112,238 +105,46 @@ widget.post('/chat', async (c) => {
   if (!channelDoc) return c.json({ error: 'Channel not found' }, 404)
 
   const workspaceId: string = channelDoc.data().workspaceId
-  const workspaceSnap = await adminDb.doc(`workspaces/${workspaceId}`).get()
-  if (!workspaceSnap.exists) return c.json({ error: 'Workspace not found' }, 404)
 
-  const workspaceRef = adminDb.doc(`workspaces/${workspaceId}`)
-
-  const workspaceData = workspaceSnap.data()!
-  const agent = workspaceData.agent
-  const systemPrompt: string = agent.systemPrompt
-  const storedModel: string = agent.llmModel ?? 'gemini-flash-latest'
-  const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
-
-  const trace = getLangfuse().trace({
-    name: 'widget-chat',
-    sessionId: conversationId,
-    userId: visitorId,
-    input: { message: message.trim() },
-    metadata: { workspaceId, channelId, llmModel },
+  const { prepareTurn } = await import('../lib/chat/agent-turn')
+  const prepared = await prepareTurn({
+    workspaceId, channelId, conversationId, visitorId, message, channelType: 'web_widget',
   })
 
-  // 2. Get or create conversation
-  const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
-  const convSnap = await convRef.get()
-  // Same ownership gate as the events feed — a leaked conversation id must not
-  // let another visitor read or write someone else's conversation.
-  if (convSnap.exists && convSnap.data()!.visitorId !== visitorId) {
-    return c.json({ error: 'Not found' }, 404)
+  if (prepared.kind === 'gated') {
+    return c.json({ error: 'This workspace has reached its plan limit or its trial has ended.', reason: prepared.reason }, 402)
   }
-  if (!convSnap.exists) {
-    // Billing gate — only NEW conversations are gated; in-progress chats continue.
-    const rawSub = workspaceData.subscription
-    const sub = rawSub
-      ? {
-          ...rawSub,
-          trialEndsAt: rawSub.trialEndsAt?.toDate?.() ?? rawSub.trialEndsAt ?? null,
-          currentPeriodEnd: rawSub.currentPeriodEnd?.toDate?.() ?? rawSub.currentPeriodEnd ?? null,
-        }
-      : undefined
-    const usage = workspaceData.usage ?? {}
-    const periodStart = usage.periodStart?.toDate?.() ?? null
-    const reset = shouldResetPeriod(periodStart, new Date(), sub)
-    const periodUsed = reset ? 0 : (usage.periodConversationCount ?? 0)
-
-    const ent = checkEntitlement({
-      subscription: sub,
-      periodConversationCount: periodUsed,
-      workspaceCreatedAt: workspaceData.createdAt?.toDate?.() ?? new Date(0),
-      now: new Date(),
-    })
-    if (!ent.entitled) {
-      return c.json(
-        { error: 'This workspace has reached its plan limit or its trial has ended.', reason: ent.reason },
-        402,
-      )
-    }
-
-    await convRef.set({
-      channelId,
-      visitorId,
-      status: 'bot',
-      operatorId: null,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-      lastMessage: message.trim(),
-    })
-
-    // Increment lifetime + period counters; reset the period window if it rolled.
-    const update: Record<string, unknown> = {
-      'usage.conversationCount': FieldValue.increment(1),
-    }
-    if (reset) {
-      update['usage.periodConversationCount'] = 1
-      update['usage.periodStart'] = FieldValue.serverTimestamp()
-    } else {
-      update['usage.periodConversationCount'] = FieldValue.increment(1)
-    }
-    await workspaceRef.update(update)
+  if (prepared.kind === 'error') {
+    return c.json({ error: "This agent's AI model needs an OpenRouter API key. Add one in Settings." }, 502)
   }
 
-  // 3. Save user message
-  const messagesRef = convRef.collection('messages')
-  await messagesRef.add({
-    role: 'user',
-    content: message.trim(),
-    createdAt: FieldValue.serverTimestamp(),
-  })
-
-  // 4. Fetch conversation history (last 10 messages for context window)
-  const historySnap = await messagesRef.orderBy('createdAt', 'asc').limitToLast(10).get()
-  const history = historySnap.docs.map((d) => d.data() as { role: string; content: string })
-
-  // 5. Embed user message + query Pinecone
-  let contextBlocks: string[] = []
-  let sources: Array<{ docId: string; source: string; score: number }> = []
-
-  try {
-    const queryEmbedding = await embedText(message.trim(), trace)
-    const retrievalSpan = trace.span({
-      name: 'pinecone-query',
-      input: { topK: 5 },
-    })
-    const ns = namespaceFor(workspaceId)
-    const results = await ns.query({ vector: queryEmbedding, topK: 5, includeMetadata: true })
-    retrievalSpan.end({ output: { matches: results.matches?.length ?? 0 } })
-
-    sources = (results.matches ?? [])
-      .filter((m) => (m.score ?? 0) > 0.6)
-      .map((m) => ({
-        docId: (m.metadata?.docId as string) ?? '',
-        source: (m.metadata?.source as string) ?? '',
-        score: m.score ?? 0,
-      }))
-
-    contextBlocks = (results.matches ?? [])
-      .filter((m) => (m.score ?? 0) > 0.6)
-      .map((m) => (m.metadata?.text as string) ?? '')
-      .filter(Boolean)
-  } catch (err) {
-    // RAG failure is non-fatal — fall back to no context
-    console.warn('[widget/chat] RAG retrieval failed:', err)
-  }
-
-  // Resolve provider + key before any streaming (pre-stream errors stay JSON)
-  const provider = providerOf(llmModel) ?? 'gemini'
-  let keyResult: ReturnType<typeof resolveOpenRouterKey>
-  try {
-    keyResult = resolveOpenRouterKey(provider, workspaceData.openRouterKey)
-  } catch (err) {
-    console.error('[widget/chat] key resolution failed:', err)
-    return c.json(
-      { error: "This agent's AI model needs an OpenRouter API key. Add one in Settings." },
-      502,
-    )
-  }
-  if (!keyResult.ok) {
-    return c.json(
-      { error: "This agent's AI model needs an OpenRouter API key. Add one in Settings." },
-      502,
-    )
-  }
-
-  // 6. Build prompt
-  const contextSection =
-    contextBlocks.length > 0
-      ? `\n\nUse the following knowledge base context to inform your answer:\n---\n${contextBlocks.join('\n\n')}\n---`
-      : ''
-
-  const fullSystemPrompt = systemPrompt + contextSection
-
-  // 7. Stream LLM response as SSE
-  const generation = trace.generation({
-    name: 'llm-chat',
-    model: llmModel,
-    input: { system: fullSystemPrompt, messages: history },
-  })
+  const { chatParams, sources, trace, llmModel, persist } = prepared
+  const generation = trace.generation({ name: 'llm-chat', model: llmModel, input: { system: chatParams.systemPrompt, messages: chatParams.messages } })
 
   return streamSSE(c, async (stream) => {
     let reply = ''
     let generationEnded = false
     try {
-      // Build message history for the LLM (exclude the just-added user msg's duplicate)
-      const chatMessages = history.slice(0, -1).map((m) => ({
-        role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
-        content: m.content,
-      }))
-      chatMessages.push({ role: 'user', content: message.trim() })
-
-      const gen = streamChat({
-        model: llmModel,
-        systemPrompt: fullSystemPrompt,
-        messages: chatMessages,
-        apiKey: keyResult.apiKey,
-      })
-
+      const gen = streamChat(chatParams)
       let promptTokens = 0
       let completionTokens = 0
       while (true) {
         const next = await gen.next()
-        if (next.done) {
-          promptTokens = next.value.promptTokens
-          completionTokens = next.value.completionTokens
-          break
-        }
+        if (next.done) { promptTokens = next.value.promptTokens; completionTokens = next.value.completionTokens; break }
         reply += next.value.text
         await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: next.value.text }) })
       }
       reply = reply.trim()
-
-      generation.end({
-        output: reply,
-        usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens },
-      })
+      generation.end({ output: reply, usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens } })
       generationEnded = true
 
-      // 8. Save assistant message
-      const messageRef = await messagesRef.add({
-        role: 'assistant',
-        content: reply,
-        createdAt: FieldValue.serverTimestamp(),
-        metadata: { sources, llmModel, promptTokens, completionTokens },
-      })
-
-      trace.update({ output: { message: reply, sources } })
-      await stream.writeSSE({
-        event: 'done',
-        data: JSON.stringify({ conversationId, messageId: messageRef.id, sources }),
-      })
-
-      // Best-effort bookkeeping — the client already has its reply
-      try {
-        await convRef.update({
-          updatedAt: FieldValue.serverTimestamp(),
-          lastMessage: reply.slice(0, 200),
-        })
-        await workspaceRef.update({
-          'usage.messageCount': FieldValue.increment(2), // user + assistant
-          'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
-        })
-      } catch (err) {
-        console.warn('[widget/chat] post-reply bookkeeping failed:', err)
-      }
+      const messageId = await persist(reply, promptTokens, completionTokens)
+      await stream.writeSSE({ event: 'done', data: JSON.stringify({ conversationId, messageId, sources }) })
     } catch (err) {
       console.error('[widget/chat] LLM stream failed:', err)
-      if (!generationEnded) {
-        generation.end({
-          level: 'ERROR',
-          statusMessage: err instanceof Error ? err.message : String(err),
-        })
-      }
+      if (!generationEnded) generation.end({ level: 'ERROR', statusMessage: err instanceof Error ? err.message : String(err) })
       trace.update({ output: { error: 'llm_failed' } })
-      await stream
-        .writeSSE({ event: 'error', data: JSON.stringify({ error: 'Failed to generate response' }) })
-        .catch(() => {})
+      await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Failed to generate response' }) }).catch(() => {})
     }
   })
 })
