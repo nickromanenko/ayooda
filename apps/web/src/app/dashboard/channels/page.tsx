@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Loader2, Copy, Check, Code } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Loader2, Copy, Check, Code, Send } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 
 interface Channel {
@@ -15,24 +15,74 @@ interface Channel {
   }
   embedCode: string
   isActive: boolean
+  telegram?: {
+    botUsername: string
+    botId: string
+  }
 }
 
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<Channel[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState<string | null>(null)
+  const [botToken, setBotToken] = useState('')
+  const [telegramError, setTelegramError] = useState<string | null>(null)
+  const [telegramBusy, setTelegramBusy] = useState(false)
 
-  useEffect(() => {
-    apiRequest('/channels')
+  const fetchChannels = useCallback(() => {
+    return apiRequest('/channels')
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setChannels(data as Channel[]))
-      .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    fetchChannels().finally(() => setLoading(false))
+  }, [fetchChannels])
 
   async function handleCopy(channelId: string, text: string) {
     await navigator.clipboard.writeText(text)
     setCopied(channelId)
     setTimeout(() => setCopied(null), 2000)
+  }
+
+  async function handleConnectTelegram() {
+    setTelegramError(null)
+    setTelegramBusy(true)
+    try {
+      const res = await apiRequest('/channels/telegram', {
+        method: 'POST',
+        body: JSON.stringify({ botToken }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setTelegramError(data.error ?? 'Failed to connect Telegram bot.')
+        return
+      }
+      setBotToken('')
+      await fetchChannels()
+    } catch {
+      setTelegramError('Failed to connect Telegram bot.')
+    } finally {
+      setTelegramBusy(false)
+    }
+  }
+
+  async function handleDisconnectTelegram() {
+    setTelegramError(null)
+    setTelegramBusy(true)
+    try {
+      const res = await apiRequest('/channels/telegram', { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setTelegramError(data.error ?? 'Failed to disconnect Telegram bot.')
+        return
+      }
+      await fetchChannels()
+    } catch {
+      setTelegramError('Failed to disconnect Telegram bot.')
+    } finally {
+      setTelegramBusy(false)
+    }
   }
 
   if (loading) {
@@ -44,6 +94,7 @@ export default function ChannelsPage() {
   }
 
   const webWidget = channels.find((c) => c.type === 'web_widget')
+  const telegramChannel = channels.find((c) => c.type === 'telegram')
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
@@ -140,10 +191,102 @@ export default function ChannelsPage() {
         </div>
       )}
 
+      {/* Telegram */}
+      <div style={{ marginTop: 16, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Send size={16} style={{ color: 'var(--accent)' }} />
+            </div>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>Telegram</p>
+              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+                {telegramChannel ? `Connected as @${telegramChannel.telegram?.botUsername}` : 'Not connected'}
+              </p>
+            </div>
+          </div>
+          {telegramChannel && (
+            <span style={{
+              fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
+              background: 'rgba(52,211,153,0.15)', color: 'var(--mint)',
+            }}>
+              Connected
+            </span>
+          )}
+        </div>
+
+        <div style={{ padding: 20 }}>
+          {telegramChannel ? (
+            <div>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 16 }}>
+                Your agent is live on Telegram as{' '}
+                <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent)' }}>
+                  @{telegramChannel.telegram?.botUsername}
+                </code>
+                .
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleDisconnectTelegram()}
+                disabled={telegramBusy}
+                style={{
+                  fontSize: 12.5, fontWeight: 500, padding: '8px 16px', borderRadius: 'var(--r-sm)',
+                  background: 'var(--panel-2)', border: '1px solid var(--line)', color: 'var(--ink-dim)',
+                  cursor: telegramBusy ? 'default' : 'pointer', opacity: telegramBusy ? 0.6 : 1,
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {telegramBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 12 }}>
+                Create a bot with @BotFather and paste its token here.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  type="password"
+                  value={botToken}
+                  onChange={(e) => setBotToken(e.target.value)}
+                  placeholder="Bot token"
+                  autoComplete="off"
+                  style={{
+                    flex: '1 1 220px', fontSize: 13, padding: '8px 12px', borderRadius: 'var(--r-sm)',
+                    background: 'var(--bg)', border: '1px solid var(--line-2)', color: 'var(--ink)',
+                    fontFamily: 'var(--font-mono)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleConnectTelegram()}
+                  disabled={telegramBusy || !botToken}
+                  style={{
+                    fontSize: 12.5, fontWeight: 500, padding: '8px 16px', borderRadius: 'var(--r-sm)',
+                    background: 'var(--accent)', border: '1px solid var(--accent)', color: '#1a1200',
+                    cursor: telegramBusy || !botToken ? 'default' : 'pointer', opacity: telegramBusy || !botToken ? 0.6 : 1,
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  {telegramBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                  Connect
+                </button>
+              </div>
+              {telegramError && (
+                <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 12, marginTop: 10 }}>
+                  {telegramError}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Future channels */}
       <div style={{ marginTop: 16, background: 'var(--panel)', border: '1px dashed var(--line-2)', borderRadius: 'var(--r-md)', padding: 20 }}>
         <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-mute)', margin: '0 0 4px' }}>More channels coming soon</p>
-        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: 0 }}>Telegram, email, and Slack integrations are on the roadmap.</p>
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: 0 }}>Email and Slack integrations are on the roadmap.</p>
       </div>
     </div>
   )
