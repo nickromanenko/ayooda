@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Loader2, Check } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { useWorkspace } from '@/hooks/useWorkspace'
-import { GEMINI_MODELS, type AgentTone } from '@ayooda/shared'
+import { LLM_MODELS, providerOf, type LLMProvider, type AgentTone } from '@ayooda/shared'
 
 const TONE_OPTIONS: { value: AgentTone; label: string; hint: string }[] = [
   { value: 'professional', label: 'Professional', hint: 'Formal and concise' },
@@ -48,7 +48,7 @@ export default function AgentPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [tone, setTone] = useState<AgentTone>('friendly')
-  const [llmModel, setLlmModel] = useState<string>(GEMINI_MODELS[0].id)
+  const [llmModel, setLlmModel] = useState<string>(LLM_MODELS[0].id)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -156,24 +156,34 @@ export default function AgentPage() {
         {/* Model */}
         <div>
           <p style={labelStyle}>AI model</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-            {GEMINI_MODELS.map((m) => (
-              <button
-                key={m.id} type="button" onClick={() => setLlmModel(m.id)}
-                style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
-                  padding: '12px 14px', borderRadius: 'var(--r-sm)', textAlign: 'left',
-                  cursor: 'pointer', transition: 'all .15s',
-                  border: `1px solid ${llmModel === m.id ? 'var(--accent)' : 'var(--line)'}`,
-                  background: llmModel === m.id ? 'var(--accent-soft)' : 'var(--bg-2)',
-                  color: 'var(--ink)',
-                }}
-              >
-                <span style={{ fontSize: 13, fontWeight: 500 }}>Gemini {m.label}</span>
-                <span style={{ fontSize: 11.5, color: 'var(--ink-mute)' }}>{m.description}</span>
-              </button>
-            ))}
-          </div>
+          {(['gemini', 'claude', 'openai'] as LLMProvider[]).map((prov) => (
+            <div key={prov} style={{ marginBottom: 12 }}>
+              <p style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'capitalize', margin: '0 0 6px' }}>{prov}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {LLM_MODELS.filter((m) => m.provider === prov).map((m) => (
+                  <button
+                    key={m.id} type="button" onClick={() => setLlmModel(m.id)}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
+                      padding: '12px 14px', borderRadius: 'var(--r-sm)', textAlign: 'left',
+                      cursor: 'pointer', transition: 'all .15s',
+                      border: `1px solid ${llmModel === m.id ? 'var(--accent)' : 'var(--line)'}`,
+                      background: llmModel === m.id ? 'var(--accent-soft)' : 'var(--bg-2)',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>{m.label}</span>
+                    <span style={{ fontSize: 11.5, color: 'var(--ink-mute)' }}>{m.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {providerOf(llmModel) !== 'gemini' && workspace && !workspace.hasOpenRouterKey && (
+            <p style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>
+              This model needs an OpenRouter key. <a href="/dashboard/settings" style={{ color: 'var(--accent)' }}>Add one in Settings →</a>
+            </p>
+          )}
         </div>
 
         {error && (

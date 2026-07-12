@@ -49,6 +49,10 @@ export default function SettingsPage() {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
 
+  const [hasKey, setHasKey] = useState(false)
+  const [keyInput, setKeyInput] = useState('')
+  const [savingKey, setSavingKey] = useState(false)
+
   const load = useCallback(async () => {
     try {
       const [userRes, wsRes, chRes] = await Promise.all([
@@ -65,8 +69,9 @@ export default function SettingsPage() {
         setEmail(u.email); setDisplayName(u.displayName)
       }
       if (wsRes.ok) {
-        const w = await wsRes.json() as { name: string }
+        const w = await wsRes.json() as { name: string; hasOpenRouterKey?: boolean }
         setWorkspaceName(w.name)
+        setHasKey(Boolean(w.hasOpenRouterKey))
       }
       if (chRes.ok) {
         const channels = await chRes.json() as Array<{ type: string; embedCode?: string }>
@@ -106,6 +111,26 @@ export default function SettingsPage() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally { setSavingWs(false) }
+  }
+
+  async function saveKey() {
+    if (!keyInput.trim()) return
+    setSavingKey(true); setError('')
+    try {
+      const res = await apiRequest('/workspace/key', { method: 'PUT', body: JSON.stringify({ apiKey: keyInput.trim() }) })
+      if (!res.ok) throw new Error('Failed to save key')
+      setHasKey(true); setKeyInput('')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally { setSavingKey(false) }
+  }
+
+  async function removeKey() {
+    setSavingKey(true); setError('')
+    try {
+      await apiRequest('/workspace/key', { method: 'DELETE' })
+      setHasKey(false)
+    } finally { setSavingKey(false) }
   }
 
   function copyEmbed() {
@@ -159,6 +184,27 @@ export default function SettingsPage() {
           <div><SaveButton saving={savingWs} saved={savedWs} disabled={!workspaceName.trim()} /></div>
         </div>
       </form>
+
+      {/* OpenRouter key */}
+      <div style={cardStyle}>
+        <p style={labelStyle}>OpenRouter API key</p>
+        <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 12px' }}>
+          One key unlocks Claude, GPT, and more. Gemini works without a key on the platform&apos;s allowance.
+        </p>
+        {hasKey ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--mint)' }}><Check size={14} /> Connected</span>
+            <button type="button" onClick={() => void removeKey()} disabled={savingKey} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13, color: '#f87171' }}>Remove</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="sk-or-..." style={{ ...inputStyle, flex: 1 }} />
+            <button type="button" onClick={() => void saveKey()} disabled={savingKey || !keyInput.trim()} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: savingKey || !keyInput.trim() ? 0.5 : 1 }}>
+              {savingKey ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Widget install */}
       <div style={cardStyle}>
