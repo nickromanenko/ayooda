@@ -25,9 +25,11 @@ import knowledgeRoutes from './routes/knowledge'
 import channelRoutes from './routes/channels'
 import conversationRoutes from './routes/conversations'
 import widgetRoutes from './routes/widget'
+import billingRoutes from './routes/billing'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
+app.route('/billing', billingRoutes)
 app.route('/user', userRoutes)
 app.route('/knowledge', knowledgeRoutes)
 app.route('/channels', channelRoutes)
