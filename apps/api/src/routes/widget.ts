@@ -91,7 +91,14 @@ widget.post('/chat', async (c) => {
   const ip = clientIp(c)
   const chLimit = rateLimit(`chat:ch:${channelId}`, CHAT_LIMIT_PER_CHANNEL, RATE_WINDOW_MS)
   const ipLimit = rateLimit(`chat:ip:${ip}`, CHAT_LIMIT_PER_IP, RATE_WINDOW_MS)
-  const worst = !chLimit.ok ? chLimit : !ipLimit.ok ? ipLimit : null
+  const worst =
+    !chLimit.ok && !ipLimit.ok
+      ? (chLimit.retryAfterMs >= ipLimit.retryAfterMs ? chLimit : ipLimit)
+      : !chLimit.ok
+        ? chLimit
+        : !ipLimit.ok
+          ? ipLimit
+          : null
   if (worst) {
     c.header('Retry-After', String(Math.ceil(worst.retryAfterMs / 1000)))
     return c.json({ error: 'Too many requests' }, 429)
