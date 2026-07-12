@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { adminAuth, adminDb } from '../lib/firebase-admin'
+import { TRIAL_DAYS } from '@ayooda/shared'
 
 const auth = new Hono()
 
@@ -65,6 +66,16 @@ auth.post('/verify', async (c) => {
       conversationCount: 0,
       messageCount: 0,
       tokenCount: 0,
+      periodConversationCount: 0,
+      periodStart: now,
+    },
+    subscription: {
+      status: 'trialing',
+      tier: null,
+      trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
+      currentPeriodEnd: null,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
     },
   })
 
