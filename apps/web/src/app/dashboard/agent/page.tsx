@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Loader2, Check } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { useWorkspace } from '@/hooks/useWorkspace'
-import { GEMINI_MODELS, type GeminiModelId, type AgentTone } from '@ayooda/shared'
+import { GEMINI_MODELS, type AgentTone } from '@ayooda/shared'
 
 const TONE_OPTIONS: { value: AgentTone; label: string; hint: string }[] = [
   { value: 'professional', label: 'Professional', hint: 'Formal and concise' },
@@ -48,7 +48,7 @@ export default function AgentPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [tone, setTone] = useState<AgentTone>('friendly')
-  const [llmModel, setLlmModel] = useState<GeminiModelId>(GEMINI_MODELS[0].id)
+  const [llmModel, setLlmModel] = useState<string>(GEMINI_MODELS[0].id)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')

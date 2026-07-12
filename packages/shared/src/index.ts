@@ -1,13 +1,33 @@
-// LLM Providers (Claude, OpenAI, Gemini planned — Gemini only in v1)
+// LLM Providers (Claude, OpenAI, Gemini)
 export type LLMProvider = 'gemini' | 'claude' | 'openai'
 
-// Gemini model options — update IDs to match actual available models
-export const GEMINI_MODELS = [
-  { id: 'gemini-flash-latest', label: 'Flash', description: 'Fast · Best for most cases' },
-  { id: 'gemini-pro-latest', label: 'Pro', description: 'Smarter · Better for complex topics' },
+export interface LLMModel {
+  provider: LLMProvider
+  id: string // OpenRouter slug, e.g. "anthropic/claude-haiku-4.5"
+  label: string
+  description: string
+}
+
+// OpenRouter slugs confirmed live against https://openrouter.ai/api/v1/models on 2026-07-12.
+export const LLM_MODELS: readonly LLMModel[] = [
+  { provider: 'gemini', id: 'google/gemini-2.5-flash', label: 'Gemini Flash', description: 'Fast · Best for most cases' },
+  { provider: 'gemini', id: 'google/gemini-2.5-pro', label: 'Gemini Pro', description: 'Smarter · Complex topics' },
+  { provider: 'claude', id: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku', description: 'Fast · Cost-effective' },
+  { provider: 'claude', id: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet', description: 'Strong reasoning' },
+  { provider: 'openai', id: 'openai/gpt-5-mini', label: 'GPT-5 mini', description: 'Fast · Cost-effective' },
+  { provider: 'openai', id: 'openai/gpt-5', label: 'GPT-5', description: 'Capable general model' },
 ] as const
 
-export type GeminiModelId = (typeof GEMINI_MODELS)[number]['id']
+/** Back-compat: the agent page and PUT validation still import GEMINI_MODELS. */
+export const GEMINI_MODELS = LLM_MODELS.filter((m) => m.provider === 'gemini')
+
+export function findModel(id: string): LLMModel | undefined {
+  return LLM_MODELS.find((m) => m.id === id)
+}
+
+export function providerOf(id: string): LLMProvider | undefined {
+  return findModel(id)?.provider
+}
 
 // Knowledge base
 export type KnowledgeDocType = 'webpage' | 'file'
@@ -37,7 +57,7 @@ export interface AgentConfig {
   photoURL: string | null
   description: string
   systemPrompt: string
-  llmModel: GeminiModelId
+  llmModel: string
 }
 
 export interface WorkspaceUsage {

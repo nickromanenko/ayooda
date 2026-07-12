@@ -2,14 +2,14 @@
 
 import { useState } from 'react'
 import { apiRequest } from '@/lib/api'
-import { GEMINI_MODELS, type GeminiModelId, type AgentTone } from '@ayooda/shared'
+import { GEMINI_MODELS, type AgentTone } from '@ayooda/shared'
 
 export interface IdentityData {
   name: string
   description: string
   tone: AgentTone
   systemPrompt: string
-  llmModel: GeminiModelId
+  llmModel: string
 }
 
 const TONE_OPTIONS: { value: AgentTone; label: string; hint: string }[] = [
@@ -47,7 +47,7 @@ export function StepIdentity({ onDone }: { onDone: (data: IdentityData) => void 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [tone, setTone] = useState<AgentTone>('friendly')
-  const [llmModel, setLlmModel] = useState<GeminiModelId>(GEMINI_MODELS[0].id)
+  const [llmModel, setLlmModel] = useState<string>(GEMINI_MODELS[0].id)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 

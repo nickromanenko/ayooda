@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { validateKnowledgeFile, MAX_UPLOAD_BYTES } from './index'
+import { validateKnowledgeFile, MAX_UPLOAD_BYTES, LLM_MODELS, GEMINI_MODELS, findModel, providerOf } from './index'
 
 describe('validateKnowledgeFile', () => {
   test('accepts allowed extensions under the size cap', () => {
@@ -29,5 +29,31 @@ describe('validateKnowledgeFile', () => {
   })
   test('accepts a file exactly at the cap', () => {
     expect(validateKnowledgeFile('edge.pdf', MAX_UPLOAD_BYTES)).toEqual({ ok: true })
+  })
+})
+
+describe('LLM catalog', () => {
+  test('every model has a unique slug and a valid provider', () => {
+    const seen = new Set<string>()
+    for (const m of LLM_MODELS) {
+      expect(['gemini', 'claude', 'openai']).toContain(m.provider)
+      expect(m.id).toContain('/') // OpenRouter slugs are vendor/model
+      expect(seen.has(m.id)).toBe(false)
+      seen.add(m.id)
+    }
+    expect(LLM_MODELS.length).toBeGreaterThanOrEqual(6)
+  })
+  test('GEMINI_MODELS is the gemini subset', () => {
+    expect(GEMINI_MODELS.length).toBeGreaterThan(0)
+    expect(GEMINI_MODELS.every((m) => m.provider === 'gemini')).toBe(true)
+  })
+  test('findModel and providerOf resolve a known slug', () => {
+    const first = LLM_MODELS[0]
+    expect(findModel(first.id)).toEqual(first)
+    expect(providerOf(first.id)).toBe(first.provider)
+  })
+  test('providerOf returns undefined for an unknown slug', () => {
+    expect(providerOf('nope/nope')).toBeUndefined()
+    expect(findModel('nope/nope')).toBeUndefined()
   })
 })

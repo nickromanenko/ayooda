@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
 import { LEGACY_MODEL_MAP } from '../lib/gemini'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
-import { GEMINI_MODELS, type GeminiModelId } from '@ayooda/shared'
+import { GEMINI_MODELS } from '@ayooda/shared'
 
 const workspace = new Hono<{ Variables: AuthVariables }>()
 
@@ -50,7 +50,7 @@ workspace.put('/agent', async (c) => {
     name?: string
     description?: string
     systemPrompt?: string
-    llmModel?: GeminiModelId
+    llmModel?: string
   }>()
 
   if (body.llmModel !== undefined && !GEMINI_MODELS.some((m) => m.id === body.llmModel)) {
