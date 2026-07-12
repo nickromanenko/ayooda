@@ -100,10 +100,13 @@ export interface WidgetConfig {
 
 export interface ChannelDoc {
   type: ChannelType
-  config: WidgetConfig
-  embedCode: string
+  config?: WidgetConfig
+  embedCode?: string
   isActive: boolean
   createdAt: Date
+  botTokenEnc?: string
+  webhookSecret?: string
+  telegram?: { botUsername: string; botId: number }
 }
 
 export interface MessageMetadata {
@@ -129,6 +132,8 @@ export interface ConversationDoc {
   createdAt: Date
   updatedAt: Date
   lastMessage: string
+  channelType?: ChannelType
+  telegramChatId?: number
 }
 
 // API types
