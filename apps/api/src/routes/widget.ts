@@ -10,6 +10,7 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { FieldValue } from 'firebase-admin/firestore'
 import { providerOf } from '@ayooda/shared'
+import { checkEntitlement, shouldResetPeriod } from '../lib/billing/entitlement'
 import { adminDb } from '../lib/firebase-admin'
 import { embedText, LEGACY_MODEL_MAP } from '../lib/gemini'
 import { getLangfuse } from '../lib/langfuse'
@@ -139,6 +140,26 @@ widget.post('/chat', async (c) => {
     return c.json({ error: 'Not found' }, 404)
   }
   if (!convSnap.exists) {
+    // Billing gate — only NEW conversations are gated; in-progress chats continue.
+    const sub = workspaceData.subscription
+    const usage = workspaceData.usage ?? {}
+    const periodStart = usage.periodStart?.toDate?.() ?? null
+    const reset = shouldResetPeriod(periodStart, new Date(), sub)
+    const periodUsed = reset ? 0 : (usage.periodConversationCount ?? 0)
+
+    const ent = checkEntitlement({
+      subscription: sub,
+      periodConversationCount: periodUsed,
+      workspaceCreatedAt: workspaceData.createdAt?.toDate?.() ?? new Date(0),
+      now: new Date(),
+    })
+    if (!ent.entitled) {
+      return c.json(
+        { error: 'This workspace has reached its plan limit or its trial has ended.', reason: ent.reason },
+        402,
+      )
+    }
+
     await convRef.set({
       channelId,
       visitorId,
@@ -149,7 +170,17 @@ widget.post('/chat', async (c) => {
       lastMessage: message.trim(),
     })
 
-    await workspaceRef.update({ 'usage.conversationCount': FieldValue.increment(1) })
+    // Increment lifetime + period counters; reset the period window if it rolled.
+    const update: Record<string, unknown> = {
+      'usage.conversationCount': FieldValue.increment(1),
+    }
+    if (reset) {
+      update['usage.periodConversationCount'] = 1
+      update['usage.periodStart'] = FieldValue.serverTimestamp()
+    } else {
+      update['usage.periodConversationCount'] = FieldValue.increment(1)
+    }
+    await workspaceRef.update(update)
   }
 
   // 3. Save user message
