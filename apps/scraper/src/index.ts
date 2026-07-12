@@ -16,7 +16,7 @@ import { initializeApp, getApps, cert, type AppOptions } from 'firebase-admin/ap
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { Pinecone } from '@pinecone-database/pinecone'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, type EmbedContentRequest } from '@google/generative-ai'
 import { extractText } from './extract'
 
 // ---------------------------------------------------------------------------
@@ -179,18 +179,23 @@ function chunkText(text: string): string[] {
 // ---------------------------------------------------------------------------
 
 const EMBED_BATCH = 100
+const EMBEDDING_DIMENSIONS = 768 // must match the 768-dim Pinecone index
 
 async function embedBatch(texts: string[], apiKey: string): Promise<number[][]> {
   const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-embedding-001' })
   const results: number[][] = []
 
   for (let i = 0; i < texts.length; i += EMBED_BATCH) {
     const batch = texts.slice(i, i + EMBED_BATCH)
     const res = await model.batchEmbedContents({
-      requests: batch.map((text) => ({
-        content: { parts: [{ text }], role: 'user' as const },
-      })),
+      requests: batch.map(
+        (text) =>
+          ({
+            content: { parts: [{ text }], role: 'user' as const },
+            outputDimensionality: EMBEDDING_DIMENSIONS,
+          }) as unknown as EmbedContentRequest,
+      ),
     })
     results.push(...res.embeddings.map((e) => e.values))
   }

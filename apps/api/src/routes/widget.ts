@@ -17,6 +17,13 @@ import { namespaceFor } from '../lib/pinecone'
 
 const widget = new Hono()
 
+// Retired Gemini model ids → stable aliases (existing workspaces may still have
+// legacy ids stored in Firestore).
+const LEGACY_MODEL_MAP: Record<string, string> = {
+  'gemini-2.5-flash': 'gemini-flash-latest',
+  'gemini-2.5-pro': 'gemini-pro-latest',
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -83,7 +90,8 @@ widget.post('/chat', async (c) => {
   const workspaceData = workspaceSnap.data()!
   const agent = workspaceData.agent
   const systemPrompt: string = agent.systemPrompt
-  const llmModel: string = agent.llmModel ?? 'gemini-2.5-flash'
+  const storedModel: string = agent.llmModel ?? 'gemini-flash-latest'
+  const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
 
   const trace = getLangfuse().trace({
     name: 'widget-chat',

@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, type EmbedContentRequest } from '@google/generative-ai'
 import type { LangfuseTrace } from './langfuse'
 
 let _genAI: GoogleGenerativeAI | null = null
@@ -10,7 +10,8 @@ export function getGenAI(): GoogleGenerativeAI {
   return _genAI
 }
 
-const EMBEDDING_MODEL = 'text-embedding-004'
+const EMBEDDING_MODEL = 'gemini-embedding-001'
+const EMBEDDING_DIMENSIONS = 768 // must match the 768-dim Pinecone index
 
 /**
  * Embed a single text string.
@@ -24,7 +25,11 @@ export async function embedText(text: string, trace?: LangfuseTrace): Promise<nu
   })
   try {
     const model = getGenAI().getGenerativeModel({ model: EMBEDDING_MODEL })
-    const result = await model.embedContent(text)
+    const request = {
+      content: { parts: [{ text }], role: 'user' },
+      outputDimensionality: EMBEDDING_DIMENSIONS,
+    } as unknown as EmbedContentRequest
+    const result = await model.embedContent(request)
     generation?.end({ output: { dimensions: result.embedding.values.length } })
     return result.embedding.values
   } catch (err) {
@@ -51,7 +56,13 @@ export async function embedBatch(texts: string[], trace?: LangfuseTrace): Promis
     })
     try {
       const res = await model.batchEmbedContents({
-        requests: batch.map((text) => ({ content: { parts: [{ text }], role: 'user' } })),
+        requests: batch.map(
+          (text) =>
+            ({
+              content: { parts: [{ text }], role: 'user' },
+              outputDimensionality: EMBEDDING_DIMENSIONS,
+            }) as unknown as EmbedContentRequest,
+        ),
       })
       results.push(...res.embeddings.map((e) => e.values))
       generation?.end({ output: { embedded: res.embeddings.length } })

@@ -3,8 +3,8 @@ export type LLMProvider = 'gemini' | 'claude' | 'openai'
 
 // Gemini model options — update IDs to match actual available models
 export const GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash', label: 'Flash', description: 'Fast · Best for most cases' },
-  { id: 'gemini-2.5-pro', label: 'Pro', description: 'Smarter · Better for complex topics' },
+  { id: 'gemini-flash-latest', label: 'Flash', description: 'Fast · Best for most cases' },
+  { id: 'gemini-pro-latest', label: 'Pro', description: 'Smarter · Better for complex topics' },
 ] as const
 
 export type GeminiModelId = (typeof GEMINI_MODELS)[number]['id']
