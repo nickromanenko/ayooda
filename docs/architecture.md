@@ -329,7 +329,7 @@ POST /widget/chat
 
 ### Firestore Security Rules
 - Client-side reads/writes from `apps/web` use Firestore rules requiring `request.auth.uid`
-- Sensitive fields (`openRouterKey`) are write-only from the API server (Admin SDK bypasses rules) — never returned to the client
+- The `workspaces/{id}` document itself is server-only (`allow read, write: if false`) — only the Admin SDK (which bypasses rules) can read or write it, so the AES-256-GCM-encrypted `openRouterKey` is never client-readable; no API endpoint returns the key either (only `hasOpenRouterKey`)
 - Server-side (API) uses Firebase Admin SDK which bypasses Firestore rules
 
 ### OpenRouter API Keys (bring-your-own-key)

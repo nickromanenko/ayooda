@@ -7,10 +7,13 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Workspace: only the owner can read/write
+    // Workspace document: server-only. The Admin SDK (used by the Hono API
+    // and the dashboard layout) bypasses these rules entirely, and no
+    // client-side code reads or writes this document. It must stay
+    // client-inaccessible because it stores the encrypted openRouterKey,
+    // which must never be client-readable.
     match /workspaces/{workspaceId} {
-      allow read, write: if request.auth != null
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+      allow read, write: if false;
 
       match /knowledge/{docId} {
         allow read, write: if request.auth != null
