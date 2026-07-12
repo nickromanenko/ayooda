@@ -141,7 +141,14 @@ widget.post('/chat', async (c) => {
   }
   if (!convSnap.exists) {
     // Billing gate — only NEW conversations are gated; in-progress chats continue.
-    const sub = workspaceData.subscription
+    const rawSub = workspaceData.subscription
+    const sub = rawSub
+      ? {
+          ...rawSub,
+          trialEndsAt: rawSub.trialEndsAt?.toDate?.() ?? rawSub.trialEndsAt ?? null,
+          currentPeriodEnd: rawSub.currentPeriodEnd?.toDate?.() ?? rawSub.currentPeriodEnd ?? null,
+        }
+      : undefined
     const usage = workspaceData.usage ?? {}
     const periodStart = usage.periodStart?.toDate?.() ?? null
     const reset = shouldResetPeriod(periodStart, new Date(), sub)

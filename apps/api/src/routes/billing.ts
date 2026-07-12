@@ -82,7 +82,14 @@ billing.get('/', requireAuth, async (c) => {
   const workspaceId = c.get('workspaceId')
   const snap = await adminDb.doc(`workspaces/${workspaceId}`).get()
   const data = snap.data()!
-  const sub: Subscription | undefined = data.subscription
+  const rawSub = data.subscription as (Subscription & { trialEndsAt?: any; currentPeriodEnd?: any }) | undefined
+  const sub: Subscription | undefined = rawSub
+    ? {
+        ...rawSub,
+        trialEndsAt: rawSub.trialEndsAt?.toDate?.() ?? rawSub.trialEndsAt ?? null,
+        currentPeriodEnd: rawSub.currentPeriodEnd?.toDate?.() ?? rawSub.currentPeriodEnd ?? null,
+      }
+    : undefined
   const usage = data.usage ?? {}
   const ent = checkEntitlement({
     subscription: sub,
