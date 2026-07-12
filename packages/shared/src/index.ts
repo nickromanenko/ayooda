@@ -134,6 +134,10 @@ export function validateKnowledgeFile(
   filename: string,
   sizeBytes: number,
 ): { ok: true } | { ok: false; error: string } {
+  // The filename becomes part of a Storage object key — no path separators
+  if (/[\\/]|\.\./.test(filename)) {
+    return { ok: false, error: 'Invalid filename.' }
+  }
   const dot = filename.lastIndexOf('.')
   const ext = dot === -1 ? '' : filename.slice(dot).toLowerCase()
   if (!(KNOWLEDGE_FILE_EXTENSIONS as readonly string[]).includes(ext)) {

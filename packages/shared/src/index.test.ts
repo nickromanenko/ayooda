@@ -7,6 +7,13 @@ describe('validateKnowledgeFile', () => {
       expect(validateKnowledgeFile(name, 1024)).toEqual({ ok: true })
     }
   })
+  test('rejects filenames with path separators or dot-dot', () => {
+    for (const name of ['../evil.pdf', 'a/b.pdf', 'a\\b.pdf', 'notes..md']) {
+      const res = validateKnowledgeFile(name, 10)
+      expect(res.ok).toBe(false)
+      if (!res.ok) expect(res.error).toBe('Invalid filename.')
+    }
+  })
   test('rejects disallowed extensions', () => {
     const res = validateKnowledgeFile('malware.exe', 10)
     expect(res.ok).toBe(false)
