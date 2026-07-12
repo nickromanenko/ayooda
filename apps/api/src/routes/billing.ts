@@ -52,11 +52,9 @@ async function applySubscription(
   const priceId = sub.items?.data?.[0]?.price?.id
   const tier: PlanTier | null = priceId ? tierForPrice(priceId) : null
   const status: Subscription['status'] =
-    sub.status === 'active' ? 'active'
+    sub.status === 'active' || sub.status === 'trialing' ? 'active'
     : sub.status === 'past_due' ? 'past_due'
-    : sub.status === 'trialing' ? 'active' // Stripe-side trial → treat as active entitlement
-    : sub.status === 'canceled' || sub.status === 'unpaid' || sub.status === 'incomplete_expired' ? 'canceled'
-    : 'active'
+    : 'canceled' // canceled/unpaid/incomplete/incomplete_expired/paused → not entitled (fail closed)
 
   const workspaceRef = adminDb.doc(`workspaces/${workspaceId}`)
   const workspaceSnap = await workspaceRef.get()
