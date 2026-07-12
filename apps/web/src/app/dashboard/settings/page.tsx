@@ -56,6 +56,10 @@ export default function SettingsPage() {
         apiRequest('/workspace'),
         apiRequest('/channels'),
       ])
+      if (!userRes.ok || !wsRes.ok) {
+        setError('Failed to load settings')
+        return
+      }
       if (userRes.ok) {
         const u = await userRes.json() as { email: string; displayName: string }
         setEmail(u.email); setDisplayName(u.displayName)
