@@ -59,7 +59,7 @@ auth.post('/verify', async (c) => {
       photoURL: null,
       description: '',
       systemPrompt: 'You are a helpful customer support agent. Answer questions based on the provided context.',
-      llmModel: 'gemini-2.5-flash',
+      llmModel: 'gemini-flash-latest',
     },
     usage: {
       conversationCount: 0,
