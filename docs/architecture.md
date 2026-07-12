@@ -2,7 +2,7 @@
 
 ## Overview
 
-Ayooda is a multi-tenant SaaS platform that lets companies deploy an AI-powered customer support agent on their website and other messaging channels. Each company (workspace) configures one agent with its own knowledge base, identity, and channel integrations.
+Ayooda is a multi-tenant SaaS platform that lets companies deploy an AI-powered customer support agent on their website and other messaging channels. Each company (workspace) configures one agent with its own knowledge base, identity, and channel integrations. Two channels are live today: the **web widget** and **Telegram** (per-workspace bot, white-label — a workspace connects its own bot by pasting a BotFather token).
 
 ---
 
@@ -100,12 +100,14 @@ Protected routes (require Firebase auth session):
 
 ### apps/api — Hono on Bun (Cloud Run)
 
-The REST API backend. All dashboard routes require a Firebase JWT in the `Authorization: Bearer <token>` header. Widget endpoints are public but validated by `agentId`.
+The REST API backend. All dashboard routes require a Firebase JWT in the `Authorization: Bearer <token>` header. Widget endpoints are public but validated by `agentId`; the Telegram webhook is public but authenticated via a per-channel secret token (see [Security Model](#security-model)).
 
 - **Runtime**: Bun
 - **Framework**: Hono
 - **Auth middleware**: Firebase Admin SDK JWT verification
 - **Deployment**: Cloud Run (always-on, min 1 instance)
+
+Both channels (web widget, Telegram) share the RAG orchestration in `apps/api/src/lib/chat/agent-turn.ts` (`prepareTurn`) — see [Chat Flow](#chat-flow).
 
 ### apps/widget — Embeddable JS (Firebase Hosting CDN)
 
@@ -193,7 +195,7 @@ workspaces/
 
   {workspaceId}/channels/
     {channelId}
-      type: 'web_widget'
+      type: 'web_widget' | 'telegram'
       config:
         widgetColor: string      ← hex color
         widgetPosition: 'bottom-right' | 'bottom-left'
@@ -203,11 +205,18 @@ workspaces/
       embedCode: string          ← generated <script> tag
       isActive: boolean
       createdAt: Timestamp
+      botTokenEnc: string        ← telegram only; AES-256-GCM encrypted BotFather token, server-only, never returned by any endpoint
+      webhookSecret: string      ← telegram only; server-only, matched against Telegram's X-Telegram-Bot-Api-Secret-Token header
+      telegram:                  ← telegram only, server-only
+        botUsername: string
+        botId: number
 
   {workspaceId}/conversations/
     {conversationId}
       channelId: string
+      channelType: 'web_widget' | 'telegram'
       visitorId: string          ← anonymous ID set by widget
+      telegramChatId: number | null  ← set when channelType = 'telegram'
       status: 'bot' | 'human' | 'resolved'
       operatorId: string | null  ← userId of operator if status = 'human'
       hadTakeover: boolean       ← set true on operator takeover; used for dashboard automation rate
@@ -274,6 +283,8 @@ Vector metadata per chunk:
 | POST | `/conversations/:id/resolve` | Mark conversation as resolved |
 | GET | `/channels` | List channels for workspace |
 | POST | `/channels/web-widget` | Create or update web widget channel |
+| POST | `/channels/telegram` | Connect a workspace's Telegram bot: validates the token via `getMe`, encrypts and stores it, registers the webhook |
+| DELETE | `/channels/telegram` | Disconnect the Telegram channel |
 | POST | `/billing/checkout` | Create a Stripe Checkout session for the selected tier, returns the hosted URL |
 | POST | `/billing/portal` | Create a Stripe Customer Portal session, returns the hosted URL |
 | GET | `/billing` | Current plan, usage, and entitlement status (no Stripe IDs) |
@@ -285,11 +296,16 @@ Vector metadata per chunk:
 | GET | `/widget/config/:agentId` | Fetch agent appearance config for widget |
 | POST | `/widget/chat` | Send message, receive AI response as an SSE stream (`chunk` / `done` / `error` events); gated for new conversations, see [Billing](#billing) |
 | GET | `/widget/conversations/:id/events` | SSE feed of operator messages + status changes; requires `channelId` & `visitorId` query params |
+| POST | `/telegram/webhook/:channelId` | Inbound Telegram updates; authenticated by matching the `X-Telegram-Bot-Api-Secret-Token` header to the channel's stored webhook secret via a constant-time compare — `401` on mismatch, otherwise always `200` (so Telegram never retry-storms) |
 | POST | `/billing/webhook` | Stripe webhook, signature-verified — syncs `subscription` state to Firestore |
 
 ---
 
-## RAG Chat Flow
+## Chat Flow
+
+The core turn — billing gate → conversation setup → RAG retrieval → OpenRouter key resolution → prompt + persist — is implemented once in `apps/api/src/lib/chat/agent-turn.ts` (`prepareTurn`) and reused by both channels. The widget streams the response to the client as it's generated; Telegram accumulates the full response and delivers it with a single `sendMessage` call. New conversations on either channel go through the same billing gate (see [Billing](#billing)).
+
+### Web Widget
 
 ```
 Widget sends message
@@ -324,6 +340,27 @@ POST /widget/chat
                Update conversation.updatedAt + lastMessage
                Increment workspace.usage.conversationCount
 ```
+
+### Telegram
+
+```
+Telegram servers send an update
+       │
+       ▼
+POST /telegram/webhook/:channelId
+  (public; secret-token header checked against the channel's webhookSecret —
+   401 on mismatch, otherwise always 200 so Telegram never retry-storms)
+       │
+       ├─ Non-text message → polite decline reply, no further processing
+       │
+       ├─ Conversation.status = 'human' → bot stays silent (operator has taken over)
+       │
+       └─ Otherwise → prepareTurn() (same billing gate, retrieval, key resolution,
+               prompt + persist as the widget)
+               → full response accumulated, then sent via Telegram sendMessage
+```
+
+Operator inbox replies to a Telegram conversation are delivered to the chat the same way, via `sendMessage`.
 
 ---
 
@@ -366,6 +403,11 @@ Resolved server-side on each gated request, no Stripe secrets exposed:
 - Rate limiting: in-memory, per-instance sliding-window limiter — `POST /widget/chat` allows 60 req/min per channel and 30 req/min per IP; `GET /widget/conversations/:id/events` allows 20 req/min per IP; over-limit requests get `429` with a `Retry-After` header
 - CORS restricted to the workspace's registered domain (future)
 
+### Telegram Public Endpoint
+- No Firebase auth (Telegram servers call it directly)
+- Authenticated by comparing Telegram's `X-Telegram-Bot-Api-Secret-Token` header to the channel's stored `webhookSecret` via a constant-time compare — `401` on mismatch
+- Always returns `200` otherwise (even on internal errors), so Telegram never retry-storms the webhook
+
 ### Firestore Security Rules
 - Client-side reads/writes from `apps/web` use Firestore rules requiring `request.auth.uid`
 - The `workspaces/{id}` document itself is server-only (`allow read, write: if false`) — only the Admin SDK (which bypasses rules) can read or write it, so the AES-256-GCM-encrypted `openRouterKey` is never client-readable; no API endpoint returns the key either (only `hasOpenRouterKey`)
@@ -376,6 +418,11 @@ Resolved server-side on each gated request, no Stripe secrets exposed:
 - Never returned in any API response — `GET /workspace` exposes only `hasOpenRouterKey: boolean`; set/cleared via `PUT /workspace/key` / `DELETE /workspace/key`
 - Resolution: workspace's own key covers all models; otherwise the platform `OPENROUTER_API_KEY` is used for Gemini-family models only; non-Gemini models with no key configured return a pre-stream JSON 502
 - Possible future upgrade: move to Cloud KMS-backed envelope encryption
+
+### Telegram Bot Tokens (bring-your-own-bot)
+- Each workspace connects its own BotFather token at `channels/{id}.botTokenEnc`, encrypted at rest the same way as OpenRouter keys (AES-256-GCM, `API_KEY_ENCRYPTION_SECRET`)
+- `POST /channels/telegram` validates the token via Telegram's `getMe` before encrypting and storing it, and registers the webhook (`{API_PUBLIC_URL}/telegram/webhook/:channelId`)
+- Never returned by any endpoint
 
 ### Billing (Stripe)
 - `POST /billing/webhook` is public but signature-verified: Stripe's async `constructEventAsync` checks the signature against the raw request body and `STRIPE_WEBHOOK_SECRET`
@@ -413,8 +460,10 @@ PINECONE_API_KEY
 PINECONE_INDEX
 GEMINI_API_KEY                ← for embeddings
 OPENROUTER_API_KEY            ← platform fallback, used for Gemini-family models when a workspace has no key of its own
-API_KEY_ENCRYPTION_SECRET     ← encrypts/decrypts customer OpenRouter keys (AES-256-GCM)
+API_KEY_ENCRYPTION_SECRET     ← encrypts/decrypts customer OpenRouter keys and Telegram bot tokens (AES-256-GCM)
 SCRAPER_JOB_URL               ← Cloud Run Job trigger URL
+API_PUBLIC_URL                ← public HTTPS base URL, used to register each workspace's Telegram webhook
+TELEGRAM_BOT_API_KEY          ← local testing only, one bot; production tokens are per-workspace, stored per-channel (see Telegram Bot Tokens)
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
 STRIPE_PRICE_LITE
@@ -454,7 +503,7 @@ The `channels` collection is typed to support additional channel types. Adding a
 
 Planned channels in priority order:
 1. **Web Widget** — v1 ✓
-2. **Telegram** — bot token + webhook
+2. **Telegram** — v1 ✓ (per-workspace bot, white-label)
 3. **WhatsApp** — Meta Cloud API webhook
 4. **Messenger** — Meta page webhook
 5. **Slack** — Slack app with Events API
