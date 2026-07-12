@@ -20,6 +20,7 @@ app.get('/health', (c) => c.json({ ok: true }))
 
 import authRoutes from './routes/auth'
 import workspaceRoutes from './routes/workspace'
+import userRoutes from './routes/user'
 import knowledgeRoutes from './routes/knowledge'
 import channelRoutes from './routes/channels'
 import conversationRoutes from './routes/conversations'
@@ -27,6 +28,7 @@ import widgetRoutes from './routes/widget'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
+app.route('/user', userRoutes)
 app.route('/knowledge', knowledgeRoutes)
 app.route('/channels', channelRoutes)
 app.route('/conversations', conversationRoutes)

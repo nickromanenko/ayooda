@@ -31,6 +31,18 @@ workspace.get('/', async (c) => {
   })
 })
 
+/** PUT /workspace — rename the workspace */
+workspace.put('/', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const body = await c.req.json<{ name?: string }>()
+  const name = body.name?.trim()
+  if (!name || name.length > 80) {
+    return c.json({ error: 'name is required (max 80 chars)' }, 400)
+  }
+  await adminDb.doc(`workspaces/${workspaceId}`).update({ name })
+  return c.json({ ok: true })
+})
+
 /** PUT /workspace/agent — update agent identity & model */
 workspace.put('/agent', async (c) => {
   const workspaceId = c.get('workspaceId')
