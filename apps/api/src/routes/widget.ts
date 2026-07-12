@@ -11,18 +11,11 @@ import { streamSSE } from 'hono/streaming'
 import { FieldValue } from 'firebase-admin/firestore'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { adminDb } from '../lib/firebase-admin'
-import { embedText } from '../lib/gemini'
+import { embedText, LEGACY_MODEL_MAP } from '../lib/gemini'
 import { getLangfuse } from '../lib/langfuse'
 import { namespaceFor } from '../lib/pinecone'
 
 const widget = new Hono()
-
-// Retired Gemini model ids → stable aliases (existing workspaces may still have
-// legacy ids stored in Firestore).
-const LEGACY_MODEL_MAP: Record<string, string> = {
-  'gemini-2.5-flash': 'gemini-flash-latest',
-  'gemini-2.5-pro': 'gemini-pro-latest',
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -104,6 +97,11 @@ widget.post('/chat', async (c) => {
   // 2. Get or create conversation
   const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
   const convSnap = await convRef.get()
+  // Same ownership gate as the events feed — a leaked conversation id must not
+  // let another visitor read or write someone else's conversation.
+  if (convSnap.exists && convSnap.data()!.visitorId !== visitorId) {
+    return c.json({ error: 'Not found' }, 404)
+  }
   if (!convSnap.exists) {
     await convRef.set({
       channelId,

@@ -1,6 +1,13 @@
 import { GoogleGenerativeAI, type EmbedContentRequest } from '@google/generative-ai'
 import type { LangfuseTrace } from './langfuse'
 
+// Retired Gemini model ids → stable aliases (existing workspaces may still have
+// legacy ids stored in Firestore).
+export const LEGACY_MODEL_MAP: Record<string, string> = {
+  'gemini-2.5-flash': 'gemini-flash-latest',
+  'gemini-2.5-pro': 'gemini-pro-latest',
+}
+
 let _genAI: GoogleGenerativeAI | null = null
 
 export function getGenAI(): GoogleGenerativeAI {

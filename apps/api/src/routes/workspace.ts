@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
+import { LEGACY_MODEL_MAP } from '../lib/gemini'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
-import type { GeminiModelId } from '@ayooda/shared'
+import { GEMINI_MODELS, type GeminiModelId } from '@ayooda/shared'
 
 const workspace = new Hono<{ Variables: AuthVariables }>()
 
@@ -24,7 +25,7 @@ workspace.get('/', async (c) => {
       photoURL: data.agent.photoURL,
       description: data.agent.description,
       systemPrompt: data.agent.systemPrompt,
-      llmModel: data.agent.llmModel,
+      llmModel: LEGACY_MODEL_MAP[data.agent.llmModel] ?? data.agent.llmModel,
     },
     usage: data.usage,
   })
@@ -39,6 +40,10 @@ workspace.put('/agent', async (c) => {
     systemPrompt?: string
     llmModel?: GeminiModelId
   }>()
+
+  if (body.llmModel !== undefined && !GEMINI_MODELS.some((m) => m.id === body.llmModel)) {
+    return c.json({ error: 'Invalid llmModel' }, 400)
+  }
 
   const update: Record<string, unknown> = {}
   if (body.name !== undefined) update['agent.name'] = body.name
