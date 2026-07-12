@@ -34,4 +34,25 @@ describe('streamChat', () => {
     const gen = streamChat({ model: 'x/y', systemPrompt: 's', messages: [], apiKey: 'k' })
     await expect(gen.next()).rejects.toThrow()
   })
+
+  test('processes a usage frame delivered without a trailing blank line before done', async () => {
+    // Body split so the usage frame arrives in the final chunk with no trailing \n\n
+    const body =
+      'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n' +
+      'data: {"choices":[{"delta":{}}],"usage":{"prompt_tokens":5,"completion_tokens":1}}'
+    globalThis.fetch = (async () => new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })) as unknown as typeof fetch
+    const gen = streamChat({ model: 'x/y', systemPrompt: 's', messages: [], apiKey: 'k' })
+    const texts: string[] = []
+    let result
+    while (true) { const n = await gen.next(); if (n.done) { result = n.value; break } texts.push(n.value.text) }
+    expect(texts).toEqual(['Hi'])
+    expect(result).toEqual({ promptTokens: 5, completionTokens: 1 })
+  })
+
+  test('throws on a mid-stream error event', async () => {
+    const body = 'data: {"error":{"message":"rate limited"}}\n\n'
+    globalThis.fetch = (async () => new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })) as unknown as typeof fetch
+    const gen = streamChat({ model: 'x/y', systemPrompt: 's', messages: [], apiKey: 'k' })
+    await expect(gen.next()).rejects.toThrow('rate limited')
+  })
 })

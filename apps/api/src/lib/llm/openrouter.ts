@@ -39,30 +39,43 @@ export async function* streamChat(
   let promptTokens = 0
   let completionTokens = 0
 
+  // Parse one SSE frame → { text?, done? }. Throws on a mid-stream error event.
+  const parseFrame = (frame: string): { text?: string; done?: boolean } => {
+    const line = frame.split('\n').find((l) => l.startsWith('data:'))
+    if (!line) return {}
+    const data = line.slice(5).trim()
+    if (data === '[DONE]') return { done: true }
+    let parsed: {
+      choices?: Array<{ delta?: { content?: string } }>
+      usage?: { prompt_tokens?: number; completion_tokens?: number }
+      error?: { message?: string }
+    }
+    try { parsed = JSON.parse(data) } catch { return {} }
+    if (parsed.error) throw new Error(`OpenRouter stream error: ${parsed.error.message ?? 'unknown'}`)
+    if (parsed.usage) {
+      promptTokens = parsed.usage.prompt_tokens ?? promptTokens
+      completionTokens = parsed.usage.completion_tokens ?? completionTokens
+    }
+    const text = parsed.choices?.[0]?.delta?.content
+    return text ? { text } : {}
+  }
+
   try {
-    while (true) {
+    let finished = false
+    while (!finished) {
       const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const frames = buffer.split('\n\n')
-      buffer = frames.pop() ?? ''
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+      // On the final read, append a frame separator so a trailing frame without
+      // its own blank line still gets processed.
+      const toSplit = done ? buffer + '\n\n' : buffer
+      const frames = toSplit.split('\n\n')
+      buffer = done ? '' : (frames.pop() ?? '')
       for (const frame of frames) {
-        const line = frame.split('\n').find((l) => l.startsWith('data:'))
-        if (!line) continue
-        const data = line.slice(5).trim()
-        if (data === '[DONE]') continue
-        let parsed: {
-          choices?: Array<{ delta?: { content?: string } }>
-          usage?: { prompt_tokens?: number; completion_tokens?: number }
-        }
-        try { parsed = JSON.parse(data) } catch { continue }
-        const text = parsed.choices?.[0]?.delta?.content
-        if (text) yield { text }
-        if (parsed.usage) {
-          promptTokens = parsed.usage.prompt_tokens ?? promptTokens
-          completionTokens = parsed.usage.completion_tokens ?? completionTokens
-        }
+        const r = parseFrame(frame)
+        if (r.text) yield { text: r.text }
+        if (r.done) { finished = true; break }
       }
+      if (done) break
     }
   } finally {
     reader.cancel().catch(() => {})
