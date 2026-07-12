@@ -26,6 +26,7 @@ import channelRoutes from './routes/channels'
 import conversationRoutes from './routes/conversations'
 import widgetRoutes from './routes/widget'
 import billingRoutes from './routes/billing'
+import telegramRoutes from './routes/telegram'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -36,6 +37,7 @@ app.route('/channels', channelRoutes)
 app.route('/conversations', conversationRoutes)
 
 app.route('/widget', widgetRoutes)
+app.route('/telegram', telegramRoutes)
 
 const port = parseInt(process.env.PORT ?? '3001')
 console.log(`API running on http://localhost:${port}`)
