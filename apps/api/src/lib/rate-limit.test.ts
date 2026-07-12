@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { rateLimit, __resetRateLimit } from './rate-limit'
+import { rateLimit, __resetRateLimit, __bucketCount } from './rate-limit'
 
 describe('rateLimit', () => {
   test('allows up to the limit then rejects', () => {
@@ -32,5 +32,14 @@ describe('rateLimit', () => {
     const denied = rateLimit('k', 2, 1000, 800)
     expect(denied.ok).toBe(false)
     expect(denied.retryAfterMs).toBe(300) // oldest(100)+1000-800
+  })
+
+  test('sweeps out keys whose window has fully expired', () => {
+    __resetRateLimit()
+    rateLimit('gone', 5, 1000, 0)
+    expect(__bucketCount()).toBe(1)
+    // A later call past the window triggers the sweep; 'gone' has no live timestamps
+    rateLimit('other', 5, 1000, 2000)
+    expect(__bucketCount()).toBe(1) // only 'other' remains
   })
 })
