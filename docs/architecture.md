@@ -61,13 +61,14 @@ Ayooda is a multi-tenant SaaS platform that lets companies deploy an AI-powered 
                ┌───────────────┼───────────────┐
                ▼               ▼               ▼
         ┌────────────┐  ┌────────────┐  ┌────────────┐
-        │  Pinecone  │  │ Gemini API │  │  LLM APIs  │
+        │  Pinecone  │  │ Gemini API │  │ OpenRouter │
         │            │  │            │  │            │
-        │ Vector DB  │  │ Embeddings │  │ Claude /   │
-        │ Per-workspace  gemini-      │  │ GPT-4o /  │
-        │ namespace  │  embedding-001│  │ Gemini     │
+        │ Vector DB  │  │ Embeddings │  │ Chat LLMs  │
+        │ Per-workspace  gemini-      │  │ (Gemini /  │
+        │ namespace  │  embedding-001│  │ Claude/GPT)│
         └────────────┘  └────────────┘  └────────────┘
-                                         (customer's own API key)
+                                         (workspace key, else platform
+                                          key for Gemini-family only)
 ```
 
 ---
@@ -133,7 +134,8 @@ Shared type definitions consumed by both `apps/web` and `apps/api`.
 
 ```typescript
 // Firestore document shapes, API request/response types, enums
-export type LLMProvider = 'claude' | 'openai' | 'gemini'
+export type LLMProvider = 'gemini' | 'claude' | 'openai'
+export const LLM_MODELS: LLMModel[]  // provider-aware catalog keyed by OpenRouter slug, e.g. 'anthropic/claude-sonnet-4.5'
 export type KnowledgeDocStatus = 'pending' | 'processing' | 'indexed' | 'error'
 export type ConversationStatus = 'bot' | 'human' | 'resolved'
 export type ChannelType = 'web_widget' | 'telegram'
@@ -163,9 +165,8 @@ workspaces/
       photoURL: string | null
       description: string
       systemPrompt: string
-      llmProvider: 'claude' | 'openai' | 'gemini'
-      llmApiKey: string          ← encrypted at rest via Cloud KMS (future)
-      llmModel: string           ← e.g. 'claude-opus-4-6', 'gpt-4o', 'gemini-2.0-flash'
+      llmModel: string           ← OpenRouter slug, e.g. 'anthropic/claude-sonnet-4.5', 'google/gemini-2.5-flash' (provider derived from slug)
+    openRouterKey: string | undefined  ← workspace's own OpenRouter key, AES-256-GCM encrypted (API_KEY_ENCRYPTION_SECRET), server-only, never returned
     usage:
       conversationCount: number
       messageCount: number
@@ -246,13 +247,18 @@ Vector metadata per chunk:
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/auth/verify` | Verify JWT, create user + workspace if new |
-| GET | `/workspace` | Get workspace + agent config |
-| PUT | `/workspace/agent` | Update agent identity and LLM config |
+| GET | `/workspace` | Get workspace + agent config (includes `hasOpenRouterKey: boolean`, never the raw key) |
+| PUT | `/workspace/agent` | Update agent identity and LLM config (model validated against the full multi-provider catalog) |
 | PUT | `/workspace` | Update workspace name |
+| PUT | `/workspace/key` | Set the workspace's OpenRouter API key (encrypted at rest before storing) |
+| DELETE | `/workspace/key` | Remove the workspace's stored OpenRouter API key |
+| GET | `/user` | Get current user profile |
+| PUT | `/user` | Update user profile (`displayName`) |
 | POST | `/knowledge/scrape` | Trigger scraper job for a URL |
 | POST | `/knowledge/upload` | Multipart file upload (pdf/docx/txt/csv/md, max 10 MB) → Firebase Storage → ingestion job |
 | GET | `/knowledge` | List knowledge base documents |
 | DELETE | `/knowledge/:id` | Delete doc + Pinecone vectors |
+| POST | `/knowledge/:id/reindex` | Clear existing Pinecone vectors and re-run ingestion for the doc |
 | GET | `/conversations` | List conversations (filter by status, channel) |
 | GET | `/conversations/:id` | Get conversation with messages |
 | POST | `/conversations/:id/takeover` | Operator takes over conversation |
@@ -281,7 +287,10 @@ POST /widget/chat
        │
        ├─ 1. Resolve workspaceId from agentId (Firestore channel lookup)
        │
-       ├─ 2. Fetch workspace agent config (LLM provider, API key, model, systemPrompt)
+       ├─ 2. Fetch workspace agent config (llmModel, systemPrompt) and resolve the
+       │       OpenRouter API key: workspace's own encrypted key (covers any model)
+       │       or platform OPENROUTER_API_KEY (Gemini-family models only) — no key
+       │       available → pre-stream JSON 502
        │
        ├─ 3. Embed message → Google gemini-embedding-001 (768-dim vector via outputDimensionality)
        │
@@ -293,7 +302,8 @@ POST /widget/chat
        │       [history: last N messages from Firestore]
        │       [user: current message]
        │
-       ├─ 6. Stream LLM response (Claude / GPT-4o / Gemini)
+       ├─ 6. Stream LLM response via OpenRouter (single OpenAI-compatible
+       │       streaming endpoint; provider inferred from the model catalog slug)
        │       → SSE stream back to widget
        │
        └─ 7. On stream complete:
@@ -314,18 +324,19 @@ POST /widget/chat
 ### Widget Public Endpoints
 - No auth required (widget runs on customer's anonymous visitors)
 - `agentId` is validated against Firestore — invalid IDs return 404
-- Rate limiting applied per `agentId` (e.g. 30 requests/minute using in-memory or Redis)
+- Rate limiting: in-memory, per-instance sliding-window limiter — `POST /widget/chat` allows 60 req/min per channel and 30 req/min per IP; `GET /widget/conversations/:id/events` allows 20 req/min per IP; over-limit requests get `429` with a `Retry-After` header
 - CORS restricted to the workspace's registered domain (future)
 
 ### Firestore Security Rules
 - Client-side reads/writes from `apps/web` use Firestore rules requiring `request.auth.uid`
-- Sensitive fields (`agent.llmApiKey`) are write-only from the API server (Admin SDK bypasses rules) — never returned to the client
+- Sensitive fields (`openRouterKey`) are write-only from the API server (Admin SDK bypasses rules) — never returned to the client
 - Server-side (API) uses Firebase Admin SDK which bypasses Firestore rules
 
-### LLM API Keys
-- Stored in Firestore `workspaces/{id}.agent.llmApiKey`
-- Never returned in any API response (redacted in GET /workspace)
-- Future: encrypt with Cloud KMS before storing
+### OpenRouter API Keys (bring-your-own-key)
+- Each workspace may store one OpenRouter key at `workspaces/{id}.openRouterKey`, encrypted at rest with AES-256-GCM (app-layer; key derived from `API_KEY_ENCRYPTION_SECRET`)
+- Never returned in any API response — `GET /workspace` exposes only `hasOpenRouterKey: boolean`; set/cleared via `PUT /workspace/key` / `DELETE /workspace/key`
+- Resolution: workspace's own key covers all models; otherwise the platform `OPENROUTER_API_KEY` is used for Gemini-family models only; non-Gemini models with no key configured return a pre-stream JSON 502
+- Possible future upgrade: move to Cloud KMS-backed envelope encryption
 
 ---
 
@@ -357,6 +368,8 @@ FIREBASE_STORAGE_BUCKET       ← optional, defaults to <project-id>.firebasesto
 PINECONE_API_KEY
 PINECONE_INDEX
 GEMINI_API_KEY                ← for embeddings
+OPENROUTER_API_KEY            ← platform fallback, used for Gemini-family models when a workspace has no key of its own
+API_KEY_ENCRYPTION_SECRET     ← encrypts/decrypts customer OpenRouter keys (AES-256-GCM)
 SCRAPER_JOB_URL               ← Cloud Run Job trigger URL
 ```
 
