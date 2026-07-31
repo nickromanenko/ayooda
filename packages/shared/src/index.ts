@@ -43,6 +43,16 @@ export type ChannelType = 'web_widget' | 'telegram'
 // Agent tone used during onboarding to build the system prompt
 export type AgentTone = 'professional' | 'friendly' | 'casual'
 
+// Workspace & Team management
+export type WorkspaceRole = 'owner' | 'member'
+
+export interface PendingInvite {
+  email: string       // lowercased
+  workspaceId: string
+  invitedBy: string   // uid of the inviting owner
+  createdAt: Date
+}
+
 // Firestore models
 export interface UserDoc {
   email: string
@@ -50,6 +60,7 @@ export interface UserDoc {
   photoURL: string | null
   workspaceId: string
   createdAt: Date
+  role?: WorkspaceRole
 }
 
 export interface AgentConfig {
