@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   createUserWithEmailAndPassword,
@@ -72,11 +72,21 @@ function friendlyError(err: unknown): string {
 }
 
 export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupPageInner />
+    </Suspense>
+  )
+}
+
+function SignupPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const invite = searchParams.get('invite')
   const { createSession } = useAuth()
 
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(invite ?? '')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -210,6 +220,12 @@ export default function SignupPage() {
           <p style={{ color: 'var(--ink-mute)', fontSize: 14, margin: '0 0 24px' }}>
             Start supporting your customers with AI — free for 14 days.
           </p>
+
+          {invite && (
+            <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'var(--accent-soft)', border: '1px solid rgba(245,165,36,0.18)', color: 'var(--ink)', fontSize: 13, marginBottom: 20 }}>
+              You&apos;re joining a team — sign up with this email.
+            </div>
+          )}
 
           {/* Google */}
           <button

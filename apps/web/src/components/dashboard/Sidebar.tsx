@@ -10,6 +10,7 @@ import {
   Radio,
   CreditCard,
   Settings,
+  Users,
   LogOut,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -24,12 +25,16 @@ const navItems = [
 
 const bottomItems = [
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
+  { label: 'Team', href: '/dashboard/team', icon: Users },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
-export function Sidebar() {
+export function Sidebar({ role }: { role: 'owner' | 'member' }) {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
+
+  const visibleNav = role === 'owner' ? navItems : navItems.filter((i) => i.href === '/dashboard/inbox')
+  const visibleBottom = role === 'owner' ? bottomItems : []
 
   function isActive(item: { href: string; exact?: boolean }) {
     if (item.exact) return pathname === item.href
@@ -61,7 +66,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {navItems.map(item => {
+        {visibleNav.map(item => {
           const active = isActive(item)
           return (
             <Link
@@ -99,7 +104,7 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div style={{ padding: '8px 8px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {bottomItems.map(item => {
+        {visibleBottom.map(item => {
           const active = isActive(item)
           return (
             <Link

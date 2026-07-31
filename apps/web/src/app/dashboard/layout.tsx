@@ -21,18 +21,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
     const workspaceSnap = await db.doc(`workspaces/${workspaceId}`).get()
 
     if (!workspaceSnap.data()?.onboardingComplete) redirect('/onboarding')
+
+    const role = (userSnap.data()!.role as 'owner' | 'member') ?? 'owner'
+
+    return (
+      <div style={{ display: 'flex', height: '100%' }}>
+        <Sidebar role={role} />
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-2)', padding: 24 }}>{children}</main>
+        </div>
+      </div>
+    )
   } catch (err) {
     if (isRedirectError(err)) throw err
     console.error('[dashboard/layout] session verification failed:', err)
     redirect('/login')
   }
-
-  return (
-    <div style={{ display: 'flex', height: '100%' }}>
-      <Sidebar />
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-        <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-2)', padding: 24 }}>{children}</main>
-      </div>
-    </div>
-  )
 }
