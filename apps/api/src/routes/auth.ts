@@ -35,6 +35,28 @@ auth.post('/verify', async (c) => {
     return c.json({ workspaceId: userData.workspaceId })
   }
 
+  // Auto-join: if this email was invited, attach as a member instead of creating a workspace.
+  const emailLower = (email ?? '').trim().toLowerCase()
+  if (emailLower) {
+    const inviteRef = adminDb.doc(`pendingInvites/${emailLower}`)
+    const inviteSnap = await inviteRef.get()
+    if (inviteSnap.exists) {
+      const invite = inviteSnap.data() as { workspaceId: string }
+      const batch = adminDb.batch()
+      batch.set(userRef, {
+        email: email ?? '',
+        displayName: name ?? '',
+        photoURL: picture ?? null,
+        workspaceId: invite.workspaceId,
+        role: 'member',
+        createdAt: new Date(),
+      })
+      batch.delete(inviteRef)
+      await batch.commit()
+      return c.json({ workspaceId: invite.workspaceId })
+    }
+  }
+
   // First login — create user + workspace atomically
   const workspaceRef = adminDb.collection('workspaces').doc()
   const workspaceId = workspaceRef.id
@@ -47,6 +69,7 @@ auth.post('/verify', async (c) => {
     displayName: name ?? '',
     photoURL: picture ?? null,
     workspaceId,
+    role: 'owner',
     createdAt: now,
   })
 
