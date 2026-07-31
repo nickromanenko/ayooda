@@ -6,8 +6,12 @@ import { parseUpdate } from '../lib/telegram/update'
 import { sendMessage } from '../lib/telegram/client'
 import { prepareTurn } from '../lib/chat/agent-turn'
 import { streamChat } from '../lib/llm/openrouter'
+import { rateLimit } from '../lib/rate-limit'
 
 const telegram = new Hono()
+
+const WEBHOOK_RATE_WINDOW_MS = 60_000
+const WEBHOOK_LIMIT_PER_IP = 120
 
 /** Constant-time secret comparison; false if either side is missing or lengths differ. */
 function secretMatches(a: string | undefined, b: string | undefined): boolean {
@@ -16,6 +20,13 @@ function secretMatches(a: string | undefined, b: string | undefined): boolean {
   const bb = Buffer.from(b)
   if (ba.length !== bb.length) return false
   return timingSafeEqual(ba, bb)
+}
+
+/** Best-effort client IP from proxy headers. */
+function clientIp(c: { req: { header: (name: string) => string | undefined } }): string {
+  const xff = c.req.header('x-forwarded-for')
+  if (xff) return xff.split(',')[0]!.trim()
+  return c.req.header('x-real-ip') ?? 'unknown'
 }
 
 /** Look up a telegram channel doc by its id (collection-group query). */
@@ -27,6 +38,11 @@ async function findTelegramChannel(channelId: string) {
 }
 
 telegram.post('/webhook/:channelId', async (c) => {
+  const ip = clientIp(c)
+  if (!rateLimit(`tg:ip:${ip}`, WEBHOOK_LIMIT_PER_IP, WEBHOOK_RATE_WINDOW_MS).ok) {
+    return c.json({ ok: true }) // acknowledge (don't 429 — avoid Telegram retries) but do no work
+  }
+
   const channelId = c.req.param('channelId')
   try {
     const channelDoc = await findTelegramChannel(channelId)

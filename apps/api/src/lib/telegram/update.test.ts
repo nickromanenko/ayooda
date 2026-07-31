@@ -30,4 +30,10 @@ describe('parseUpdate', () => {
   test('message missing chat/from → ignore', () => {
     expect(parseUpdate({ message: { text: 'x' } })).toEqual({ kind: 'ignore' })
   })
+  test('non-private chat (group) → ignore', () => {
+    expect(parseUpdate({ message: { chat: { id: 1, type: 'group' }, from: { id: 2 }, text: 'hi' } })).toEqual({ kind: 'ignore' })
+  })
+  test('explicit private chat → text', () => {
+    expect(parseUpdate({ message: { chat: { id: 1, type: 'private' }, from: { id: 2 }, text: 'hi' } })).toEqual({ kind: 'text', chatId: 1, userId: 2, text: 'hi' })
+  })
 })

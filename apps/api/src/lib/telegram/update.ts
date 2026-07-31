@@ -4,7 +4,7 @@ export type ParsedUpdate =
   | { kind: 'ignore' }
 
 interface TgMessage {
-  chat?: { id?: number }
+  chat?: { id?: number; type?: string }
   from?: { id?: number }
   text?: string
 }
@@ -14,6 +14,8 @@ export function parseUpdate(update: unknown): ParsedUpdate {
   const u = update as { message?: TgMessage } | null
   const msg = u?.message
   if (!msg) return { kind: 'ignore' } // edited_message / channel_post / callback_query / etc.
+
+  if (msg.chat?.type !== undefined && msg.chat.type !== 'private') return { kind: 'ignore' } // DM-only
 
   const chatId = msg.chat?.id
   const userId = msg.from?.id
