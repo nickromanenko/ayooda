@@ -1,9 +1,11 @@
 import { createMiddleware } from 'hono/factory'
+import type { WorkspaceRole } from '@ayooda/shared'
 import { adminAuth, adminDb } from '../lib/firebase-admin'
 
 export type AuthVariables = {
   uid: string
   workspaceId: string
+  role: WorkspaceRole
 }
 
 export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
@@ -22,8 +24,17 @@ export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(async 
     const userData = userDoc.data()!
     c.set('uid', decoded.uid)
     c.set('workspaceId', userData.workspaceId)
+    c.set('role', (userData.role as WorkspaceRole) ?? 'owner')
     await next()
   } catch {
     return c.json({ error: 'Invalid token' }, 401)
   }
+})
+
+/** Gate a route to workspace owners. Must run AFTER requireAuth. */
+export const requireOwner = createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
+  if (c.get('role') !== 'owner') {
+    return c.json({ error: 'Owner access required' }, 403)
+  }
+  await next()
 })
