@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { adminDb, adminBucket } from '../lib/firebase-admin'
-import { requireAuth, type AuthVariables } from '../middleware/auth'
+import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { triggerIngestion } from '../lib/scraper'
 import { namespaceFor } from '../lib/pinecone'
 import { validateKnowledgeFile } from '@ayooda/shared'
@@ -8,6 +8,7 @@ import { validateKnowledgeFile } from '@ayooda/shared'
 const knowledge = new Hono<{ Variables: AuthVariables }>()
 
 knowledge.use('*', requireAuth)
+knowledge.use('*', requireOwner)
 
 /** POST /knowledge/scrape — queue a URL for scraping */
 knowledge.post('/scrape', async (c) => {

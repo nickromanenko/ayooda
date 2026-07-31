@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
-import { requireAuth, type AuthVariables } from '../middleware/auth'
+import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { getStripe, PRICE_BY_TIER, tierForPrice } from '../lib/billing/stripe'
 import { checkEntitlement } from '../lib/billing/entitlement'
 import { subscriptionPeriodEnd, subscriptionPriceId } from '../lib/billing/stripe-sync'
@@ -77,9 +77,11 @@ async function applySubscription(
 // Scoped to the specific authenticated subpaths only — NOT a broad `use('/')` — so the
 // public `/webhook` route above is never caught by auth middleware.
 billing.use('/checkout', requireAuth)
+billing.use('/checkout', requireOwner)
 billing.use('/portal', requireAuth)
+billing.use('/portal', requireOwner)
 
-billing.get('/', requireAuth, async (c) => {
+billing.get('/', requireAuth, requireOwner, async (c) => {
   const workspaceId = c.get('workspaceId')
   const snap = await adminDb.doc(`workspaces/${workspaceId}`).get()
   const data = snap.data()!

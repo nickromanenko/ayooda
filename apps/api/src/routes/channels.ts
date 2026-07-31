@@ -1,13 +1,14 @@
 import { Hono } from 'hono'
 import { randomBytes } from 'crypto'
 import { adminDb } from '../lib/firebase-admin'
-import { requireAuth, type AuthVariables } from '../middleware/auth'
+import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { encryptSecret } from '../lib/crypto'
 import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
 
 const channels = new Hono<{ Variables: AuthVariables }>()
 
 channels.use('*', requireAuth)
+channels.use('*', requireOwner)
 
 const WIDGET_BASE_URL = process.env.WIDGET_BASE_URL ?? 'https://ayooda-1791f.web.app'
 
