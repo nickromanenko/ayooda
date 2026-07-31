@@ -27,9 +27,11 @@ import conversationRoutes from './routes/conversations'
 import widgetRoutes from './routes/widget'
 import billingRoutes from './routes/billing'
 import telegramRoutes from './routes/telegram'
+import teamRoutes from './routes/team'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
+app.route('/team', teamRoutes)
 app.route('/billing', billingRoutes)
 app.route('/user', userRoutes)
 app.route('/knowledge', knowledgeRoutes)
