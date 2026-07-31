@@ -40,20 +40,22 @@ auth.post('/verify', async (c) => {
   if (emailLower) {
     const inviteRef = adminDb.doc(`pendingInvites/${emailLower}`)
     const inviteSnap = await inviteRef.get()
-    if (inviteSnap.exists) {
+    if (inviteSnap.exists && decodedToken.email_verified === true) {
       const invite = inviteSnap.data() as { workspaceId: string }
-      const batch = adminDb.batch()
-      batch.set(userRef, {
-        email: email ?? '',
-        displayName: name ?? '',
-        photoURL: picture ?? null,
-        workspaceId: invite.workspaceId,
-        role: 'member',
-        createdAt: new Date(),
-      })
-      batch.delete(inviteRef)
-      await batch.commit()
-      return c.json({ workspaceId: invite.workspaceId })
+      if (typeof invite.workspaceId === 'string' && invite.workspaceId.length > 0) {
+        const batch = adminDb.batch()
+        batch.set(userRef, {
+          email: email ?? '',
+          displayName: name ?? '',
+          photoURL: picture ?? null,
+          workspaceId: invite.workspaceId,
+          role: 'member',
+          createdAt: new Date(),
+        })
+        batch.delete(inviteRef)
+        await batch.commit()
+        return c.json({ workspaceId: invite.workspaceId })
+      }
     }
   }
 

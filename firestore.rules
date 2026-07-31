@@ -2,6 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function callerData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     // Users can only read/write their own user document
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
@@ -17,12 +21,14 @@ service cloud.firestore {
 
       match /knowledge/{docId} {
         allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+          && callerData().workspaceId == workspaceId
+          && callerData().role != 'member';
       }
 
       match /channels/{channelId} {
         allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+          && callerData().workspaceId == workspaceId
+          && callerData().role != 'member';
       }
 
       match /conversations/{conversationId} {
