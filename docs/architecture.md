@@ -97,6 +97,7 @@ Protected routes (require Firebase auth session):
 - `/dashboard/agent` — Agent identity + LLM config
 - `/dashboard/channels` — Channels + embed code generator
 - `/dashboard/settings` — Workspace settings
+- `/dashboard/team` — Team members + invites (owner only)
 
 ### apps/api — Hono on Bun (Cloud Run)
 
@@ -155,6 +156,14 @@ users/
     displayName: string
     photoURL: string | null
     workspaceId: string
+    role: 'owner' | 'member'   ← missing on existing users treated as 'owner' (no backfill); members are inbox operators only
+    createdAt: Timestamp
+
+pendingInvites/
+  {emailLower}                 ← email (lowercased) as doc id ⇒ one pending invite per email, globally
+    email: string
+    workspaceId: string
+    invitedBy: string          ← uid of the inviting owner
     createdAt: Timestamp
 
 workspaces/
@@ -264,30 +273,34 @@ Vector metadata per chunk:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/auth/verify` | Verify JWT, create user + workspace if new |
-| GET | `/workspace` | Get workspace + agent config (includes `hasOpenRouterKey: boolean`, never the raw key) |
-| PUT | `/workspace/agent` | Update agent identity and LLM config (model validated against the full multi-provider catalog) |
-| PUT | `/workspace` | Update workspace name |
-| PUT | `/workspace/key` | Set the workspace's OpenRouter API key (encrypted at rest before storing) |
-| DELETE | `/workspace/key` | Remove the workspace's stored OpenRouter API key |
+| POST | `/auth/verify` | Verify JWT, create user + workspace if new — or, if the email matches a `pendingInvites` doc, join as a `member` of that workspace instead (invite consumed in the same batch) |
+| GET | `/workspace` | Get workspace + agent config (includes `hasOpenRouterKey: boolean`, never the raw key, and the caller's `role`) |
+| PUT | `/workspace/agent` | Update agent identity and LLM config (model validated against the full multi-provider catalog) — **owner only** |
+| PUT | `/workspace` | Update workspace name — **owner only** |
+| PUT | `/workspace/key` | Set the workspace's OpenRouter API key (encrypted at rest before storing) — **owner only** |
+| DELETE | `/workspace/key` | Remove the workspace's stored OpenRouter API key — **owner only** |
 | GET | `/user` | Get current user profile |
 | PUT | `/user` | Update user profile (`displayName`) |
-| POST | `/knowledge/scrape` | Trigger scraper job for a URL |
-| POST | `/knowledge/upload` | Multipart file upload (pdf/docx/txt/csv/md, max 10 MB) → Firebase Storage → ingestion job |
-| GET | `/knowledge` | List knowledge base documents |
-| DELETE | `/knowledge/:id` | Delete doc + Pinecone vectors |
-| POST | `/knowledge/:id/reindex` | Clear existing Pinecone vectors and re-run ingestion for the doc |
+| GET | `/team` | List workspace members and pending invites — **owner only** |
+| POST | `/team/invite` | Invite by email, creates `pendingInvites/{emailLower}`; `409` if the email already has an account or is already invited — **owner only** |
+| DELETE | `/team/invite/:email` | Revoke a pending invite (scoped to the caller's workspace) — **owner only** |
+| DELETE | `/team/member/:uid` | Remove a member — never the owner; deletes their `users/{uid}` doc, so they re-provision a fresh solo workspace on next login — **owner only** |
+| POST | `/knowledge/scrape` | Trigger scraper job for a URL — **owner only** |
+| POST | `/knowledge/upload` | Multipart file upload (pdf/docx/txt/csv/md, max 10 MB) → Firebase Storage → ingestion job — **owner only** |
+| GET | `/knowledge` | List knowledge base documents — **owner only** |
+| DELETE | `/knowledge/:id` | Delete doc + Pinecone vectors — **owner only** |
+| POST | `/knowledge/:id/reindex` | Clear existing Pinecone vectors and re-run ingestion for the doc — **owner only** |
 | GET | `/conversations` | List conversations (filter by status, channel) |
 | GET | `/conversations/:id` | Get conversation with messages |
 | POST | `/conversations/:id/takeover` | Operator takes over conversation |
 | POST | `/conversations/:id/resolve` | Mark conversation as resolved |
-| GET | `/channels` | List channels for workspace |
-| POST | `/channels/web-widget` | Create or update web widget channel |
-| POST | `/channels/telegram` | Connect a workspace's Telegram bot: validates the token via `getMe`, encrypts and stores it, registers the webhook |
-| DELETE | `/channels/telegram` | Disconnect the Telegram channel |
-| POST | `/billing/checkout` | Create a Stripe Checkout session for the selected tier, returns the hosted URL |
-| POST | `/billing/portal` | Create a Stripe Customer Portal session, returns the hosted URL |
-| GET | `/billing` | Current plan, usage, and entitlement status (no Stripe IDs) |
+| GET | `/channels` | List channels for workspace — **owner only** |
+| POST | `/channels/web-widget` | Create or update web widget channel — **owner only** |
+| POST | `/channels/telegram` | Connect a workspace's Telegram bot: validates the token via `getMe`, encrypts and stores it, registers the webhook — **owner only** |
+| DELETE | `/channels/telegram` | Disconnect the Telegram channel — **owner only** |
+| POST | `/billing/checkout` | Create a Stripe Checkout session for the selected tier, returns the hosted URL — **owner only** |
+| POST | `/billing/portal` | Create a Stripe Customer Portal session, returns the hosted URL — **owner only** |
+| GET | `/billing` | Current plan, usage, and entitlement status (no Stripe IDs) — **owner only** |
 
 ### Public endpoints (no auth, validated by agentId)
 
@@ -390,11 +403,29 @@ Resolved server-side on each gated request, no Stripe secrets exposed:
 
 ---
 
+## Team & Roles
+
+### Model
+- Each workspace has one **owner** and any number of **members**. Role lives on `users/{uid}.role` (`'owner' | 'member'`); a missing `role` (existing users, no backfill) is treated as `'owner'`.
+- Members are inbox operators only — they can work `/conversations` (inbox + takeover) but cannot touch knowledge, channels, billing, workspace settings, or team management.
+
+### Invites (no email infrastructure)
+- The owner invites by email: `POST /team/invite` creates `pendingInvites/{emailLower}` (`{ email, workspaceId, invitedBy, createdAt }`) — email as the doc id means one pending invite per email, globally. `409` if the email already has an account or is already invited.
+- On a first-time user's `POST /auth/verify`, if their email matches a pending invite, they're created as a `member` of that invite's workspace (no new workspace provisioned) and the invite doc is deleted in the same batch.
+- The owner also gets a copyable `{WEB_PUBLIC_URL}/signup?invite=<email>` link from the invite response — auto-join is matched by email, not a token.
+- `DELETE /team/invite/:email` revokes a pending invite (scoped to the caller's workspace). `DELETE /team/member/:uid` removes a member — never the owner — by deleting their `users/{uid}` doc, so they re-provision a fresh solo workspace on next login.
+
+### Enforcement
+- `requireOwner` middleware (must run after `requireAuth`) 403s non-owners: `PUT /workspace*`, `PUT`/`DELETE /workspace/key`, all `/knowledge`, all `/channels`, all authed `/billing`, all `/team` mutations.
+- Members keep access to all `/conversations`, `GET /workspace` (now includes `role`), and `GET`/`PUT /user`. Public routes are unaffected.
+
+---
+
 ## Security Model
 
 ### API Authentication
 - All protected routes validate Firebase ID tokens via Firebase Admin SDK
-- Token contains `uid` → API looks up `users/{uid}` → resolves `workspaceId`
+- Token contains `uid` → API looks up `users/{uid}` → resolves `workspaceId` and `role`
 - All data operations are scoped to the resolved `workspaceId`
 
 ### Widget Public Endpoints
@@ -463,6 +494,7 @@ OPENROUTER_API_KEY            ← platform fallback, used for Gemini-family mode
 API_KEY_ENCRYPTION_SECRET     ← encrypts/decrypts customer OpenRouter keys and Telegram bot tokens (AES-256-GCM)
 SCRAPER_JOB_URL               ← Cloud Run Job trigger URL
 API_PUBLIC_URL                ← public HTTPS base URL, used to register each workspace's Telegram webhook
+WEB_PUBLIC_URL                ← public base URL of apps/web, used to build the team invite link (/signup?invite=<email>)
 TELEGRAM_BOT_API_KEY          ← local testing only, one bot; production tokens are per-workspace, stored per-channel (see Telegram Bot Tokens)
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
