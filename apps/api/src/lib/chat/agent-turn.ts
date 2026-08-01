@@ -3,7 +3,8 @@ import { adminDb } from '../firebase-admin'
 import { embedText, LEGACY_MODEL_MAP } from '../gemini'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
 import { namespaceFor } from '../pinecone'
-import { streamChat, type ChatParams } from '../llm/openrouter'
+import { type ChatParams } from '../llm/openrouter'
+import { loadTools, type StoredTool } from './tools'
 import { resolveOpenRouterKey } from '../llm/resolve'
 import { providerOf, type ChannelType } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
@@ -24,6 +25,7 @@ export interface ReadyTurn {
   sources: Array<{ docId: string; source: string; score: number }>
   trace: LangfuseTrace
   llmModel: string
+  tools: StoredTool[]
   persist: (reply: string, promptTokens: number, completionTokens: number) => Promise<string>
 }
 
@@ -152,6 +154,14 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }))
   chatMessages.push({ role: 'user', content: trimmed })
 
+  // Tool/webhook actions (non-fatal): the model may call these during the turn.
+  let tools: StoredTool[] = []
+  try {
+    tools = await loadTools(workspaceId)
+  } catch (err) {
+    console.warn('[agent-turn] tool load failed:', err)
+  }
+
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
     const messageRef = await messagesRef.add({
       role: 'assistant',
@@ -178,6 +188,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     sources,
     trace,
     llmModel,
+    tools,
     persist,
   }
 }
