@@ -8,6 +8,7 @@ import {
   BookOpen,
   Bot,
   Radio,
+  Wrench,
   CreditCard,
   Settings,
   Users,
@@ -21,6 +22,7 @@ const navItems = [
   { label: 'Knowledge', href: '/dashboard/knowledge', icon: BookOpen },
   { label: 'Agent', href: '/dashboard/agent', icon: Bot },
   { label: 'Channels', href: '/dashboard/channels', icon: Radio },
+  { label: 'Tools', href: '/dashboard/tools', icon: Wrench },
 ]
 
 const bottomItems = [
