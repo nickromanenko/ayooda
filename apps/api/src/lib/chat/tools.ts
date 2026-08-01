@@ -1,8 +1,10 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import type { ToolMethod, ToolParam } from '@ayooda/shared'
-import type { OpenRouterTool } from '../llm/openrouter'
+import { streamChat, type OpenRouterTool, type ChatParams, type ChatChunk, type ChatResult, type ChatMessage } from '../llm/openrouter'
 import { decryptSecret } from '../crypto'
 import { isBlockedAddress } from '../tools/ssrf'
+import { adminDb } from '../firebase-admin'
+import type { LangfuseTrace } from '../langfuse'
 
 export interface StoredTool {
   id: string
@@ -155,4 +157,86 @@ export async function executeTool(
   } finally {
     clearTimeout(timer)
   }
+}
+
+export const MAX_ROUNDS = 3
+export const MAX_CALLS_PER_ROUND = 5
+
+/** Tools the model may see: enabled, and (read OR write-with-writeEnabled). */
+export function selectExposedTools(tools: StoredTool[]): StoredTool[] {
+  return tools.filter((t) => t.enabled && (t.kind === 'read' || t.writeEnabled === true))
+}
+
+export async function loadTools(workspaceId: string): Promise<StoredTool[]> {
+  const snap = await adminDb.collection(`workspaces/${workspaceId}/tools`).where('enabled', '==', true).get()
+  const tools = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoredTool, 'id'>) }))
+  return selectExposedTools(tools)
+}
+
+interface RunDeps {
+  stream?: (params: ChatParams) => AsyncGenerator<ChatChunk, ChatResult, void>
+  execute?: (tool: StoredTool, args: Record<string, unknown>) => Promise<ToolResult>
+}
+
+function safeParse(json: string): Record<string, unknown> {
+  try { const v = JSON.parse(json || '{}'); return v && typeof v === 'object' ? v : {} } catch { return {} }
+}
+
+/**
+ * Channel-agnostic agent turn with a bounded tool-resolution loop. Delegates to streamChat
+ * via yield* so text still streams to the caller; between rounds it executes any tool calls
+ * the model requested and feeds the results back. Falls back to one tool-free call after MAX_ROUNDS.
+ */
+export async function* runAgentTurn(
+  chatParams: ChatParams,
+  tools: StoredTool[],
+  trace: LangfuseTrace,
+  deps: RunDeps = {},
+): AsyncGenerator<ChatChunk, ChatResult, void> {
+  const stream = deps.stream ?? streamChat
+  const execute = deps.execute ?? executeTool
+  const schema = toOpenRouterTools(tools)
+  const byName = new Map(tools.map((t) => [t.name, t]))
+  let messages: ChatMessage[] = chatParams.messages
+  let promptTokens = 0
+  let completionTokens = 0
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const result = yield* stream({ ...chatParams, messages, tools: schema.length ? schema : undefined })
+    promptTokens += result.promptTokens
+    completionTokens += result.completionTokens
+    const calls = result.toolCalls ?? []
+    if (calls.length === 0) return { promptTokens, completionTokens }
+
+    messages = [
+      ...messages,
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: calls.map((c) => ({ id: c.id, type: 'function' as const, function: { name: c.name, arguments: c.arguments } })),
+      },
+    ]
+
+    for (let i = 0; i < calls.length; i++) {
+      const c = calls[i]!
+      let content: string
+      if (i >= MAX_CALLS_PER_ROUND) {
+        content = 'error: too many tool calls in one step'
+      } else {
+        const tool = byName.get(c.name)
+        if (!tool) {
+          content = `error: unknown tool ${c.name}`
+        } else {
+          const span = trace.span({ name: `tool:${c.name}`, input: safeParse(c.arguments) })
+          const r = await execute(tool, safeParse(c.arguments))
+          span.end({ output: { status: r.status, error: r.error } })
+          content = r.error ? `error: ${r.error}` : `status ${r.status}\n${r.body}`
+        }
+      }
+      messages = [...messages, { role: 'tool', tool_call_id: c.id, content }]
+    }
+  }
+
+  const final = yield* stream({ ...chatParams, messages, tools: undefined })
+  return { promptTokens: promptTokens + final.promptTokens, completionTokens: completionTokens + final.completionTokens }
 }
