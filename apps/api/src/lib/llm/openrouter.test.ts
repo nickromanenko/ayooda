@@ -56,3 +56,28 @@ describe('streamChat', () => {
     await expect(gen.next()).rejects.toThrow('rate limited')
   })
 })
+
+describe('streamChat tool-calling', () => {
+  test('accumulates tool_calls deltas across frames and sends tools in the body', async () => {
+    let sentBody: { tools?: unknown[] } | null = null
+    const body =
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"order_lookup","arguments":"{\\"or"}}]}}]}\n\n' +
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"derId\\":\\"A1\\"}"}}]}}]}\n\n' +
+      'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":9,"completion_tokens":4}}\n\n' +
+      'data: [DONE]\n\n'
+    globalThis.fetch = (async (_url: string, init: { body: string }) => {
+      sentBody = JSON.parse(init.body)
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }) as unknown as typeof fetch
+
+    const tools = [{ type: 'function' as const, function: { name: 'order_lookup', description: 'd', parameters: { type: 'object', properties: {}, required: [] } } }]
+    const gen = streamChat({ model: 'x/y', systemPrompt: 's', messages: [{ role: 'user', content: 'where is A1' }], apiKey: 'k', tools })
+    const texts: string[] = []
+    let result: { promptTokens: number; completionTokens: number; toolCalls?: unknown } | undefined
+    while (true) { const n = await gen.next(); if (n.done) { result = n.value; break } texts.push(n.value.text) }
+    expect(texts).toEqual([])
+    expect(sentBody!.tools).toHaveLength(1)
+    expect(result!.toolCalls).toEqual([{ id: 'call_1', name: 'order_lookup', arguments: '{"orderId":"A1"}' }])
+    expect(result!.promptTokens).toBe(9)
+  })
+})
