@@ -1,5 +1,8 @@
+import { lookup as dnsLookup } from 'node:dns/promises'
 import type { ToolMethod, ToolParam } from '@ayooda/shared'
 import type { OpenRouterTool } from '../llm/openrouter'
+import { decryptSecret } from '../crypto'
+import { isBlockedAddress } from '../tools/ssrf'
 
 export interface StoredTool {
   id: string
@@ -69,4 +72,87 @@ export function buildToolRequest(tool: StoredTool, args: Record<string, unknown>
   const query = qs.toString()
   const full = query ? url + (url.includes('?') ? '&' : '?') + query : url
   return { url: full, method: tool.method, headers }
+}
+
+export interface ToolResult { status: number; body: string; error?: string }
+
+type LookupFn = (host: string, opts: { all: true }) => Promise<Array<{ address: string }>>
+
+const TIMEOUT_MS = 10_000
+const MAX_BODY_BYTES = 32 * 1024
+
+async function readCapped(res: Response, cap: number): Promise<string> {
+  if (!res.body) return ''
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let out = ''
+  let total = 0
+  try {
+    while (total < cap) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      out += dec.decode(value, { stream: true })
+      if (total >= cap) { out += '…[truncated]'; break }
+    }
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+  return out
+}
+
+/** Execute one tool call, SSRF-guarded. Never throws — all failures become a ToolResult. */
+export async function executeTool(
+  tool: StoredTool,
+  args: Record<string, unknown>,
+  deps: { lookup?: LookupFn } = {},
+): Promise<ToolResult> {
+  const resolve = deps.lookup ?? (dnsLookup as unknown as LookupFn)
+
+  let req: BuiltRequest
+  try {
+    req = buildToolRequest(tool, args)
+  } catch (err) {
+    return { status: 0, body: '', error: err instanceof Error ? err.message : 'bad request' }
+  }
+
+  let parsed: URL
+  try { parsed = new URL(req.url) } catch { return { status: 0, body: '', error: 'invalid url' } }
+  if (parsed.protocol !== 'https:') return { status: 0, body: '', error: 'only https is allowed' }
+
+  try {
+    const addrs = await resolve(parsed.hostname, { all: true })
+    if (addrs.length === 0 || addrs.some((a) => isBlockedAddress(a.address))) {
+      return { status: 0, body: '', error: 'blocked host' }
+    }
+  } catch {
+    return { status: 0, body: '', error: 'dns resolution failed' }
+  }
+
+  const headers = { ...req.headers }
+  if (tool.auth.type !== 'none' && tool.auth.secretEnc) {
+    let secret: string
+    try { secret = decryptSecret(tool.auth.secretEnc) } catch { return { status: 0, body: '', error: 'auth secret error' } }
+    if (tool.auth.type === 'bearer') headers['Authorization'] = `Bearer ${secret}`
+    else if (tool.auth.type === 'header' && tool.auth.headerName) headers[tool.auth.headerName] = secret
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  try {
+    const res = await fetch(req.url, {
+      method: req.method,
+      headers,
+      body: req.body,
+      redirect: 'manual',
+      signal: controller.signal,
+    })
+    const body = await readCapped(res, MAX_BODY_BYTES)
+    return { status: res.status, body }
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return { status: 0, body: '', error: 'timeout' }
+    return { status: 0, body: '', error: 'request failed' }
+  } finally {
+    clearTimeout(timer)
+  }
 }
