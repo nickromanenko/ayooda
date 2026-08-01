@@ -5,7 +5,7 @@ import { decryptSecret } from '../lib/crypto'
 import { parseUpdate } from '../lib/telegram/update'
 import { sendMessage } from '../lib/telegram/client'
 import { prepareTurn } from '../lib/chat/agent-turn'
-import { streamChat } from '../lib/llm/openrouter'
+import { runAgentTurn } from '../lib/chat/tools'
 import { rateLimit } from '../lib/rate-limit'
 
 const telegram = new Hono()
@@ -104,7 +104,7 @@ telegram.post('/webhook/:channelId', async (c) => {
       }
 
       // Accumulate the full reply (Telegram doesn't stream), then send once.
-      const gen = streamChat(prepared.chatParams)
+      const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace)
       let reply = ''
       let promptTokens = 0
       let completionTokens = 0

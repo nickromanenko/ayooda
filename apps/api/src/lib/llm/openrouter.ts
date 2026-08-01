@@ -1,13 +1,31 @@
-export interface ChatMessage { role: 'user' | 'assistant'; content: string }
-export interface ChatParams { model: string; systemPrompt: string; messages: ChatMessage[]; apiKey: string }
+export interface ToolCall { id: string; name: string; arguments: string }
+export interface OpenRouterTool {
+  type: 'function'
+  function: { name: string; description: string; parameters: Record<string, unknown> }
+}
+
+interface WireToolCall { id: string; type: 'function'; function: { name: string; arguments: string } }
+
+export type ChatMessage =
+  | { role: 'system' | 'user' | 'assistant'; content: string }
+  | { role: 'assistant'; content: string | null; tool_calls: WireToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string }
+
+export interface ChatParams {
+  model: string
+  systemPrompt: string
+  messages: ChatMessage[]
+  apiKey: string
+  tools?: OpenRouterTool[]
+}
 export interface ChatChunk { text: string }
-export interface ChatResult { promptTokens: number; completionTokens: number }
+export interface ChatResult { promptTokens: number; completionTokens: number; toolCalls?: ToolCall[] }
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 
 /**
  * Stream a chat completion from OpenRouter (OpenAI-compatible SSE).
- * Yields text deltas; returns token usage after the stream completes.
+ * Yields text deltas; returns token usage and any accumulated tool calls after the stream completes.
  */
 export async function* streamChat(
   params: ChatParams,
@@ -25,6 +43,7 @@ export async function* streamChat(
       messages: [{ role: 'system', content: params.systemPrompt }, ...params.messages],
       stream: true,
       stream_options: { include_usage: true },
+      ...(params.tools?.length ? { tools: params.tools } : {}),
     }),
   })
 
@@ -38,6 +57,7 @@ export async function* streamChat(
   let buffer = ''
   let promptTokens = 0
   let completionTokens = 0
+  const toolAcc: Array<{ id: string; name: string; arguments: string }> = []
 
   // Parse one SSE frame → { text?, done? }. Throws on a mid-stream error event.
   const parseFrame = (frame: string): { text?: string; done?: boolean } => {
@@ -46,7 +66,7 @@ export async function* streamChat(
     const data = line.slice(5).trim()
     if (data === '[DONE]') return { done: true }
     let parsed: {
-      choices?: Array<{ delta?: { content?: string } }>
+      choices?: Array<{ delta?: { content?: string; tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }> } }>
       usage?: { prompt_tokens?: number; completion_tokens?: number }
       error?: { message?: string }
     }
@@ -55,6 +75,16 @@ export async function* streamChat(
     if (parsed.usage) {
       promptTokens = parsed.usage.prompt_tokens ?? promptTokens
       completionTokens = parsed.usage.completion_tokens ?? completionTokens
+    }
+    const tcs = parsed.choices?.[0]?.delta?.tool_calls
+    if (tcs) {
+      for (const tc of tcs) {
+        const idx = tc.index ?? 0
+        const cur = (toolAcc[idx] ??= { id: '', name: '', arguments: '' })
+        if (tc.id) cur.id = tc.id
+        if (tc.function?.name) cur.name = tc.function.name
+        if (tc.function?.arguments) cur.arguments += tc.function.arguments
+      }
     }
     const text = parsed.choices?.[0]?.delta?.content
     return text ? { text } : {}
@@ -81,5 +111,6 @@ export async function* streamChat(
     reader.cancel().catch(() => {})
   }
 
-  return { promptTokens, completionTokens }
+  const toolCalls = toolAcc.filter((t) => t && t.id)
+  return { promptTokens, completionTokens, ...(toolCalls.length ? { toolCalls } : {}) }
 }

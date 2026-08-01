@@ -245,3 +245,41 @@ export type ChatStreamEvent =
 export type ConversationEvent =
   | { type: 'message'; id: string; role: MessageRole; content: string }
   | { type: 'status'; status: ConversationStatus }
+
+// ---------------------------------------------------------------------------
+// Tool / webhook actions
+// ---------------------------------------------------------------------------
+
+export type ToolMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+export type ToolParamType = 'string' | 'number' | 'boolean'
+export type ToolAuthType = 'none' | 'bearer' | 'header'
+export type ToolKind = 'read' | 'write'
+
+export interface ToolParam {
+  name: string
+  type: ToolParamType
+  description: string
+  required: boolean
+}
+
+/** Auth as returned to the web (no secret). Storage adds `secretEnc`; requests send `secret` (write-only). */
+export interface ToolAuth {
+  type: ToolAuthType
+  headerName?: string
+}
+
+/** The tool as returned by GET /tools — never carries the secret. */
+export interface ToolDef {
+  id: string
+  name: string
+  description: string
+  method: ToolMethod
+  urlTemplate: string
+  params: ToolParam[]
+  headers: Array<{ key: string; value: string }>
+  auth: ToolAuth
+  hasSecret: boolean
+  kind: ToolKind
+  writeEnabled: boolean
+  enabled: boolean
+}

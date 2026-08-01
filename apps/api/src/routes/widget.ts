@@ -9,7 +9,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { adminDb } from '../lib/firebase-admin'
-import { streamChat } from '../lib/llm/openrouter'
+import { runAgentTurn } from '../lib/chat/tools'
 import { rateLimit } from '../lib/rate-limit'
 
 const widget = new Hono()
@@ -118,14 +118,14 @@ widget.post('/chat', async (c) => {
     return c.json({ error: "This agent's AI model needs an OpenRouter API key. Add one in Settings." }, 502)
   }
 
-  const { chatParams, sources, trace, llmModel, persist } = prepared
+  const { chatParams, sources, trace, llmModel, tools, persist } = prepared
   const generation = trace.generation({ name: 'llm-chat', model: llmModel, input: { system: chatParams.systemPrompt, messages: chatParams.messages } })
 
   return streamSSE(c, async (stream) => {
     let reply = ''
     let generationEnded = false
     try {
-      const gen = streamChat(chatParams)
+      const gen = runAgentTurn(chatParams, tools, trace)
       let promptTokens = 0
       let completionTokens = 0
       while (true) {
