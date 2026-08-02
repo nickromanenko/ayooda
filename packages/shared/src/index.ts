@@ -283,3 +283,28 @@ export interface ToolDef {
   writeEnabled: boolean
   enabled: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Agents (multiple per workspace)
+// ---------------------------------------------------------------------------
+
+/** The agent as returned by /agents — never carries the key or namespace. */
+export interface AgentDoc {
+  id: string
+  name: string
+  photoURL: string | null
+  description: string
+  systemPrompt: string
+  llmModel: string
+  hasOpenRouterKey: boolean
+  isDefault: boolean
+}
+
+/** Compact shape for pickers/lists. */
+export interface AgentSummary {
+  id: string
+  name: string
+  photoURL: string | null
+  llmModel: string
+  isDefault: boolean
+}
