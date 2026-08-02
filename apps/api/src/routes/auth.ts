@@ -64,6 +64,19 @@ auth.post('/verify', async (c) => {
   const workspaceId = workspaceRef.id
   const now = new Date()
 
+  const defaultAgentRef = workspaceRef.collection('agents').doc()
+  const defaultAgent = {
+    name: 'Support Agent',
+    photoURL: null,
+    description: '',
+    systemPrompt: 'You are a helpful customer support agent. Answer questions based on the provided context.',
+    llmModel: 'google/gemini-2.5-flash',
+    knowledgeNamespace: `ws_${workspaceId}`,
+    isDefault: true,
+    createdAt: now,
+    updatedAt: now,
+  }
+
   const batch = adminDb.batch()
 
   batch.set(userRef, {
@@ -103,6 +116,8 @@ auth.post('/verify', async (c) => {
       stripeSubscriptionId: null,
     },
   })
+
+  batch.set(defaultAgentRef, defaultAgent)
 
   await batch.commit()
 

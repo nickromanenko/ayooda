@@ -113,11 +113,20 @@ export default function SettingsPage() {
     } finally { setSavingWs(false) }
   }
 
+  async function defaultAgentId(): Promise<string | null> {
+    const res = await apiRequest('/agents')
+    if (!res.ok) return null
+    const { agents } = await res.json() as { agents: { id: string; isDefault: boolean }[] }
+    return agents.find((a) => a.isDefault)?.id ?? agents[0]?.id ?? null
+  }
+
   async function saveKey() {
     if (!keyInput.trim()) return
     setSavingKey(true); setError('')
     try {
-      const res = await apiRequest('/workspace/key', { method: 'PUT', body: JSON.stringify({ apiKey: keyInput.trim() }) })
+      const id = await defaultAgentId()
+      if (!id) throw new Error('No agent to configure')
+      const res = await apiRequest(`/agents/${id}/key`, { method: 'PUT', body: JSON.stringify({ apiKey: keyInput.trim() }) })
       if (!res.ok) throw new Error('Failed to save key')
       setHasKey(true); setKeyInput('')
     } catch (err: unknown) {
@@ -128,7 +137,8 @@ export default function SettingsPage() {
   async function removeKey() {
     setSavingKey(true); setError('')
     try {
-      await apiRequest('/workspace/key', { method: 'DELETE' })
+      const id = await defaultAgentId()
+      if (id) await apiRequest(`/agents/${id}/key`, { method: 'DELETE' })
       setHasKey(false)
     } finally { setSavingKey(false) }
   }

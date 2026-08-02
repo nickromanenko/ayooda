@@ -7,8 +7,10 @@ import { validateKnowledgeFile, KNOWLEDGE_FILE_EXTENSIONS } from '@ayooda/shared
 
 export function KnowledgeUpload({
   onUploaded,
+  uploadPath,
 }: {
   onUploaded: (doc: { docId: string; source: string }) => void
+  uploadPath: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -26,7 +28,7 @@ export function KnowledgeUpload({
     try {
       const form = new FormData()
       form.append('file', file)
-      const res = await apiRequest('/knowledge/upload', { method: 'POST', body: form })
+      const res = await apiRequest(uploadPath, { method: 'POST', body: form })
       const data = (await res.json()) as { docId?: string; error?: string }
       if (!res.ok || !data.docId) throw new Error(data.error ?? 'Upload failed')
       onUploaded({ docId: data.docId, source: file.name })

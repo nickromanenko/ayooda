@@ -8,6 +8,8 @@ interface IngestionJobParams {
   docType: 'webpage' | 'file'
   url?: string
   storagePath?: string
+  agentId?: string
+  namespace?: string
 }
 
 /**
@@ -39,6 +41,8 @@ async function triggerCloudRunJob(jobUrl: string, params: IngestionJobParams): P
     { name: 'DOC_TYPE', value: params.docType },
     ...(params.url ? [{ name: 'URL', value: params.url }] : []),
     ...(params.storagePath ? [{ name: 'STORAGE_PATH', value: params.storagePath }] : []),
+    ...(params.agentId ? [{ name: 'AGENT_ID', value: params.agentId }] : []),
+    ...(params.namespace ? [{ name: 'PINECONE_NAMESPACE', value: params.namespace }] : []),
   ]
 
   const body = {
@@ -80,6 +84,8 @@ function triggerLocal(params: IngestionJobParams): void {
     DOC_TYPE: params.docType,
     ...(params.url ? { URL: params.url } : {}),
     ...(params.storagePath ? { STORAGE_PATH: params.storagePath } : {}),
+    ...(params.agentId ? { AGENT_ID: params.agentId } : {}),
+    ...(params.namespace ? { PINECONE_NAMESPACE: params.namespace } : {}),
   }
 
   console.log(`[scraper-trigger] Spawning local scraper for docId=${params.docId}`)

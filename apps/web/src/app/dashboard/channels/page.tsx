@@ -7,6 +7,7 @@ import { apiRequest } from '@/lib/api'
 interface Channel {
   id: string
   type: string
+  agentId?: string | null
   config: {
     agentName: string
     widgetColor: string
@@ -28,6 +29,7 @@ export default function ChannelsPage() {
   const [botToken, setBotToken] = useState('')
   const [telegramError, setTelegramError] = useState<string | null>(null)
   const [telegramBusy, setTelegramBusy] = useState(false)
+  const [agentList, setAgentList] = useState<{ id: string; name: string; isDefault: boolean }[]>([])
 
   const fetchChannels = useCallback(() => {
     return apiRequest('/channels')
@@ -37,7 +39,26 @@ export default function ChannelsPage() {
 
   useEffect(() => {
     fetchChannels().finally(() => setLoading(false))
+    void apiRequest('/agents').then((res) => res.ok ? res.json() : { agents: [] }).then((d) => setAgentList(d.agents ?? []))
   }, [fetchChannels])
+
+  async function assignAgent(channelId: string, agentId: string) {
+    await apiRequest(`/channels/${channelId}/agent`, { method: 'PUT', body: JSON.stringify({ agentId }) })
+    await fetchChannels()
+  }
+
+  function agentPicker(channel: Channel) {
+    if (agentList.length < 2) return null
+    return (
+      <select
+        value={channel.agentId ?? ''}
+        onChange={(e) => void assignAgent(channel.id, e.target.value)}
+        style={{ padding: '5px 8px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 12 }}
+      >
+        {agentList.map((a) => <option key={a.id} value={a.id}>{a.name}{a.isDefault ? ' (default)' : ''}</option>)}
+      </select>
+    )
+  }
 
   async function handleCopy(channelId: string, text: string) {
     await navigator.clipboard.writeText(text)
@@ -121,13 +142,16 @@ export default function ChannelsPage() {
                 <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>Agent: {webWidget.config.agentName}</p>
               </div>
             </div>
-            <span style={{
-              fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
-              background: webWidget.isActive ? 'rgba(52,211,153,0.15)' : 'var(--panel-2)',
-              color: webWidget.isActive ? 'var(--mint)' : 'var(--ink-mute)',
-            }}>
-              {webWidget.isActive ? 'Active' : 'Inactive'}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {agentPicker(webWidget)}
+              <span style={{
+                fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
+                background: webWidget.isActive ? 'rgba(52,211,153,0.15)' : 'var(--panel-2)',
+                color: webWidget.isActive ? 'var(--mint)' : 'var(--ink-mute)',
+              }}>
+                {webWidget.isActive ? 'Active' : 'Inactive'}
+              </span>
+            </div>
           </div>
 
           {/* Embed code */}
@@ -206,12 +230,15 @@ export default function ChannelsPage() {
             </div>
           </div>
           {telegramChannel && (
-            <span style={{
-              fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
-              background: 'rgba(52,211,153,0.15)', color: 'var(--mint)',
-            }}>
-              Connected
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {agentPicker(telegramChannel)}
+              <span style={{
+                fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
+                background: 'rgba(52,211,153,0.15)', color: 'var(--mint)',
+              }}>
+                Connected
+              </span>
+            </div>
           )}
         </div>
 

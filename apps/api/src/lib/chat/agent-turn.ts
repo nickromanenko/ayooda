@@ -6,6 +6,7 @@ import { namespaceFor } from '../pinecone'
 import { type ChatParams } from '../llm/openrouter'
 import { loadTools, type StoredTool } from './tools'
 import { resolveOpenRouterKey } from '../llm/resolve'
+import { resolveAgentDoc } from '../agents/agent-helpers'
 import { providerOf, type ChannelType } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 
@@ -17,6 +18,7 @@ export interface PrepareTurnInput {
   message: string
   channelType: ChannelType
   telegramChatId?: number
+  agentId?: string
 }
 
 export interface ReadyTurn {
@@ -40,7 +42,7 @@ export type PreparedTurn =
  * widget, accumulate+sendMessage for Telegram) and calls persist() with the final reply.
  */
 export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn> {
-  const { workspaceId, channelId, conversationId, visitorId, message, channelType, telegramChatId } = input
+  const { workspaceId, channelId, conversationId, visitorId, message, channelType, telegramChatId, agentId } = input
   const trimmed = message.trim()
 
   const workspaceRef = adminDb.doc(`workspaces/${workspaceId}`)
@@ -48,9 +50,42 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   if (!workspaceSnap.exists) return { kind: 'error', error: 'Workspace not found' }
   const workspaceData = workspaceSnap.data()!
 
-  const agent = workspaceData.agent
-  const systemPrompt: string = agent.systemPrompt
-  const storedModel: string = agent.llmModel ?? 'gemini-flash-latest'
+  // Resolve the agent for this turn: the channel's agent, else the workspace default,
+  // else the inline workspace.agent (pre-migration safety net).
+  const agentsCol = adminDb.collection(`workspaces/${workspaceId}/agents`)
+  type AgentRec = { id: string; systemPrompt: string; llmModel: string; openRouterKey?: string; knowledgeNamespace: string }
+  let agentRec: AgentRec | undefined
+  try {
+    const toRec = (id: string, d: FirebaseFirestore.DocumentData): AgentRec => ({
+      id,
+      systemPrompt: d.systemPrompt ?? '',
+      llmModel: d.llmModel ?? 'google/gemini-2.5-flash',
+      openRouterKey: d.openRouterKey,
+      knowledgeNamespace: d.knowledgeNamespace ?? `ws_${workspaceId}`,
+    })
+    const [specificSnap, defaultSnap] = await Promise.all([
+      agentId ? agentsCol.doc(agentId).get() : Promise.resolve(null),
+      agentsCol.where('isDefault', '==', true).limit(1).get(),
+    ])
+    const byId = new Map<string, AgentRec>()
+    if (specificSnap && specificSnap.exists) { const r = toRec(specificSnap.id, specificSnap.data()!); byId.set(r.id, r) }
+    const defaultAgent = defaultSnap.empty ? undefined : toRec(defaultSnap.docs[0]!.id, defaultSnap.docs[0]!.data())
+    agentRec = resolveAgentDoc(agentId, byId, defaultAgent)
+  } catch (err) {
+    console.warn('[agent-turn] agent resolution failed:', err)
+  }
+  if (!agentRec) {
+    const inline = workspaceData.agent ?? {}
+    agentRec = {
+      id: 'inline',
+      systemPrompt: inline.systemPrompt ?? '',
+      llmModel: inline.llmModel ?? 'google/gemini-2.5-flash',
+      openRouterKey: workspaceData.openRouterKey,
+      knowledgeNamespace: `ws_${workspaceId}`,
+    }
+  }
+  const systemPrompt: string = agentRec.systemPrompt
+  const storedModel: string = agentRec.llmModel ?? 'gemini-flash-latest'
   const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
 
   const trace = getLangfuse().trace({
@@ -122,7 +157,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   try {
     const queryEmbedding = await embedText(trimmed, trace)
     const retrievalSpan = trace.span({ name: 'pinecone-query', input: { topK: 5 } })
-    const results = await namespaceFor(workspaceId).query({ vector: queryEmbedding, topK: 5, includeMetadata: true })
+    const results = await namespaceFor(agentRec.knowledgeNamespace).query({ vector: queryEmbedding, topK: 5, includeMetadata: true })
     retrievalSpan.end({ output: { matches: results.matches?.length ?? 0 } })
     const good = (results.matches ?? []).filter((m) => (m.score ?? 0) > 0.6)
     sources = good.map((m) => ({ docId: (m.metadata?.docId as string) ?? '', source: (m.metadata?.source as string) ?? '', score: m.score ?? 0 }))
@@ -135,7 +170,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const provider = providerOf(llmModel) ?? 'gemini'
   let keyResult
   try {
-    keyResult = resolveOpenRouterKey(provider, workspaceData.openRouterKey)
+    keyResult = resolveOpenRouterKey(provider, agentRec.openRouterKey)
   } catch (err) {
     console.error('[agent-turn] key resolution failed:', err)
     return { kind: 'error', error: 'AI model needs an API key' }
@@ -157,7 +192,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   // Tool/webhook actions (non-fatal): the model may call these during the turn.
   let tools: StoredTool[] = []
   try {
-    tools = await loadTools(workspaceId)
+    tools = await loadTools(workspaceId, agentRec.id)
   } catch (err) {
     console.warn('[agent-turn] tool load failed:', err)
   }

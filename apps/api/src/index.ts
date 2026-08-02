@@ -29,16 +29,18 @@ import billingRoutes from './routes/billing'
 import telegramRoutes from './routes/telegram'
 import teamRoutes from './routes/team'
 import toolRoutes from './routes/tools'
+import agentRoutes from './routes/agents'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
 app.route('/team', teamRoutes)
 app.route('/billing', billingRoutes)
 app.route('/user', userRoutes)
-app.route('/knowledge', knowledgeRoutes)
+app.route('/agents/:agentId/knowledge', knowledgeRoutes)
 app.route('/channels', channelRoutes)
 app.route('/conversations', conversationRoutes)
-app.route('/tools', toolRoutes)
+app.route('/agents', agentRoutes)
+app.route('/agents/:agentId/tools', toolRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)

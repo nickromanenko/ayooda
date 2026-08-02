@@ -20,7 +20,7 @@ const navItems = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
   { label: 'Inbox', href: '/dashboard/inbox', icon: MessageSquare },
   { label: 'Knowledge', href: '/dashboard/knowledge', icon: BookOpen },
-  { label: 'Agent', href: '/dashboard/agent', icon: Bot },
+  { label: 'Agents', href: '/dashboard/agents', icon: Bot },
   { label: 'Channels', href: '/dashboard/channels', icon: Radio },
   { label: 'Tools', href: '/dashboard/tools', icon: Wrench },
 ]

@@ -50,21 +50,37 @@ export default function KnowledgePage() {
   const [urlError, setUrlError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [reindexingId, setReindexingId] = useState<string | null>(null)
+  const [agentList, setAgentList] = useState<{ id: string; name: string; isDefault: boolean }[]>([])
+  const [agentId, setAgentId] = useState<string>('')
+
+  useEffect(() => {
+    void (async () => {
+      const res = await apiRequest('/agents')
+      if (res.ok) {
+        const d = await res.json() as { agents: { id: string; name: string; isDefault: boolean }[] }
+        setAgentList(d.agents)
+        setAgentId((prev) => prev || d.agents.find((a) => a.isDefault)?.id || d.agents[0]?.id || '')
+      }
+    })()
+  }, [])
 
   const fetchDocs = useCallback(async () => {
+    if (!agentId) return
     try {
-      const res = await apiRequest('/knowledge')
+      const res = await apiRequest(`/agents/${agentId}/knowledge`)
       if (!res.ok) return
       const data = (await res.json()) as KnowledgeDoc[]
       setDocs(data)
     } catch {
       // silently ignore polling errors
     }
-  }, [])
+  }, [agentId])
 
   useEffect(() => {
+    if (!agentId) return
+    setLoading(true)
     fetchDocs().finally(() => setLoading(false))
-  }, [fetchDocs])
+  }, [fetchDocs, agentId])
 
   useEffect(() => {
     if (!hasActiveJobs(docs)) return
@@ -82,7 +98,7 @@ export default function KnowledgePage() {
     setAdding(true)
     setUrlError('')
     try {
-      const res = await apiRequest('/knowledge/scrape', {
+      const res = await apiRequest(`/agents/${agentId}/knowledge/scrape`, {
         method: 'POST',
         body: JSON.stringify({ url: trimmed }),
       })
@@ -102,7 +118,7 @@ export default function KnowledgePage() {
   async function handleDelete(id: string) {
     setDeletingId(id)
     try {
-      await apiRequest(`/knowledge/${id}`, { method: 'DELETE' })
+      await apiRequest(`/agents/${agentId}/knowledge/${id}`, { method: 'DELETE' })
       setDocs((prev) => prev.filter((d) => d.id !== id))
     } finally {
       setDeletingId(null)
@@ -112,7 +128,7 @@ export default function KnowledgePage() {
   async function handleReindex(id: string) {
     setReindexingId(id)
     try {
-      await apiRequest(`/knowledge/${id}/reindex`, { method: 'POST' })
+      await apiRequest(`/agents/${agentId}/knowledge/${id}/reindex`, { method: 'POST' })
       await fetchDocs()
     } finally {
       setReindexingId(null)
@@ -127,6 +143,15 @@ export default function KnowledgePage() {
           Pages and documents your agent can reference when answering questions.
         </p>
       </div>
+
+      {agentList.length > 1 && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 8 }}>Agent</label>
+          <select value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ padding: '8px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14 }}>
+            {agentList.map((a) => <option key={a.id} value={a.id}>{a.name}{a.isDefault ? ' (default)' : ''}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Add URL */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 20, marginBottom: 20 }}>
@@ -170,7 +195,7 @@ export default function KnowledgePage() {
           We'll crawl the page and its linked pages (up to 25 pages).
         </p>
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
-          <KnowledgeUpload onUploaded={() => void fetchDocs()} />
+          <KnowledgeUpload uploadPath={`/agents/${agentId}/knowledge/upload`} onUploaded={() => void fetchDocs()} />
         </div>
       </div>
 

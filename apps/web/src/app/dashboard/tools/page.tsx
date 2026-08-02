@@ -36,14 +36,28 @@ export default function ToolsPage() {
   const [testResult, setTestResult] = useState<string>('')
   const [testing, setTesting] = useState(false)
   const [busyId, setBusyId] = useState('')
+  const [agentList, setAgentList] = useState<{ id: string; name: string; isDefault: boolean }[]>([])
+  const [agentId, setAgentId] = useState<string>('')
+
+  useEffect(() => {
+    void (async () => {
+      const res = await apiRequest('/agents')
+      if (res.ok) {
+        const d = await res.json() as { agents: { id: string; name: string; isDefault: boolean }[] }
+        setAgentList(d.agents)
+        setAgentId((prev) => prev || d.agents.find((a) => a.isDefault)?.id || d.agents[0]?.id || '')
+      }
+    })()
+  }, [])
 
   const load = useCallback(async () => {
+    if (!agentId) return
     try {
-      const res = await apiRequest('/tools')
+      const res = await apiRequest(`/agents/${agentId}/tools`)
       if (res.ok) { const d = await res.json() as { tools: ToolDef[] }; setTools(d.tools) }
     } finally { setLoading(false) }
-  }, [])
-  useEffect(() => { void load() }, [load])
+  }, [agentId])
+  useEffect(() => { if (agentId) void load() }, [load, agentId])
 
   function startCreate() { setForm({ ...emptyForm }); setError(''); setTestResult(''); setTestArgs('{}') }
   function startEdit(t: ToolDef) {
@@ -70,8 +84,8 @@ export default function ToolsPage() {
     setSaving(true); setError('')
     try {
       const res = form.id
-        ? await apiRequest(`/tools/${form.id}`, { method: 'PUT', body: JSON.stringify(payload(form)) })
-        : await apiRequest('/tools', { method: 'POST', body: JSON.stringify(payload(form)) })
+        ? await apiRequest(`/agents/${agentId}/tools/${form.id}`, { method: 'PUT', body: JSON.stringify(payload(form)) })
+        : await apiRequest(`/agents/${agentId}/tools`, { method: 'POST', body: JSON.stringify(payload(form)) })
       const d = await res.json().catch(() => ({})) as { error?: string }
       if (!res.ok) { setError(d.error ?? 'Could not save the tool'); return }
       setForm(null); await load()
@@ -84,7 +98,7 @@ export default function ToolsPage() {
     let args: unknown = {}
     try { args = JSON.parse(testArgs || '{}') } catch { setTestResult('Sample args must be valid JSON.'); setTesting(false); return }
     try {
-      const res = await apiRequest(`/tools/${form.id}/test`, { method: 'POST', body: JSON.stringify({ args }) })
+      const res = await apiRequest(`/agents/${agentId}/tools/${form.id}/test`, { method: 'POST', body: JSON.stringify({ args }) })
       const d = await res.json().catch(() => ({}))
       setTestResult(JSON.stringify(d, null, 2))
     } finally { setTesting(false) }
@@ -92,7 +106,7 @@ export default function ToolsPage() {
 
   async function remove(id: string) {
     setBusyId(id)
-    try { await apiRequest(`/tools/${id}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
+    try { await apiRequest(`/agents/${agentId}/tools/${id}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
   }
 
   if (loading) return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-mute)' }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</div>
@@ -106,6 +120,15 @@ export default function ToolsPage() {
         </div>
         {!form && <button type="button" onClick={startCreate} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px' }}><Plus size={14} /> New tool</button>}
       </div>
+
+      {agentList.length > 1 && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 8 }}>Agent</label>
+          <select value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ padding: '8px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14 }}>
+            {agentList.map((a) => <option key={a.id} value={a.id}>{a.name}{a.isDefault ? ' (default)' : ''}</option>)}
+          </select>
+        </div>
+      )}
 
       {!form && (
         <div style={card}>

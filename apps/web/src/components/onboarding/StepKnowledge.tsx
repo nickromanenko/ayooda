@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Globe, Loader2, CheckCircle2, XCircle, X } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
@@ -51,6 +51,17 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
   const [queued, setQueued] = useState<QueuedUrl[]>([])
   const [adding, setAdding] = useState(false)
   const [urlError, setUrlError] = useState('')
+  const [agentId, setAgentId] = useState('')
+
+  useEffect(() => {
+    void (async () => {
+      const res = await apiRequest('/agents')
+      if (res.ok) {
+        const d = await res.json() as { agents: { id: string; isDefault: boolean }[] }
+        setAgentId(d.agents.find((a) => a.isDefault)?.id ?? d.agents[0]?.id ?? '')
+      }
+    })()
+  }, [])
 
   async function handleAddUrl() {
     const trimmed = urlInput.trim()
@@ -63,7 +74,7 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
     setAdding(true)
     setUrlError('')
     try {
-      const res = await apiRequest('/knowledge/scrape', { method: 'POST', body: JSON.stringify({ url: trimmed }) })
+      const res = await apiRequest(`/agents/${agentId}/knowledge/scrape`, { method: 'POST', body: JSON.stringify({ url: trimmed }) })
       if (!res.ok) throw new Error('Failed to queue URL')
       const data = (await res.json()) as { docId: string; status: KnowledgeDocStatus }
       setQueued(prev => [...prev, { docId: data.docId, url: trimmed, status: data.status }])
@@ -126,6 +137,7 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
         </div>
 
         <KnowledgeUpload
+          uploadPath={`/agents/${agentId}/knowledge/upload`}
           onUploaded={(doc) =>
             setQueued((prev) => [...prev, { docId: doc.docId, url: doc.source, status: 'pending' }])
           }

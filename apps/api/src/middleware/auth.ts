@@ -6,6 +6,8 @@ export type AuthVariables = {
   uid: string
   workspaceId: string
   role: WorkspaceRole
+  agentId?: string
+  agentNamespace?: string
 }
 
 export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {

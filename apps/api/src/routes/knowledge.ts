@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { adminDb, adminBucket } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
+import { requireAgent } from '../middleware/agent'
 import { triggerIngestion } from '../lib/scraper'
 import { namespaceFor } from '../lib/pinecone'
 import { validateKnowledgeFile } from '@ayooda/shared'
@@ -9,10 +10,12 @@ const knowledge = new Hono<{ Variables: AuthVariables }>()
 
 knowledge.use('*', requireAuth)
 knowledge.use('*', requireOwner)
+knowledge.use('*', requireAgent)
 
 /** POST /knowledge/scrape — queue a URL for scraping */
 knowledge.post('/scrape', async (c) => {
   const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
   const body = await c.req.json<{ url: string }>()
 
   if (!body.url) return c.json({ error: 'url is required' }, 400)
@@ -26,7 +29,7 @@ knowledge.post('/scrape', async (c) => {
 
   // Check for duplicate URL in this workspace
   const existing = await adminDb
-    .collection(`workspaces/${workspaceId}/knowledge`)
+    .collection(`workspaces/${workspaceId}/agents/${agentId}/knowledge`)
     .where('source', '==', normalised)
     .where('type', '==', 'webpage')
     .limit(1)
@@ -37,7 +40,7 @@ knowledge.post('/scrape', async (c) => {
     return c.json({ docId: doc.id, status: doc.data().status })
   }
 
-  const docRef = await adminDb.collection(`workspaces/${workspaceId}/knowledge`).add({
+  const docRef = await adminDb.collection(`workspaces/${workspaceId}/agents/${agentId}/knowledge`).add({
     type: 'webpage',
     source: normalised,
     status: 'pending',
@@ -48,7 +51,7 @@ knowledge.post('/scrape', async (c) => {
   })
 
   // Fire-and-forget: Cloud Run Job in prod, local Bun spawn in dev
-  triggerIngestion({ workspaceId, docId: docRef.id, docType: 'webpage', url: normalised })
+  triggerIngestion({ workspaceId, docId: docRef.id, docType: 'webpage', url: normalised, agentId, namespace: c.get('agentNamespace')! })
 
   return c.json({ docId: docRef.id, status: 'pending' }, 201)
 })
@@ -56,6 +59,7 @@ knowledge.post('/scrape', async (c) => {
 /** POST /knowledge/upload — upload a file (pdf/docx/txt/csv/md) for indexing */
 knowledge.post('/upload', async (c) => {
   const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
 
   const form = await c.req.formData().catch(() => null)
   const file = form?.get('file')
@@ -68,7 +72,7 @@ knowledge.post('/upload', async (c) => {
 
   // Dedupe by filename within the workspace
   const existing = await adminDb
-    .collection(`workspaces/${workspaceId}/knowledge`)
+    .collection(`workspaces/${workspaceId}/agents/${agentId}/knowledge`)
     .where('source', '==', file.name)
     .where('type', '==', 'file')
     .limit(1)
@@ -77,8 +81,8 @@ knowledge.post('/upload', async (c) => {
     return c.json({ error: `"${file.name}" has already been uploaded` }, 409)
   }
 
-  const docRef = adminDb.collection(`workspaces/${workspaceId}/knowledge`).doc()
-  const storagePath = `workspaces/${workspaceId}/knowledge/${docRef.id}/${file.name}`
+  const docRef = adminDb.collection(`workspaces/${workspaceId}/agents/${agentId}/knowledge`).doc()
+  const storagePath = `workspaces/${workspaceId}/agents/${agentId}/knowledge/${docRef.id}/${file.name}`
 
   await adminBucket()
     .file(storagePath)
@@ -97,7 +101,7 @@ knowledge.post('/upload', async (c) => {
     indexedAt: null,
   })
 
-  triggerIngestion({ workspaceId, docId: docRef.id, docType: 'file', storagePath })
+  triggerIngestion({ workspaceId, docId: docRef.id, docType: 'file', storagePath, agentId, namespace: c.get('agentNamespace')! })
 
   return c.json({ docId: docRef.id, status: 'pending' }, 201)
 })
@@ -105,9 +109,10 @@ knowledge.post('/upload', async (c) => {
 /** POST /knowledge/:id/reindex — clear vectors and re-run ingestion for an existing doc */
 knowledge.post('/:id/reindex', async (c) => {
   const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
   const docId = c.req.param('id')
 
-  const docRef = adminDb.doc(`workspaces/${workspaceId}/knowledge/${docId}`)
+  const docRef = adminDb.doc(`workspaces/${workspaceId}/agents/${agentId}/knowledge/${docId}`)
   const snap = await docRef.get()
   if (!snap.exists) return c.json({ error: 'Not found' }, 404)
 
@@ -123,7 +128,7 @@ knowledge.post('/:id/reindex', async (c) => {
 
   // Best-effort clear existing vectors (same as delete)
   try {
-    await namespaceFor(workspaceId).deleteMany({ docId })
+    await namespaceFor(c.get('agentNamespace')!).deleteMany({ docId })
   } catch (err) {
     console.warn(`[knowledge] Pinecone clear failed for reindex ${docId}:`, err)
   }
@@ -137,8 +142,8 @@ knowledge.post('/:id/reindex', async (c) => {
 
   triggerIngestion(
     data.type === 'file'
-      ? { workspaceId, docId, docType: 'file', storagePath: data.storagePath }
-      : { workspaceId, docId, docType: 'webpage', url: data.source },
+      ? { workspaceId, docId, docType: 'file', storagePath: data.storagePath, agentId, namespace: c.get('agentNamespace')! }
+      : { workspaceId, docId, docType: 'webpage', url: data.source, agentId, namespace: c.get('agentNamespace')! },
   )
 
   return c.json({ ok: true, status: 'pending' })
@@ -147,8 +152,9 @@ knowledge.post('/:id/reindex', async (c) => {
 /** GET /knowledge — list all knowledge docs for the workspace */
 knowledge.get('/', async (c) => {
   const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
   const snap = await adminDb
-    .collection(`workspaces/${workspaceId}/knowledge`)
+    .collection(`workspaces/${workspaceId}/agents/${agentId}/knowledge`)
     .orderBy('createdAt', 'desc')
     .get()
 
@@ -159,15 +165,16 @@ knowledge.get('/', async (c) => {
 /** DELETE /knowledge/:id — remove a knowledge doc and its vectors */
 knowledge.delete('/:id', async (c) => {
   const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
   const docId = c.req.param('id')
 
-  const docRef = adminDb.doc(`workspaces/${workspaceId}/knowledge/${docId}`)
+  const docRef = adminDb.doc(`workspaces/${workspaceId}/agents/${agentId}/knowledge/${docId}`)
   const snap = await docRef.get()
   if (!snap.exists) return c.json({ error: 'Not found' }, 404)
 
   // Delete Pinecone vectors (best-effort — don't block on failure)
   try {
-    await namespaceFor(workspaceId).deleteMany({ docId })
+    await namespaceFor(c.get('agentNamespace')!).deleteMany({ docId })
   } catch (err) {
     console.warn(`[knowledge] Pinecone delete failed for doc ${docId}:`, err)
   }
