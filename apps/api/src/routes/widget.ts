@@ -109,6 +109,7 @@ widget.post('/chat', async (c) => {
   const { prepareTurn } = await import('../lib/chat/agent-turn')
   const prepared = await prepareTurn({
     workspaceId, channelId, conversationId, visitorId, message, channelType: 'web_widget',
+    agentId: channelDoc.data().agentId,
   })
 
   if (prepared.kind === 'gated') {

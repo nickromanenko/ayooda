@@ -91,7 +91,7 @@ telegram.post('/webhook/:channelId', async (c) => {
 
       const prepared = await prepareTurn({
         workspaceId, channelId, conversationId, visitorId, message: parsed.text,
-        channelType: 'telegram', telegramChatId: chatId,
+        channelType: 'telegram', telegramChatId: chatId, agentId: channel.agentId,
       })
       if (prepared.kind === 'gated') {
         await sendMessage(token, chatId, 'This assistant is temporarily unavailable.')

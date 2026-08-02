@@ -167,8 +167,8 @@ export function selectExposedTools(tools: StoredTool[]): StoredTool[] {
   return tools.filter((t) => t.enabled && (t.kind === 'read' || t.writeEnabled === true))
 }
 
-export async function loadTools(workspaceId: string): Promise<StoredTool[]> {
-  const snap = await adminDb.collection(`workspaces/${workspaceId}/tools`).where('enabled', '==', true).get()
+export async function loadTools(workspaceId: string, agentId: string): Promise<StoredTool[]> {
+  const snap = await adminDb.collection(`workspaces/${workspaceId}/agents/${agentId}/tools`).where('enabled', '==', true).get()
   const tools = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoredTool, 'id'>) }))
   return selectExposedTools(tools)
 }
