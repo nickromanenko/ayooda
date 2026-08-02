@@ -2,9 +2,9 @@ import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { getStripe, PRICE_BY_TIER, tierForPrice } from '../lib/billing/stripe'
-import { checkEntitlement } from '../lib/billing/entitlement'
+import { checkEntitlement, shouldResetPeriod } from '../lib/billing/entitlement'
 import { subscriptionPeriodEnd, subscriptionPriceId } from '../lib/billing/stripe-sync'
-import { PLANS, planFor, type PlanTier, type Subscription } from '@ayooda/shared'
+import { PLANS, planFor, OVERAGE_RATE_USD, type PlanTier, type Subscription } from '@ayooda/shared'
 
 const billing = new Hono<{ Variables: AuthVariables }>()
 
@@ -100,6 +100,12 @@ billing.get('/', requireAuth, requireOwner, async (c) => {
     workspaceCreatedAt: data.createdAt?.toDate?.() ?? new Date(0),
     now: new Date(),
   })
+  const periodStart = usage.periodStart?.toDate?.() ?? null
+  const reset = shouldResetPeriod(periodStart, new Date(), sub)
+  const used = reset ? 0 : (usage.periodConversationCount ?? 0)
+  const overageCount = Math.max(0, used - ent.includedCap)
+  const estOverageUsd = Math.round(overageCount * OVERAGE_RATE_USD * 100) / 100
+
   return c.json({
     subscription: sub ? {
       status: sub.status, tier: sub.tier,
@@ -107,8 +113,9 @@ billing.get('/', requireAuth, requireOwner, async (c) => {
       currentPeriodEnd: sub.currentPeriodEnd ?? null,
       // never return stripeCustomerId/stripeSubscriptionId
     } : null,
-    usage: { periodConversationCount: usage.periodConversationCount ?? 0 },
-    entitled: ent.entitled, reason: ent.reason, cap: ent.includedCap, tier: ent.tier,
+    usage: { periodConversationCount: used },
+    entitled: ent.entitled, reason: ent.reason, tier: ent.tier,
+    includedCap: ent.includedCap, ceiling: ent.ceiling, overageCount, estOverageUsd,
     plans: PLANS,
   })
 })
