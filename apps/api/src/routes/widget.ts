@@ -119,6 +119,19 @@ widget.post('/chat', async (c) => {
     return c.json({ error: "This agent's AI model needs an OpenRouter API key. Add one in Settings." }, 502)
   }
 
+  if (prepared.kind === 'silent') {
+    return streamSSE(c, async (stream) => {
+      await stream.writeSSE({ event: 'done', data: JSON.stringify({ conversationId, sources: [] }) })
+    })
+  }
+  if (prepared.kind === 'escalated') {
+    const message = prepared.message
+    return streamSSE(c, async (stream) => {
+      await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: message }) })
+      await stream.writeSSE({ event: 'done', data: JSON.stringify({ conversationId, sources: [] }) })
+    })
+  }
+
   const { chatParams, sources, trace, llmModel, tools, persist } = prepared
   const generation = trace.generation({ name: 'llm-chat', model: llmModel, input: { system: chatParams.systemPrompt, messages: chatParams.messages } })
 

@@ -11,8 +11,9 @@ interface Conversation {
   id: string
   channelId: string
   visitorId: string
-  status: 'bot' | 'human' | 'resolved'
+  status: 'bot' | 'waiting' | 'human' | 'resolved'
   operatorId: string | null
+  escalationReason?: string
   lastMessage: string
   updatedAt: Timestamp | null
   createdAt: Timestamp | null
@@ -27,6 +28,7 @@ interface Message {
 
 const STATUS_STYLE: Record<Conversation['status'], React.CSSProperties> = {
   bot: { background: 'var(--accent-soft)', color: 'var(--accent)' },
+  waiting: { background: 'rgba(239,68,68,0.15)', color: '#f87171' },
   human: { background: 'rgba(245,165,36,0.18)', color: '#ffd27a' },
   resolved: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
 }
@@ -52,6 +54,7 @@ export default function InboxPage() {
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
   const [takingOver, setTakingOver] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'waiting' | 'human' | 'bot' | 'resolved'>('all')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const workspaceId = workspace?.id
@@ -124,6 +127,8 @@ export default function InboxPage() {
     )
   }
 
+  const visibleConversations = filter === 'all' ? conversations : conversations.filter((c) => c.status === filter)
+
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 48px)', margin: -24, overflow: 'hidden' }}>
       {/* Conversation list */}
@@ -132,15 +137,32 @@ export default function InboxPage() {
           <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>Inbox</h1>
           <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>{conversations.length} conversations</p>
         </div>
+        <div style={{ display: 'flex', gap: 4, padding: '8px 10px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
+          {(['all', 'waiting', 'human', 'bot', 'resolved'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              style={{
+                fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, cursor: 'pointer',
+                border: '1px solid var(--line)', textTransform: 'capitalize',
+                background: filter === f ? 'var(--accent-soft)' : 'transparent',
+                color: filter === f ? 'var(--accent)' : 'var(--ink-mute)',
+              }}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {conversations.length === 0 ? (
+          {visibleConversations.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ink-mute)', gap: 8, padding: '0 24px', textAlign: 'center' }}>
               <MessageSquare size={28} style={{ opacity: 0.3 }} />
               <p style={{ fontSize: 13, margin: 0 }}>No conversations yet.</p>
               <p style={{ fontSize: 12, margin: 0, color: 'var(--ink-faint)' }}>They'll appear here when visitors start chatting.</p>
             </div>
           ) : (
-            conversations.map((conv) => (
+            visibleConversations.map((conv) => (
               <button
                 key={conv.id}
                 type="button"
@@ -183,9 +205,12 @@ export default function InboxPage() {
               <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
                 Status: <span style={{ textTransform: 'capitalize' }}>{selectedConv.status}</span>
               </p>
+              {selectedConv.status === 'waiting' && selectedConv.escalationReason && (
+                <p style={{ fontSize: 11, color: '#f87171', marginTop: 2 }}>Escalated: {selectedConv.escalationReason}</p>
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {selectedConv.status === 'bot' && (
+              {(selectedConv.status === 'bot' || selectedConv.status === 'waiting') && (
                 <button
                   type="button"
                   onClick={() => void handleTakeover()}

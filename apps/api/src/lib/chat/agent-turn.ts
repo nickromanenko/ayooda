@@ -7,7 +7,8 @@ import { type ChatParams } from '../llm/openrouter'
 import { loadTools, type StoredTool } from './tools'
 import { resolveOpenRouterKey } from '../llm/resolve'
 import { resolveAgentDoc } from '../agents/agent-helpers'
-import { providerOf, type ChannelType } from '@ayooda/shared'
+import { evaluateRules } from '../workflow/engine'
+import { providerOf, type ChannelType, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 
 export interface PrepareTurnInput {
@@ -34,7 +35,11 @@ export interface ReadyTurn {
 export type PreparedTurn =
   | { kind: 'gated'; reason: GateReason }
   | { kind: 'error'; error: string }
+  | { kind: 'silent' }
+  | { kind: 'escalated'; message: string }
   | ReadyTurn
+
+const DEFAULT_HANDOFF = 'Let me connect you with someone from our team.'
 
 /**
  * Channel-agnostic agent turn: billing gate → conversation setup → RAG → key resolution
@@ -102,6 +107,13 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     return { kind: 'error', error: 'Not found' }
   }
 
+  // Silence guard: a conversation a human owns/queued never gets a bot reply.
+  if (convSnap.exists && convSnap.data()!.status && convSnap.data()!.status !== 'bot') {
+    await convRef.collection('messages').add({ role: 'user', content: trimmed, createdAt: FieldValue.serverTimestamp() })
+    await convRef.update({ updatedAt: FieldValue.serverTimestamp(), lastMessage: trimmed.slice(0, 200) })
+    return { kind: 'silent' }
+  }
+
   if (!convSnap.exists) {
     // Billing gate — only NEW conversations are gated.
     const rawSub = workspaceData.subscription
@@ -166,6 +178,28 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     console.warn('[agent-turn] RAG retrieval failed:', err)
   }
 
+  // Escalation rules (non-fatal): evaluate after RAG so low-confidence is known.
+  try {
+    const rulesSnap = await adminDb.collection(`workspaces/${workspaceId}/workflowRules`).where('enabled', '==', true).get()
+    const rules: WorkflowRule[] = rulesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<WorkflowRule, 'id'>) }))
+    const hit = evaluateRules(rules, {
+      messageLower: trimmed.toLowerCase(),
+      botReplyCount: (convSnap.exists ? convSnap.data()!.botReplyCount : 0) ?? 0,
+      sourceCount: sources.length,
+      now: new Date(),
+    })
+    if (hit) {
+      const handoff = hit.action.handoffMessage?.trim() || DEFAULT_HANDOFF
+      await messagesRef.add({ role: 'assistant', content: handoff, createdAt: FieldValue.serverTimestamp(), metadata: { escalated: true } })
+      await convRef.update({ status: 'waiting', escalationReason: hit.name, operatorId: null, updatedAt: FieldValue.serverTimestamp(), lastMessage: handoff.slice(0, 200) })
+      await workspaceRef.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
+      trace.update({ output: { escalated: hit.name } })
+      return { kind: 'escalated', message: handoff }
+    }
+  } catch (err) {
+    console.warn('[agent-turn] escalation check failed:', err)
+  }
+
   // Key resolution
   const provider = providerOf(llmModel) ?? 'gemini'
   let keyResult
@@ -205,7 +239,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       metadata: { sources, llmModel, promptTokens, completionTokens },
     })
     try {
-      await convRef.update({ updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200) })
+      await convRef.update({ updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200), botReplyCount: FieldValue.increment(1) })
       await workspaceRef.update({
         'usage.messageCount': FieldValue.increment(2),
         'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),

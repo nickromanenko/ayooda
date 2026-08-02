@@ -34,7 +34,7 @@ export type KnowledgeDocType = 'webpage' | 'file'
 export type KnowledgeDocStatus = 'pending' | 'processing' | 'indexed' | 'error'
 
 // Conversations
-export type ConversationStatus = 'bot' | 'human' | 'resolved'
+export type ConversationStatus = 'bot' | 'waiting' | 'human' | 'resolved'
 export type MessageRole = 'user' | 'assistant' | 'operator'
 
 // Channels
@@ -140,6 +140,8 @@ export interface ConversationDoc {
   status: ConversationStatus
   hadTakeover?: boolean
   operatorId: string | null
+  escalationReason?: string
+  botReplyCount?: number
   createdAt: Date
   updatedAt: Date
   lastMessage: string
@@ -307,4 +309,40 @@ export interface AgentSummary {
   photoURL: string | null
   llmModel: string
   isDefault: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Workflow / escalation rules
+// ---------------------------------------------------------------------------
+
+export type TriggerType = 'ask_for_human' | 'low_confidence' | 'bot_replies' | 'keyword' | 'off_hours'
+
+export type WorkflowTrigger =
+  | { type: 'ask_for_human'; phrases: string[] }
+  | { type: 'low_confidence' }
+  | { type: 'bot_replies'; count: number }
+  | { type: 'keyword'; keywords: string[] }
+  | { type: 'off_hours'; timezone: string; days: number[]; start: string; end: string }
+
+export interface WorkflowAction {
+  type: 'escalate'
+  handoffMessage?: string
+}
+
+/** API↔web contract for a rule (no timestamps). */
+export interface WorkflowRule {
+  id: string
+  name: string
+  enabled: boolean
+  order: number
+  trigger: WorkflowTrigger
+  action: WorkflowAction
+}
+
+/** Inputs the engine evaluates for one bot turn. */
+export interface EscalationContext {
+  messageLower: string
+  botReplyCount: number
+  sourceCount: number
+  now: Date
 }

@@ -9,6 +9,7 @@ import {
   Bot,
   Radio,
   Wrench,
+  GitBranch,
   CreditCard,
   Settings,
   Users,
@@ -23,6 +24,7 @@ const navItems = [
   { label: 'Agents', href: '/dashboard/agents', icon: Bot },
   { label: 'Channels', href: '/dashboard/channels', icon: Radio },
   { label: 'Tools', href: '/dashboard/tools', icon: Wrench },
+  { label: 'Workflows', href: '/dashboard/workflows', icon: GitBranch },
 ]
 
 const bottomItems = [
