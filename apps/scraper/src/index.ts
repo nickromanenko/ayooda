@@ -211,18 +211,20 @@ const UPSERT_BATCH = 100
 
 async function upsertVectors(
   pinecone: Pinecone,
+  namespace: string,
   workspaceId: string,
+  agentId: string | undefined,
   docId: string,
   source: string,
   chunks: string[],
   embeddings: number[][],
 ): Promise<void> {
-  const ns = pinecone.index(process.env.PINECONE_INDEX!).namespace(`ws_${workspaceId}`)
+  const ns = pinecone.index(process.env.PINECONE_INDEX!).namespace(namespace)
 
   const vectors = chunks.map((text, i) => ({
     id: `${docId}_${i}`,
     values: embeddings[i],
-    metadata: { workspaceId, docId, source, chunkIndex: i, text },
+    metadata: { workspaceId, ...(agentId ? { agentId } : {}), docId, source, chunkIndex: i, text },
   }))
 
   for (let i = 0; i < vectors.length; i += UPSERT_BATCH) {
@@ -240,6 +242,8 @@ async function main() {
   const docType = process.env.DOC_TYPE ?? 'webpage'
   const url = process.env.URL
   const storagePath = process.env.STORAGE_PATH
+  const agentId = process.env.AGENT_ID
+  const namespace = process.env.PINECONE_NAMESPACE ?? `ws_${workspaceId}`
 
   if (!workspaceId || !docId) {
     console.error('Missing required env vars: WORKSPACE_ID, DOC_ID')
@@ -260,7 +264,9 @@ async function main() {
 
   initFirebase()
   const db = getFirestore()
-  const docRef = db.doc(`workspaces/${workspaceId}/knowledge/${docId}`)
+  const docRef = agentId
+    ? db.doc(`workspaces/${workspaceId}/agents/${agentId}/knowledge/${docId}`)
+    : db.doc(`workspaces/${workspaceId}/knowledge/${docId}`)
 
   try {
     // Mark as processing
@@ -299,7 +305,7 @@ async function main() {
     // Upsert to Pinecone
     console.log(`[scraper] Upserting to Pinecone…`)
     const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! })
-    await upsertVectors(pinecone, workspaceId, docId, source, allChunks, embeddings)
+    await upsertVectors(pinecone, namespace, workspaceId, agentId, docId, source, allChunks, embeddings)
 
     // Mark as indexed
     await docRef.update({
