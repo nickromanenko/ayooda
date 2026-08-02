@@ -9,21 +9,29 @@ const base = (over: Partial<Subscription>): Subscription => ({
 const created = new Date('2026-01-01T00:00:00Z')
 
 describe('checkEntitlement', () => {
-  test('active subscription under cap → entitled', () => {
+  test('active subscription under included cap → entitled, no overage', () => {
     const r = checkEntitlement({ subscription: base({ status: 'active', tier: 'core' }), periodConversationCount: 10, workspaceCreatedAt: created, now: new Date() })
-    expect(r).toEqual({ entitled: true, reason: 'ok', cap: 500, tier: 'core' })
+    expect(r).toEqual({ entitled: true, reason: 'ok', includedCap: 500, ceiling: 5000, overage: false, tier: 'core' })
   })
-  test('active subscription over cap → over_cap', () => {
+  test('active subscription at/over included cap but under ceiling → entitled + overage', () => {
     const r = checkEntitlement({ subscription: base({ status: 'active', tier: 'lite' }), periodConversationCount: 100, workspaceCreatedAt: created, now: new Date() })
-    expect(r.entitled).toBe(false); expect(r.reason).toBe('over_cap')
+    expect(r.entitled).toBe(true); expect(r.overage).toBe(true); expect(r.includedCap).toBe(100); expect(r.ceiling).toBe(1000)
   })
-  test('past_due still entitled but flagged', () => {
+  test('active subscription at the ceiling → ceiling_reached', () => {
+    const r = checkEntitlement({ subscription: base({ status: 'active', tier: 'lite' }), periodConversationCount: 1000, workspaceCreatedAt: created, now: new Date() })
+    expect(r.entitled).toBe(false); expect(r.reason).toBe('ceiling_reached'); expect(r.overage).toBe(false)
+  })
+  test('past_due under cap → entitled, no overage (grace)', () => {
     const r = checkEntitlement({ subscription: base({ status: 'past_due', tier: 'lite' }), periodConversationCount: 5, workspaceCreatedAt: created, now: new Date() })
-    expect(r.entitled).toBe(true); expect(r.reason).toBe('past_due')
+    expect(r.entitled).toBe(true); expect(r.reason).toBe('past_due'); expect(r.overage).toBe(false)
   })
-  test('trial active under trial cap → entitled', () => {
+  test('past_due at/over cap under ceiling → entitled + overage (grace)', () => {
+    const r = checkEntitlement({ subscription: base({ status: 'past_due', tier: 'lite' }), periodConversationCount: 150, workspaceCreatedAt: created, now: new Date() })
+    expect(r.entitled).toBe(true); expect(r.reason).toBe('past_due'); expect(r.overage).toBe(true)
+  })
+  test('trial active under trial cap → entitled, no overage', () => {
     const r = checkEntitlement({ subscription: base({ status: 'trialing', trialEndsAt: new Date('2026-01-15T00:00:00Z') }), periodConversationCount: 10, workspaceCreatedAt: created, now: new Date('2026-01-10T00:00:00Z') })
-    expect(r).toEqual({ entitled: true, reason: 'ok', cap: 50, tier: null })
+    expect(r).toEqual({ entitled: true, reason: 'ok', includedCap: 50, ceiling: 50, overage: false, tier: null })
   })
   test('trial active over trial cap → over_cap', () => {
     const r = checkEntitlement({ subscription: base({ status: 'trialing', trialEndsAt: new Date('2026-01-15T00:00:00Z') }), periodConversationCount: 50, workspaceCreatedAt: created, now: new Date('2026-01-10T00:00:00Z') })

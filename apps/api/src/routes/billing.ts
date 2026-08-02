@@ -108,7 +108,7 @@ billing.get('/', requireAuth, requireOwner, async (c) => {
       // never return stripeCustomerId/stripeSubscriptionId
     } : null,
     usage: { periodConversationCount: usage.periodConversationCount ?? 0 },
-    entitled: ent.entitled, reason: ent.reason, cap: ent.cap, tier: ent.tier,
+    entitled: ent.entitled, reason: ent.reason, cap: ent.includedCap, tier: ent.tier,
     plans: PLANS,
   })
 })

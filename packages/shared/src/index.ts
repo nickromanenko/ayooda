@@ -226,6 +226,11 @@ export const PLANS: readonly PlanDef[] = [
 export const TRIAL_DAYS = 14
 export const TRIAL_CONVERSATION_CAP = 50
 
+/** Overage: conversations beyond a plan's included pack are billed at this rate. */
+export const OVERAGE_RATE_USD = 0.05
+/** Safety ceiling for paying subscribers = includedCap × this multiplier. */
+export const OVERAGE_CEILING_MULTIPLIER = 10
+
 export function planFor(tier: PlanTier | null): PlanDef | undefined {
   return tier ? PLANS.find((p) => p.tier === tier) : undefined
 }
