@@ -40,7 +40,7 @@ app.route('/agents/:agentId/knowledge', knowledgeRoutes)
 app.route('/channels', channelRoutes)
 app.route('/conversations', conversationRoutes)
 app.route('/agents', agentRoutes)
-app.route('/tools', toolRoutes)
+app.route('/agents/:agentId/tools', toolRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)
