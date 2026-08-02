@@ -22,7 +22,7 @@ function toAgentDoc(id: string, d: DocumentData): AgentDoc {
     description: d.description ?? '',
     systemPrompt: d.systemPrompt ?? '',
     llmModel: d.llmModel ?? DEFAULT_MODEL,
-    hasOpenRouterKey: Boolean(d.openRouterKey),
+    hasGatewayKey: Boolean(d.gatewayKey),
     isDefault: d.isDefault === true,
   }
 }
@@ -99,7 +99,7 @@ agents.put('/:id/key', async (c) => {
   const body = await c.req.json<{ apiKey?: string }>().catch(() => ({} as { apiKey?: string }))
   const apiKey = body.apiKey?.trim()
   if (!apiKey || apiKey.length > 500) return c.json({ error: 'apiKey is required (max 500 chars)' }, 400)
-  await ref.update({ openRouterKey: encryptSecret(apiKey), updatedAt: new Date() })
+  await ref.update({ gatewayKey: encryptSecret(apiKey), updatedAt: new Date() })
   return c.json({ ok: true })
 })
 
@@ -109,7 +109,7 @@ agents.delete('/:id/key', async (c) => {
   const ref = adminDb.doc(`workspaces/${ws}/agents/${c.req.param('id')}`)
   if (!(await ref.get()).exists) return c.json({ error: 'Agent not found' }, 404)
   const { FieldValue } = await import('firebase-admin/firestore')
-  await ref.update({ openRouterKey: FieldValue.delete(), updatedAt: new Date() })
+  await ref.update({ gatewayKey: FieldValue.delete(), updatedAt: new Date() })
   return c.json({ ok: true })
 })
 

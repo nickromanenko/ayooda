@@ -3,7 +3,7 @@ export type LLMProvider = 'gemini' | 'claude' | 'openai'
 
 export interface LLMModel {
   provider: LLMProvider
-  id: string // OpenRouter slug, e.g. "anthropic/claude-haiku-4.5"
+  id: string // AI Gateway model id, e.g. "anthropic/claude-haiku-4.5"
   label: string
   description: string
 }
@@ -303,7 +303,7 @@ export interface AgentDoc {
   description: string
   systemPrompt: string
   llmModel: string
-  hasOpenRouterKey: boolean
+  hasGatewayKey: boolean
   isDefault: boolean
 }
 
