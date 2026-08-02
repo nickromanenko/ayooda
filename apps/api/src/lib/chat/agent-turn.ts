@@ -122,7 +122,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   try {
     const queryEmbedding = await embedText(trimmed, trace)
     const retrievalSpan = trace.span({ name: 'pinecone-query', input: { topK: 5 } })
-    const results = await namespaceFor(workspaceId).query({ vector: queryEmbedding, topK: 5, includeMetadata: true })
+    const results = await namespaceFor(`ws_${workspaceId}`).query({ vector: queryEmbedding, topK: 5, includeMetadata: true })
     retrievalSpan.end({ output: { matches: results.matches?.length ?? 0 } })
     const good = (results.matches ?? []).filter((m) => (m.score ?? 0) > 0.6)
     sources = good.map((m) => ({ docId: (m.metadata?.docId as string) ?? '', source: (m.metadata?.source as string) ?? '', score: m.score ?? 0 }))

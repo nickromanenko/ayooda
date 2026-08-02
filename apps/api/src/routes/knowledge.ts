@@ -123,7 +123,7 @@ knowledge.post('/:id/reindex', async (c) => {
 
   // Best-effort clear existing vectors (same as delete)
   try {
-    await namespaceFor(workspaceId).deleteMany({ docId })
+    await namespaceFor(`ws_${workspaceId}`).deleteMany({ docId })
   } catch (err) {
     console.warn(`[knowledge] Pinecone clear failed for reindex ${docId}:`, err)
   }
@@ -167,7 +167,7 @@ knowledge.delete('/:id', async (c) => {
 
   // Delete Pinecone vectors (best-effort — don't block on failure)
   try {
-    await namespaceFor(workspaceId).deleteMany({ docId })
+    await namespaceFor(`ws_${workspaceId}`).deleteMany({ docId })
   } catch (err) {
     console.warn(`[knowledge] Pinecone delete failed for doc ${docId}:`, err)
   }

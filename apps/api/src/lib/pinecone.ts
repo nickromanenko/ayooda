@@ -13,7 +13,8 @@ export function getIndex() {
   return getPinecone().index(process.env.PINECONE_INDEX!)
 }
 
-/** Namespace per workspace to keep vectors isolated */
-export function namespaceFor(workspaceId: string) {
-  return getIndex().namespace(`ws_${workspaceId}`)
+/** Namespace for a Pinecone-isolated vector set. Pass the full namespace string
+ * (e.g. an agent's stored knowledgeNamespace). */
+export function namespaceFor(namespace: string) {
+  return getIndex().namespace(namespace)
 }
