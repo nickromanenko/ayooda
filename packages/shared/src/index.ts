@@ -346,3 +346,144 @@ export interface EscalationContext {
   sourceCount: number
   now: Date
 }
+
+// ---------------------------------------------------------------------------
+// Tool templates (CRM / e-commerce starters)
+// ---------------------------------------------------------------------------
+
+export interface ToolTemplateSetupField {
+  key: string          // referenced in the template as {{key}}
+  label: string
+  placeholder?: string
+  help?: string
+}
+
+export interface ToolTemplate {
+  id: string
+  label: string
+  category: string     // 'E-commerce' | 'CRM' | 'Support' | 'Generic'
+  description: string
+  setupFields: ToolTemplateSetupField[]
+  toolName: string     // slug for the created tool
+  toolDescription: string
+  method: ToolMethod
+  urlTemplate: string  // may contain {{setup}} and {param}
+  params: ToolParam[]
+  headers: Array<{ key: string; value: string }>  // values may contain {{setup}}
+  auth: { type: ToolAuthType; headerName?: string } // no secret — owner-entered
+  kind: ToolKind
+  secretLabel: string
+}
+
+export const TOOL_TEMPLATES: ToolTemplate[] = [
+  {
+    id: 'shopify_order_lookup',
+    label: 'Shopify — order lookup',
+    category: 'E-commerce',
+    description: 'Look up an order by its order number in your Shopify store.',
+    setupFields: [
+      { key: 'shop', label: 'Store subdomain', placeholder: 'my-store', help: 'The part before .myshopify.com' },
+      { key: 'apiVersion', label: 'API version', placeholder: '2024-01' },
+    ],
+    toolName: 'shopify_order_lookup',
+    toolDescription: 'Look up a Shopify order by its order number (e.g. #1001) to check status, fulfillment, and totals.',
+    method: 'GET',
+    urlTemplate: 'https://{{shop}}.myshopify.com/admin/api/{{apiVersion}}/orders.json?status=any&name={orderNumber}',
+    params: [{ name: 'orderNumber', type: 'string', description: 'The order number, e.g. #1001', required: true }],
+    headers: [],
+    auth: { type: 'header', headerName: 'X-Shopify-Access-Token' },
+    kind: 'read',
+    secretLabel: 'Shopify Admin API access token',
+  },
+  {
+    id: 'stripe_customer_lookup',
+    label: 'Stripe — customer lookup',
+    category: 'CRM',
+    description: 'Find a Stripe customer by email address.',
+    setupFields: [],
+    toolName: 'stripe_customer_lookup',
+    toolDescription: 'Look up a Stripe customer by email to check their account and subscription details.',
+    method: 'GET',
+    urlTemplate: 'https://api.stripe.com/v1/customers?email={email}',
+    params: [{ name: 'email', type: 'string', description: "The customer's email address", required: true }],
+    headers: [],
+    auth: { type: 'bearer' },
+    kind: 'read',
+    secretLabel: 'Stripe secret key (sk_…)',
+  },
+  {
+    id: 'hubspot_contact_lookup',
+    label: 'HubSpot — contact by id',
+    category: 'CRM',
+    description: 'Fetch a HubSpot contact by its record id.',
+    setupFields: [],
+    toolName: 'hubspot_contact_lookup',
+    toolDescription: 'Fetch a HubSpot contact by its record id to read their name, email, and phone.',
+    method: 'GET',
+    urlTemplate: 'https://api.hubapi.com/crm/v3/objects/contacts/{contactId}?properties=email,firstname,lastname,phone',
+    params: [{ name: 'contactId', type: 'string', description: 'The HubSpot contact record id', required: true }],
+    headers: [],
+    auth: { type: 'bearer' },
+    kind: 'read',
+    secretLabel: 'HubSpot private-app token',
+  },
+  {
+    id: 'zendesk_ticket_lookup',
+    label: 'Zendesk — ticket lookup',
+    category: 'Support',
+    description: 'Look up a Zendesk support ticket by id.',
+    setupFields: [{ key: 'subdomain', label: 'Zendesk subdomain', placeholder: 'mycompany', help: 'The part before .zendesk.com' }],
+    toolName: 'zendesk_ticket_lookup',
+    toolDescription: 'Look up a Zendesk support ticket by its id to check its status and latest comments.',
+    method: 'GET',
+    urlTemplate: 'https://{{subdomain}}.zendesk.com/api/v2/tickets/{ticketId}.json',
+    params: [{ name: 'ticketId', type: 'string', description: 'The Zendesk ticket id', required: true }],
+    headers: [],
+    auth: { type: 'header', headerName: 'Authorization' },
+    kind: 'read',
+    secretLabel: 'Basic auth value — "Basic " + base64("you@co.com/token:APITOKEN")',
+  },
+  {
+    id: 'generic_rest_get',
+    label: 'Generic REST (GET)',
+    category: 'Generic',
+    description: 'A blank GET request to any REST API — a starting point you can edit.',
+    setupFields: [{ key: 'baseUrl', label: 'Base URL', placeholder: 'https://api.example.com', help: 'Without a trailing slash' }],
+    toolName: 'rest_lookup',
+    toolDescription: 'Look up a record by id from an external API.',
+    method: 'GET',
+    urlTemplate: '{{baseUrl}}/{id}',
+    params: [{ name: 'id', type: 'string', description: 'The record id to look up', required: true }],
+    headers: [],
+    auth: { type: 'bearer' },
+    kind: 'read',
+    secretLabel: 'Bearer token (or set auth to None for a public API)',
+  },
+]
+
+/** Substitute {{setup}} placeholders (URL + header values) from setupValues; leave {param} intact. */
+export function applyTemplate(
+  template: ToolTemplate,
+  setupValues: Record<string, string>,
+): {
+  name: string
+  description: string
+  method: ToolMethod
+  urlTemplate: string
+  params: ToolParam[]
+  headers: Array<{ key: string; value: string }>
+  auth: { type: ToolAuthType; headerName?: string }
+  kind: ToolKind
+} {
+  const sub = (s: string) => s.replace(/\{\{(\w+)\}\}/g, (_m, k: string) => setupValues[k] ?? '')
+  return {
+    name: template.toolName,
+    description: template.toolDescription,
+    method: template.method,
+    urlTemplate: sub(template.urlTemplate),
+    params: template.params.map((p) => ({ ...p })),
+    headers: template.headers.map((h) => ({ key: h.key, value: sub(h.value) })),
+    auth: { ...template.auth },
+    kind: template.kind,
+  }
+}
