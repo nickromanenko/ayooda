@@ -81,7 +81,7 @@ telegram.post('/webhook/:channelId', async (c) => {
       // If a human operator has taken over, save the message and stay silent.
       const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
       const convSnap = await convRef.get()
-      if (convSnap.exists && convSnap.data()!.status === 'human') {
+      if (convSnap.exists && convSnap.data()!.status !== 'bot') {
         await convRef.collection('messages').add({
           role: 'user', content: parsed.text, createdAt: new Date(),
         })
@@ -100,6 +100,14 @@ telegram.post('/webhook/:channelId', async (c) => {
       if (prepared.kind === 'error') {
         console.warn('[telegram/webhook] prepare error:', prepared.error)
         await sendMessage(token, chatId, "The assistant isn't configured yet. Please contact the site owner.")
+        return c.json({ ok: true })
+      }
+
+      if (prepared.kind === 'silent') {
+        return c.json({ ok: true })
+      }
+      if (prepared.kind === 'escalated') {
+        await sendMessage(token, chatId, prepared.message)
         return c.json({ ok: true })
       }
 

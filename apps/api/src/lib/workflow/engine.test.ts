@@ -8,7 +8,7 @@ const ctx = (over: Partial<EscalationContext> = {}): EscalationContext => ({
 
 describe('matchesTrigger', () => {
   test('ask_for_human matches a phrase substring (case-insensitive)', () => {
-    const t = { type: 'ask_for_human', phrases: ['talk to a human', 'agent'] } as const
+    const t = { type: 'ask_for_human' as const, phrases: ['talk to a human', 'agent'] }
     expect(matchesTrigger(t, ctx({ messageLower: 'can i talk to a human please' }))).toBe(true)
     expect(matchesTrigger(t, ctx({ messageLower: 'what are your hours' }))).toBe(false)
   })
@@ -21,12 +21,12 @@ describe('matchesTrigger', () => {
     expect(matchesTrigger({ type: 'bot_replies', count: 3 }, ctx({ botReplyCount: 2 }))).toBe(false)
   })
   test('keyword matches any keyword substring', () => {
-    const t = { type: 'keyword', keywords: ['refund', 'cancel'] } as const
+    const t = { type: 'keyword' as const, keywords: ['refund', 'cancel'] }
     expect(matchesTrigger(t, ctx({ messageLower: 'i want a refund' }))).toBe(true)
     expect(matchesTrigger(t, ctx({ messageLower: 'thanks!' }))).toBe(false)
   })
   test('off_hours respects the timezone', () => {
-    const base = { type: 'off_hours', days: [0, 1, 2, 3, 4, 5, 6], start: '09:00', end: '17:00' } as const
+    const base = { type: 'off_hours' as const, days: [0, 1, 2, 3, 4, 5, 6], start: '09:00', end: '17:00' }
     // 12:00 UTC is inside 09–17 in UTC → open → does not fire
     expect(matchesTrigger({ ...base, timezone: 'UTC' }, ctx())).toBe(false)
     // Same instant is 08:00 in New York (EDT, UTC-4) → before 09:00 → closed → fires
