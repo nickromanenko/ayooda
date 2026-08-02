@@ -69,9 +69,9 @@ export default function SettingsPage() {
         setEmail(u.email); setDisplayName(u.displayName)
       }
       if (wsRes.ok) {
-        const w = await wsRes.json() as { name: string; hasOpenRouterKey?: boolean }
+        const w = await wsRes.json() as { name: string; hasGatewayKey?: boolean }
         setWorkspaceName(w.name)
-        setHasKey(Boolean(w.hasOpenRouterKey))
+        setHasKey(Boolean(w.hasGatewayKey))
       }
       if (chRes.ok) {
         const channels = await chRes.json() as Array<{ type: string; embedCode?: string }>
@@ -195,11 +195,11 @@ export default function SettingsPage() {
         </div>
       </form>
 
-      {/* OpenRouter key */}
+      {/* AI Gateway key */}
       <div style={cardStyle}>
-        <p style={labelStyle}>OpenRouter API key</p>
+        <p style={labelStyle}>AI Gateway key</p>
         <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 12px' }}>
-          One key unlocks Claude, GPT, and more. Gemini works without a key on the platform&apos;s allowance.
+          One key routes Claude, GPT, Gemini, and more. Falls back to the platform key if left unset.
         </p>
         {hasKey ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -208,7 +208,7 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 8 }}>
-            <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="sk-or-..." style={{ ...inputStyle, flex: 1 }} />
+            <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="vck_..." style={{ ...inputStyle, flex: 1 }} />
             <button type="button" onClick={() => void saveKey()} disabled={savingKey || !keyInput.trim()} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: savingKey || !keyInput.trim() ? 0.5 : 1 }}>
               {savingKey ? 'Saving…' : 'Save'}
             </button>
