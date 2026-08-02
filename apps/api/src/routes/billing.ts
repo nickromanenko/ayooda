@@ -129,11 +129,16 @@ billing.post('/checkout', async (c) => {
     await ref.update({ 'subscription.stripeCustomerId': customerId })
   }
 
+  const overagePrice = process.env.STRIPE_PRICE_OVERAGE
+  const lineItems: Array<{ price: string; quantity?: number }> = [{ price, quantity: 1 }]
+  if (overagePrice) lineItems.push({ price: overagePrice })
+  else console.warn('[billing/checkout] STRIPE_PRICE_OVERAGE not set — overage will not be metered')
+
   const session = await getStripe().checkout.sessions.create({
     mode: 'subscription',
     customer: customerId,
     client_reference_id: workspaceId,
-    line_items: [{ price, quantity: 1 }],
+    line_items: lineItems,
     subscription_data: { metadata: { workspaceId } },
     success_url: process.env.BILLING_SUCCESS_URL!,
     cancel_url: process.env.BILLING_CANCEL_URL!,
