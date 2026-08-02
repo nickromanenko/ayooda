@@ -27,7 +27,7 @@ Everything persistent lives in **your** Firebase project (Firestore) and **your*
   - The **Web app config** (Project settings → your Web app → SDK setup) for the `NEXT_PUBLIC_FIREBASE_*` values.
 - **A Pinecone index** — **768 dimensions, cosine** metric (must match the Gemini `gemini-embedding-001` @ 768 embedding size). Serverless is fine. Note its name.
 - **A Gemini API key** (`GEMINI_API_KEY`) — Google AI Studio. Used for embeddings.
-- **An OpenRouter API key** (`OPENROUTER_API_KEY`) — the platform chat fallback. (A workspace can also add its own key per agent; without any key, only Gemini chat models work.)
+- **A Vercel AI Gateway key** (`AI_GATEWAY_API_KEY`) — routes chat to all providers (Gemini, Claude, OpenAI). A workspace agent can bring its own Gateway key; without any key, chat is disabled.
 - **Optional:** Stripe (billing) and Langfuse (tracing). Ayooda runs without either.
 - **Tooling:** Node 20+, [Bun](https://bun.sh) 1.3+, pnpm 10+, the Firebase CLI, and Chromium (for the scraper).
 
@@ -64,7 +64,7 @@ cp apps/scraper/.env.example  apps/scraper/.env
 | `FIREBASE_STORAGE_BUCKET` | `<project-id>.firebasestorage.app`. |
 | `PINECONE_API_KEY` / `PINECONE_INDEX` | Your Pinecone key and the 768-dim/cosine index name. |
 | `GEMINI_API_KEY` | Embeddings key. |
-| `OPENROUTER_API_KEY` | Platform chat fallback key. |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway key; routes chat to all providers. A workspace agent can bring its own Gateway key. |
 | `API_KEY_ENCRYPTION_SECRET` | Random 32+ char string. Encrypts BYO keys, tool secrets, and Telegram tokens — **keep it stable**, rotating it invalidates stored secrets. |
 | `PORT` | Listen port (default 8080). |
 | `ALLOWED_ORIGINS` | Comma-separated web origins allowed by CORS (include your web URL). |

@@ -1,5 +1,7 @@
 import { describe, expect, test, afterEach } from 'bun:test'
-import { toOpenRouterTools, buildToolRequest, type StoredTool } from './tools'
+import { toAiSdkTools, buildToolRequest, type StoredTool } from './tools'
+
+const fakeTrace = { span: () => ({ end: () => {} }) } as unknown as import('../langfuse').LangfuseTrace
 
 const readTool: StoredTool = {
   id: 't1', name: 'order_lookup', description: 'Look up an order',
@@ -12,16 +14,17 @@ const readTool: StoredTool = {
   auth: { type: 'none' }, kind: 'read', writeEnabled: false, enabled: true,
 }
 
-describe('toOpenRouterTools', () => {
-  test('maps params to a JSON Schema with a required list', () => {
-    const [t] = toOpenRouterTools([readTool])
-    expect(t!.function.name).toBe('order_lookup')
-    expect(t!.function.parameters).toEqual({
-      type: 'object',
-      properties: { orderId: { type: 'string', description: 'id' }, verbose: { type: 'boolean', description: 'v' } },
-      required: ['orderId'],
-      additionalProperties: false,
-    })
+describe('toAiSdkTools', () => {
+  test('maps to a tool set whose execute returns the formatted executor result', async () => {
+    const set = toAiSdkTools([readTool], fakeTrace, async (_t, args) => ({ status: 200, body: JSON.stringify(args) }))
+    expect(Object.keys(set)).toEqual(['order_lookup'])
+    const out = await set.order_lookup!.execute!({ orderId: 'A1' }, { toolCallId: 't', messages: [] } as never)
+    expect(out).toBe('status 200\n{"orderId":"A1"}')
+  })
+  test('execute surfaces an executor error string', async () => {
+    const set = toAiSdkTools([readTool], fakeTrace, async () => ({ status: 0, body: '', error: 'blocked host' }))
+    const out = await set.order_lookup!.execute!({ orderId: 'A1' }, { toolCallId: 't', messages: [] } as never)
+    expect(out).toBe('error: blocked host')
   })
 })
 
@@ -95,14 +98,9 @@ const mkTool = (over: Partial<StoredTool>): StoredTool => ({
   id: 'x', name: 'n', description: 'd', method: 'GET', urlTemplate: 'https://a.com/', params: [],
   headers: [], auth: { type: 'none' }, kind: 'read', writeEnabled: false, enabled: true, ...over,
 })
-const fakeTrace = { span: () => ({ end: () => {} }) } as unknown as import('../langfuse').LangfuseTrace
 
-async function* streamText(text: string, tokens = 1): AsyncGenerator<{ text: string }, { promptTokens: number; completionTokens: number }, void> {
-  if (text) yield { text }
-  return { promptTokens: tokens, completionTokens: tokens }
-}
-async function* streamCall(id: string, name: string, args: string): AsyncGenerator<{ text: string }, { promptTokens: number; completionTokens: number; toolCalls: Array<{ id: string; name: string; arguments: string }> }, void> {
-  return { promptTokens: 1, completionTokens: 1, toolCalls: [{ id, name, arguments: args }] }
+function fakeStream(deltas: string[], usage: { inputTokens?: number; outputTokens?: number }) {
+  return { textStream: (async function* () { for (const d of deltas) yield d })(), usage: Promise.resolve(usage) }
 }
 
 describe('selectExposedTools', () => {
@@ -118,39 +116,26 @@ describe('selectExposedTools', () => {
 })
 
 describe('runAgentTurn', () => {
-  test('no tools → single stream call, text passes through', async () => {
-    const gen = runAgentTurn({ model: 'm', systemPrompt: 's', messages: [{ role: 'user', content: 'hi' }], apiKey: 'k' }, [], fakeTrace, { stream: () => streamText('hello', 2) })
+  test('yields text deltas and maps usage → prompt/completion tokens', async () => {
+    const gen = runAgentTurn(
+      { model: 'm', systemPrompt: 's', messages: [{ role: 'user', content: 'hi' }], apiKey: 'k' },
+      [], fakeTrace,
+      { streamText: () => fakeStream(['Hel', 'lo'], { inputTokens: 9, outputTokens: 2 }) },
+    )
     const texts: string[] = []
     let result: { promptTokens: number; completionTokens: number } | undefined
     while (true) { const n = await gen.next(); if (n.done) { result = n.value; break } texts.push(n.value.text) }
-    expect(texts).toEqual(['hello'])
-    expect(result).toEqual({ promptTokens: 2, completionTokens: 2 })
+    expect(texts).toEqual(['Hel', 'lo'])
+    expect(result).toEqual({ promptTokens: 9, completionTokens: 2 })
   })
 
-  test('executes a tool call then streams the final answer, summing tokens', async () => {
-    const calls: string[] = []
-    let round = 0
-    const stream = () => (round++ === 0 ? streamCall('c1', 'n', '{"orderId":"A1"}') : streamText('done', 3))
-    const execute = async (_t: StoredTool, a: Record<string, unknown>) => { calls.push(JSON.stringify(a)); return { status: 200, body: 'shipped' } }
-    const gen = runAgentTurn({ model: 'm', systemPrompt: 's', messages: [{ role: 'user', content: 'where' }], apiKey: 'k' }, [mkTool({ name: 'n' })], fakeTrace, { stream, execute })
-    const texts: string[] = []
-    let result: { promptTokens: number; completionTokens: number } | undefined
-    while (true) { const nx = await gen.next(); if (nx.done) { result = nx.value; break } texts.push(nx.value.text) }
-    expect(calls).toEqual(['{"orderId":"A1"}'])
-    expect(texts).toEqual(['done'])
-    expect(result!.promptTokens).toBe(4) // 1 (tool round) + 3 (final)
-  })
-
-  test('stops after MAX_ROUNDS and makes one tool-free final call', async () => {
-    let n = 0
-    const toolsSeen: boolean[] = []
-    const stream = (p: { tools?: unknown }) => { toolsSeen.push(!!p.tools); n++; return n <= 3 ? streamCall(`c${n}`, 'n', '{}') : streamText('fallback', 1) }
-    const execute = async () => ({ status: 200, body: 'x' })
-    const gen = runAgentTurn({ model: 'm', systemPrompt: 's', messages: [{ role: 'user', content: 'x' }], apiKey: 'k' }, [mkTool({ name: 'n' })], fakeTrace, { stream, execute })
-    let result: { promptTokens: number; completionTokens: number } | undefined
-    while (true) { const nx = await gen.next(); if (nx.done) { result = nx.value; break } }
-    expect(n).toBe(4) // 3 tool rounds + 1 final
-    expect(toolsSeen).toEqual([true, true, true, false]) // final call is tool-free
-    expect(result!.completionTokens).toBe(4)
+  test('passes no tools when the workspace has none', async () => {
+    let seenTools: unknown = 'unset'
+    const gen = runAgentTurn(
+      { model: 'm', systemPrompt: 's', messages: [], apiKey: 'k' }, [], fakeTrace,
+      { streamText: (o) => { seenTools = o.tools; return fakeStream(['x'], {}) } },
+    )
+    while (!(await gen.next()).done) { /* drain */ }
+    expect(seenTools).toBeUndefined()
   })
 })

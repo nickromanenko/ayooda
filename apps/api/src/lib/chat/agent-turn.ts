@@ -3,12 +3,12 @@ import { adminDb } from '../firebase-admin'
 import { embedText, LEGACY_MODEL_MAP } from '../gemini'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
 import { namespaceFor } from '../pinecone'
-import { type ChatParams } from '../llm/openrouter'
+import { type ChatParams } from '../llm/chat'
 import { loadTools, type StoredTool } from './tools'
-import { resolveOpenRouterKey } from '../llm/resolve'
+import { resolveGatewayKey } from '../llm/resolve'
 import { resolveAgentDoc } from '../agents/agent-helpers'
 import { evaluateRules } from '../workflow/engine'
-import { providerOf, type ChannelType, type WorkflowRule } from '@ayooda/shared'
+import { type ChannelType, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 import { emitOverageEvent } from '../billing/overage'
 
@@ -59,14 +59,14 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   // Resolve the agent for this turn: the channel's agent, else the workspace default,
   // else the inline workspace.agent (pre-migration safety net).
   const agentsCol = adminDb.collection(`workspaces/${workspaceId}/agents`)
-  type AgentRec = { id: string; systemPrompt: string; llmModel: string; openRouterKey?: string; knowledgeNamespace: string }
+  type AgentRec = { id: string; systemPrompt: string; llmModel: string; gatewayKey?: string; knowledgeNamespace: string }
   let agentRec: AgentRec | undefined
   try {
     const toRec = (id: string, d: FirebaseFirestore.DocumentData): AgentRec => ({
       id,
       systemPrompt: d.systemPrompt ?? '',
       llmModel: d.llmModel ?? 'google/gemini-2.5-flash',
-      openRouterKey: d.openRouterKey,
+      gatewayKey: d.gatewayKey,
       knowledgeNamespace: d.knowledgeNamespace ?? `ws_${workspaceId}`,
     })
     const [specificSnap, defaultSnap] = await Promise.all([
@@ -86,7 +86,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       id: 'inline',
       systemPrompt: inline.systemPrompt ?? '',
       llmModel: inline.llmModel ?? 'google/gemini-2.5-flash',
-      openRouterKey: workspaceData.openRouterKey,
+      gatewayKey: workspaceData.gatewayKey,
       knowledgeNamespace: `ws_${workspaceId}`,
     }
   }
@@ -207,10 +207,9 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
 
   // Key resolution
-  const provider = providerOf(llmModel) ?? 'gemini'
   let keyResult
   try {
-    keyResult = resolveOpenRouterKey(provider, agentRec.openRouterKey)
+    keyResult = resolveGatewayKey(agentRec.gatewayKey)
   } catch (err) {
     console.error('[agent-turn] key resolution failed:', err)
     return { kind: 'error', error: 'AI model needs an API key' }

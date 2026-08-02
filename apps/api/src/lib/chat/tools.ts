@@ -1,6 +1,8 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import type { ToolMethod, ToolParam } from '@ayooda/shared'
-import { streamChat, type OpenRouterTool, type ChatParams, type ChatChunk, type ChatResult, type ChatMessage } from '../llm/openrouter'
+import { streamText as aiStreamText, createGateway, stepCountIs, tool, type ToolSet } from 'ai'
+import { z } from 'zod'
+import type { ChatParams, ChatChunk, ChatResult, ChatMessage } from '../llm/chat'
 import { decryptSecret } from '../crypto'
 import { isBlockedAddress } from '../tools/ssrf'
 import { adminDb } from '../firebase-admin'
@@ -20,23 +22,31 @@ export interface StoredTool {
   enabled: boolean
 }
 
-export function toOpenRouterTools(tools: StoredTool[]): OpenRouterTool[] {
-  return tools.map((t) => {
-    const properties: Record<string, { type: string; description: string }> = {}
-    const required: string[] = []
+export function toAiSdkTools(
+  tools: StoredTool[],
+  trace: LangfuseTrace,
+  execute: (t: StoredTool, args: Record<string, unknown>) => Promise<ToolResult> = executeTool,
+): ToolSet {
+  const set: ToolSet = {}
+  for (const t of tools) {
+    const shape: Record<string, z.ZodTypeAny> = {}
     for (const p of t.params) {
-      properties[p.name] = { type: p.type, description: p.description }
-      if (p.required) required.push(p.name)
+      const field: z.ZodTypeAny = p.type === 'number' ? z.number() : p.type === 'boolean' ? z.boolean() : z.string()
+      const described = field.describe(p.description)
+      shape[p.name] = p.required ? described : described.optional()
     }
-    return {
-      type: 'function',
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: { type: 'object', properties, required, additionalProperties: false },
+    set[t.name] = tool({
+      description: t.description,
+      inputSchema: z.object(shape),
+      execute: async (args: Record<string, unknown>) => {
+        const span = trace.span({ name: `tool:${t.name}`, input: args })
+        const r = await execute(t, args)
+        span.end({ output: { status: r.status, error: r.error } })
+        return r.error ? `error: ${r.error}` : `status ${r.status}\n${r.body}`
       },
-    }
-  })
+    })
+  }
+  return set
 }
 
 export interface BuiltRequest {
@@ -160,7 +170,6 @@ export async function executeTool(
 }
 
 export const MAX_ROUNDS = 3
-export const MAX_CALLS_PER_ROUND = 5
 
 /** Tools the model may see: enabled, and (read OR write-with-writeEnabled). */
 export function selectExposedTools(tools: StoredTool[]): StoredTool[] {
@@ -173,19 +182,16 @@ export async function loadTools(workspaceId: string, agentId: string): Promise<S
   return selectExposedTools(tools)
 }
 
+type StreamResult = { textStream: AsyncIterable<string>; usage: Promise<{ inputTokens?: number; outputTokens?: number }> }
 interface RunDeps {
-  stream?: (params: ChatParams) => AsyncGenerator<ChatChunk, ChatResult, void>
-  execute?: (tool: StoredTool, args: Record<string, unknown>) => Promise<ToolResult>
-}
-
-function safeParse(json: string): Record<string, unknown> {
-  try { const v = JSON.parse(json || '{}'); return v && typeof v === 'object' ? v : {} } catch { return {} }
+  streamText?: (opts: { model: unknown; system: string; messages: ChatMessage[]; tools?: ToolSet; stopWhen?: unknown }) => StreamResult
+  execute?: (t: StoredTool, args: Record<string, unknown>) => Promise<ToolResult>
 }
 
 /**
- * Channel-agnostic agent turn with a bounded tool-resolution loop. Delegates to streamChat
- * via yield* so text still streams to the caller; between rounds it executes any tool calls
- * the model requested and feeds the results back. Falls back to one tool-free call after MAX_ROUNDS.
+ * Channel-agnostic agent turn. Uses the AI SDK's streamText (routed through AI Gateway) to
+ * stream text and run the multi-step tool loop natively (stopWhen: stepCountIs(MAX_ROUNDS)).
+ * Keeps the AsyncGenerator<ChatChunk, ChatResult> shape so the channels are unchanged.
  */
 export async function* runAgentTurn(
   chatParams: ChatParams,
@@ -193,50 +199,19 @@ export async function* runAgentTurn(
   trace: LangfuseTrace,
   deps: RunDeps = {},
 ): AsyncGenerator<ChatChunk, ChatResult, void> {
-  const stream = deps.stream ?? streamChat
+  // The default wrapper swaps the model string for the Gateway model, so an injected
+  // streamText (tests) never touches createGateway.
+  const run = deps.streamText ?? ((opts) =>
+    aiStreamText({ ...opts, model: createGateway({ apiKey: chatParams.apiKey })(chatParams.model) } as Parameters<typeof aiStreamText>[0]) as unknown as StreamResult)
   const execute = deps.execute ?? executeTool
-  const schema = toOpenRouterTools(tools)
-  const byName = new Map(tools.map((t) => [t.name, t]))
-  let messages: ChatMessage[] = chatParams.messages
-  let promptTokens = 0
-  let completionTokens = 0
-
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const result = yield* stream({ ...chatParams, messages, tools: schema.length ? schema : undefined })
-    promptTokens += result.promptTokens
-    completionTokens += result.completionTokens
-    const calls = result.toolCalls ?? []
-    if (calls.length === 0) return { promptTokens, completionTokens }
-
-    messages = [
-      ...messages,
-      {
-        role: 'assistant',
-        content: null,
-        tool_calls: calls.map((c) => ({ id: c.id, type: 'function' as const, function: { name: c.name, arguments: c.arguments } })),
-      },
-    ]
-
-    for (let i = 0; i < calls.length; i++) {
-      const c = calls[i]!
-      let content: string
-      if (i >= MAX_CALLS_PER_ROUND) {
-        content = 'error: too many tool calls in one step'
-      } else {
-        const tool = byName.get(c.name)
-        if (!tool) {
-          content = `error: unknown tool ${c.name}`
-        } else {
-          const span = trace.span({ name: `tool:${c.name}`, input: safeParse(c.arguments) })
-          const r = await execute(tool, safeParse(c.arguments))
-          span.end({ output: { status: r.status, error: r.error } })
-          content = r.error ? `error: ${r.error}` : `status ${r.status}\n${r.body}`
-        }
-      }
-      messages = [...messages, { role: 'tool', tool_call_id: c.id, content }]
-    }
-  }
-
-  const final = yield* stream({ ...chatParams, messages, tools: undefined })
-  return { promptTokens: promptTokens + final.promptTokens, completionTokens: completionTokens + final.completionTokens }
+  const result = run({
+    model: chatParams.model,
+    system: chatParams.systemPrompt,
+    messages: chatParams.messages,
+    tools: tools.length ? toAiSdkTools(tools, trace, execute) : undefined,
+    stopWhen: stepCountIs(MAX_ROUNDS),
+  })
+  for await (const delta of result.textStream) yield { text: delta }
+  const u = await result.usage
+  return { promptTokens: u.inputTokens ?? 0, completionTokens: u.outputTokens ?? 0 }
 }
