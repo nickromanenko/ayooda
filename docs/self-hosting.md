@@ -72,7 +72,7 @@ cp apps/scraper/.env.example  apps/scraper/.env
 | `WEB_PUBLIC_URL` | Base URL used in team-invite links. |
 | `WIDGET_BASE_URL` | Where `widget.js` is hosted (embed snippets point here). |
 | `SCRAPER_JOB_URL` | Empty for local-subprocess ingestion; a Cloud Run Job run URL to use Cloud Run Jobs. See §5. |
-| `STRIPE_*`, `BILLING_*` | *Optional.* Billing (see §7). |
+| `STRIPE_*`, `BILLING_*` | *Optional.* Billing (see §7). For usage-based overage, also set `STRIPE_PRICE_OVERAGE` (the metered price printed by `setup-stripe.ts`) and `STRIPE_OVERAGE_METER_EVENT`. |
 | `LANGFUSE_*` | *Optional.* Tracing. |
 
 ### web (`apps/web/.env`)

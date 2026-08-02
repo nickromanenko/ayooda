@@ -8,7 +8,8 @@ interface PlanDef { tier: string; name: string; priceUsd: number; conversationCa
 interface BillingData {
   subscription: { status: string; tier: string | null; trialEndsAt: string | null; currentPeriodEnd: string | null } | null
   usage: { periodConversationCount: number }
-  entitled: boolean; reason: string; cap: number; tier: string | null
+  entitled: boolean; reason: string; tier: string | null
+  includedCap: number; ceiling: number; overageCount: number; estOverageUsd: number
   plans: PlanDef[]
 }
 
@@ -53,7 +54,7 @@ export default function BillingPage() {
   if (!data) return <div style={{ padding: 24, color: '#f87171' }}>Failed to load billing.</div>
 
   const sub = data.subscription
-  const pct = data.cap > 0 ? Math.min(100, Math.round((data.usage.periodConversationCount / data.cap) * 100)) : 0
+  const pct = data.includedCap > 0 ? Math.min(100, Math.round((data.usage.periodConversationCount / data.includedCap) * 100)) : 0
   const trialLeft = sub?.status === 'trialing' && sub.trialEndsAt
     ? Math.max(0, Math.ceil((new Date(sub.trialEndsAt).getTime() - Date.now()) / 86400000))
     : null
@@ -82,11 +83,16 @@ export default function BillingPage() {
         </div>
         <div style={{ marginTop: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-mute)', marginBottom: 6 }}>
-            <span>Conversations this period</span><span>{data.usage.periodConversationCount} / {data.cap}</span>
+            <span>Included conversations this period</span><span>{data.usage.periodConversationCount} / {data.includedCap}</span>
           </div>
           <div style={{ height: 8, borderRadius: 4, background: 'var(--bg-2)', overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? '#f87171' : 'var(--accent)' }} />
           </div>
+          {data.overageCount > 0 && (
+            <p style={{ fontSize: 13, color: 'var(--accent)', marginTop: 8 }}>
+              {data.overageCount} over your plan — an estimated ${data.estOverageUsd.toFixed(2)} this period ($0.05 each)
+            </p>
+          )}
         </div>
         {sub?.tier && (
           <button type="button" onClick={() => void manage()} disabled={busy === 'manage'} className="btn btn-ghost" style={{ marginTop: 16, borderRadius: 'var(--r-sm)', padding: '8px 14px' }}>

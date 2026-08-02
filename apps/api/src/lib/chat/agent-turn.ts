@@ -10,6 +10,7 @@ import { resolveAgentDoc } from '../agents/agent-helpers'
 import { evaluateRules } from '../workflow/engine'
 import { providerOf, type ChannelType, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
+import { emitOverageEvent } from '../billing/overage'
 
 export interface PrepareTurnInput {
   workspaceId: string
@@ -155,6 +156,11 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       update['usage.periodConversationCount'] = FieldValue.increment(1)
     }
     await workspaceRef.update(update)
+
+    // Overage: this conversation is beyond the plan's included pack — meter it (non-fatal).
+    if (ent.overage && (sub?.status === 'active' || sub?.status === 'past_due')) {
+      void emitOverageEvent(sub?.stripeCustomerId, conversationId)
+    }
   }
 
   const messagesRef = convRef.collection('messages')
