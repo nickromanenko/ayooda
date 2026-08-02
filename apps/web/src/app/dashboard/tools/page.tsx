@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2, Trash2, Plus, Play } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
-import type { ToolDef, ToolMethod, ToolParamType, ToolAuthType, ToolKind } from '@ayooda/shared'
+import { TOOL_TEMPLATES, applyTemplate, type ToolDef, type ToolMethod, type ToolParamType, type ToolAuthType, type ToolKind, type ToolTemplate } from '@ayooda/shared'
 
 const card: React.CSSProperties = { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 24, marginBottom: 20 }
 const label: React.CSSProperties = { fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }
@@ -38,6 +38,7 @@ export default function ToolsPage() {
   const [busyId, setBusyId] = useState('')
   const [agentList, setAgentList] = useState<{ id: string; name: string; isDefault: boolean }[]>([])
   const [agentId, setAgentId] = useState<string>('')
+  const [picker, setPicker] = useState<'gallery' | { template: ToolTemplate; setup: Record<string, string> } | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -60,6 +61,20 @@ export default function ToolsPage() {
   useEffect(() => { if (agentId) void load() }, [load, agentId])
 
   function startCreate() { setForm({ ...emptyForm }); setError(''); setTestResult(''); setTestArgs('{}') }
+  function chooseTemplate(template: ToolTemplate) {
+    setPicker({ template, setup: Object.fromEntries(template.setupFields.map((f) => [f.key, ''])) })
+  }
+  function applyPickedTemplate(p: { template: ToolTemplate; setup: Record<string, string> }) {
+    const a = applyTemplate(p.template, p.setup)
+    setForm({
+      id: null,
+      name: a.name, description: a.description, method: a.method, urlTemplate: a.urlTemplate,
+      params: a.params.map((x) => ({ ...x })), headers: a.headers.map((x) => ({ ...x })),
+      authType: a.auth.type, headerName: a.auth.headerName ?? '', secret: '', hasSecret: false,
+      kind: a.kind, writeEnabled: false, enabled: true,
+    })
+    setPicker(null); setError(''); setTestResult(''); setTestArgs('{}')
+  }
   function startEdit(t: ToolDef) {
     setForm({
       id: t.id, name: t.name, description: t.description, method: t.method, urlTemplate: t.urlTemplate,
@@ -118,7 +133,12 @@ export default function ToolsPage() {
           <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Tools</h1>
           <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Let your agent call your APIs — look up orders, check inventory, update records.</p>
         </div>
-        {!form && <button type="button" onClick={startCreate} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px' }}><Plus size={14} /> New tool</button>}
+        {!form && !picker && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => setPicker('gallery')} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 16px' }}>Start from a template</button>
+            <button type="button" onClick={startCreate} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px' }}><Plus size={14} /> New tool</button>
+          </div>
+        )}
       </div>
 
       {agentList.length > 1 && (
@@ -130,7 +150,7 @@ export default function ToolsPage() {
         </div>
       )}
 
-      {!form && (
+      {!form && !picker && (
         <div style={card}>
           <p style={label}>Your tools</p>
           {tools.length === 0 && <p style={{ fontSize: 13, color: 'var(--ink-mute)' }}>No tools yet. Create one to give your agent an action.</p>}
@@ -148,6 +168,58 @@ export default function ToolsPage() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {picker === 'gallery' && (
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <p style={label}>Choose a template</p>
+            <button type="button" onClick={() => setPicker(null)} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13 }}>Cancel</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {TOOL_TEMPLATES.map((t) => (
+              <button key={t.id} type="button" onClick={() => chooseTemplate(t)} style={{ textAlign: 'left', background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 'var(--r-sm)', padding: 14, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{t.label}</span>
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, background: 'var(--panel-2)', color: 'var(--ink-mute)' }}>{t.category}</span>
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0 }}>{t.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {picker && picker !== 'gallery' && (
+        <div style={card}>
+          <p style={label}>{picker.template.label}</p>
+          <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginBottom: 16 }}>{picker.template.description}</p>
+          {picker.template.setupFields.map((f) => (
+            <div key={f.key} style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: 'var(--ink-mute)', display: 'block', marginBottom: 4 }}>{f.label}</label>
+              <input
+                placeholder={f.placeholder}
+                value={picker.setup[f.key] ?? ''}
+                onChange={(e) => setPicker({ template: picker.template, setup: { ...picker.setup, [f.key]: e.target.value } })}
+                style={input}
+              />
+              {f.help && <p style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 4 }}>{f.help}</p>}
+            </div>
+          ))}
+          <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 8 }}>You&apos;ll add the secret next: <strong style={{ color: 'var(--ink-dim)' }}>{picker.template.secretLabel}</strong></p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            <button
+              type="button"
+              onClick={() => applyPickedTemplate(picker)}
+              disabled={picker.template.setupFields.some((f) => !picker.setup[f.key]?.trim())}
+              className="btn btn-primary"
+              style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: picker.template.setupFields.some((f) => !picker.setup[f.key]?.trim()) ? 0.5 : 1 }}
+            >
+              Continue
+            </button>
+            <button type="button" onClick={() => setPicker('gallery')} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>Back</button>
+          </div>
         </div>
       )}
 
