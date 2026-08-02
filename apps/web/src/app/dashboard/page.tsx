@@ -158,7 +158,7 @@ export default async function DashboardPage() {
           Get started
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <GetStartedStep number={1} title="Configure your agent" description="Give your agent a name, avatar, and personality." href="/dashboard/agent" done={o.agentConfigured} />
+          <GetStartedStep number={1} title="Configure your agent" description="Give your agent a name, avatar, and personality." href="/dashboard/agents" done={o.agentConfigured} />
           <GetStartedStep number={2} title="Add your knowledge base" description="Paste your website URL or upload documents." href="/dashboard/knowledge" done={o.indexedDocCount > 0} />
           <GetStartedStep number={3} title="Deploy the widget" description="Copy a script tag and paste it into your website." href="/dashboard/channels" done={o.channelCount > 0} />
         </div>

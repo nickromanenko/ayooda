@@ -59,7 +59,11 @@ export function StepIdentity({ onDone }: { onDone: (data: IdentityData) => void 
     setLoading(true)
     setError('')
     try {
-      const res = await apiRequest('/workspace/agent', {
+      const agentsRes = await apiRequest('/agents')
+      const { agents } = await agentsRes.json() as { agents: { id: string; isDefault: boolean }[] }
+      const defaultId = agents.find((a) => a.isDefault)?.id ?? agents[0]?.id
+      if (!defaultId) throw new Error('No agent to configure')
+      const res = await apiRequest(`/agents/${defaultId}`, {
         method: 'PUT',
         body: JSON.stringify({ name: name.trim(), description, systemPrompt, llmModel }),
       })
