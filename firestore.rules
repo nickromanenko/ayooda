@@ -11,18 +11,24 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Workspace document: server-only. The Admin SDK (used by the Hono API
-    // and the dashboard layout) bypasses these rules entirely, and no
-    // client-side code reads or writes this document. It must stay
-    // client-inaccessible because it stores the encrypted openRouterKey,
-    // which must never be client-readable.
+    // Workspace document: server-only. The Admin SDK (the Hono API and the dashboard
+    // layout) bypasses these rules entirely, and no client-side code reads or writes it.
+    // It must stay client-inaccessible because the agent docs beneath it store encrypted
+    // per-agent AI Gateway keys and tool secrets, which must never be client-readable.
     match /workspaces/{workspaceId} {
       allow read, write: if false;
 
-      match /knowledge/{docId} {
-        allow read, write: if request.auth != null
-          && callerData().workspaceId == workspaceId
-          && callerData().get('role', 'owner') != 'member';
+      // Agents and everything beneath them (knowledge, tools) are managed exclusively
+      // through the Admin-SDK API and hold encrypted keys/secrets — server-only.
+      match /agents/{agentId} {
+        allow read, write: if false;
+        match /knowledge/{docId} { allow read, write: if false; }
+        match /tools/{toolId} { allow read, write: if false; }
+      }
+
+      // Escalation rules: API-managed, server-only.
+      match /workflowRules/{ruleId} {
+        allow read, write: if false;
       }
 
       match /channels/{channelId} {
