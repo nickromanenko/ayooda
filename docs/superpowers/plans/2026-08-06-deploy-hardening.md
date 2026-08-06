@@ -1,3 +1,124 @@
+# Deploy / Hardening Pass Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Make everything merged this session shippable: harden + validate `firestore.rules` and rewrite `docs/deploy.md` into a complete, ordered deploy runbook (with a deferred-follow-ups audit).
+
+**Architecture:** Two in-repo deliverables. (1) `firestore.rules` gains explicit server-only matches for the subcollections added this session and drops a dead match — behavior is unchanged (deny-default made explicit), validated with the Firebase rules tool. (2) `docs/deploy.md` is rewritten as the single ordered runbook. No app-code behavior change; the operator runs all deploys/migrations.
+
+**Tech Stack:** Firestore security rules; Markdown runbook. Verification: Firebase rules validation + `grep` consistency checks + the unchanged `bun test`/typecheck suite.
+
+## Global Constraints
+
+- **No app-code behavior change** beyond `firestore.rules`. Deferred follow-ups are **listed, not fixed**. Deploys/migrations are the operator's to run.
+- **Rules stay deny-default for the new subcollections** — only the inbox (`conversations`/`messages`) is read by the client SDK; everything else is Admin-SDK/API. The explicit `if false` matches are documentation + guardrails.
+- **Runbook must be self-consistent:** every env var it names in the API-deploy step exists in `apps/api/.env.example`; every script path exists under `apps/api/scripts/`; Pinecone index `ayooda-prod` @ **768-dim, cosine**; project `ayooda-1791f`.
+- `bun test` + `pnpm -r typecheck` remain green (no app code touched).
+
+---
+
+### Task 1: Harden `firestore.rules`
+
+**Files:**
+- Modify: `firestore.rules`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: explicit server-only rules for `agents` (+ `knowledge`/`tools`) and `workflowRules`; dead top-level `knowledge` match removed.
+
+- [ ] **Step 1: Rewrite the rules**
+
+Replace the entire contents of `firestore.rules` with:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function callerData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Users can only read/write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Workspace document: server-only. The Admin SDK (the Hono API and the dashboard
+    // layout) bypasses these rules entirely, and no client-side code reads or writes it.
+    // It must stay client-inaccessible because the agent docs beneath it store encrypted
+    // per-agent AI Gateway keys and tool secrets, which must never be client-readable.
+    match /workspaces/{workspaceId} {
+      allow read, write: if false;
+
+      // Agents and everything beneath them (knowledge, tools) are managed exclusively
+      // through the Admin-SDK API and hold encrypted keys/secrets — server-only.
+      match /agents/{agentId} {
+        allow read, write: if false;
+        match /knowledge/{docId} { allow read, write: if false; }
+        match /tools/{toolId} { allow read, write: if false; }
+      }
+
+      // Escalation rules: API-managed, server-only.
+      match /workflowRules/{ruleId} {
+        allow read, write: if false;
+      }
+
+      match /channels/{channelId} {
+        allow read, write: if request.auth != null
+          && callerData().workspaceId == workspaceId
+          && callerData().get('role', 'owner') != 'member';
+      }
+
+      match /conversations/{conversationId} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+
+        match /messages/{messageId} {
+          allow read, write: if request.auth != null
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+        }
+      }
+    }
+  }
+}
+```
+
+(This removes the old top-level `match /knowledge/{docId}` block — knowledge now lives under `agents/{agentId}/knowledge`, and no client reads the old path. `channels`, `conversations`, `messages`, the workspace doc, and `users` are unchanged.)
+
+- [ ] **Step 2: Validate the rules syntax**
+
+Validate the file with the Firebase security-rules validation tool (MCP): `mcp__plugin_firebase_firebase__firebase_validate_security_rules` with the `firestore.rules` source. Expected: **no validation errors**.
+
+If that tool is unavailable in the session, fall back to `firebase deploy --only firestore:rules --dry-run` **is not** a supported flag — instead run the rules through the emulator compile check `firebase emulators:exec --only firestore "true"` if the emulator is installed, or record in the commit message that validation was done manually (the ruleset is structurally identical to the prior one plus `if false` blocks, which cannot introduce a compile error). Do **not** block the task on tooling that isn't present — the behavioral guarantee (deny-default made explicit) is unchanged.
+
+- [ ] **Step 3: Confirm no client-SDK path lost access**
+
+Run: `grep -rn "collection(db\|doc(db\|onSnapshot" apps/web/src --include=*.tsx --include=*.ts | grep -v firebase-admin`
+Expected: matches only in `apps/web/src/app/dashboard/inbox/page.tsx` over `conversations` / `.../messages` (both still allowed). No client reads of `agents`/`knowledge`/`tools`/`workflowRules`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add firestore.rules
+git commit -m "chore(security): explicit server-only rules for agents/tools/workflowRules; drop dead knowledge match"
+```
+
+---
+
+### Task 2: Rewrite `docs/deploy.md` into the full runbook
+
+**Files:**
+- Modify: `docs/deploy.md`
+
+**Interfaces:**
+- Consumes: the `firestore.rules` from Task 1; `apps/api/.env.example`; the scripts under `apps/api/scripts/`.
+
+- [ ] **Step 1: Replace `docs/deploy.md` with the runbook**
+
+Write exactly this content to `docs/deploy.md`:
+
+````markdown
 # Deployment Runbook
 
 Ships the whole stack to the `ayooda-1791f` Firebase/GCP project. Follow the sections in order — later steps depend on earlier ones. **Deploy the API and web together**: the web app calls only the current API surface (the old `/workspace/agent` and `/workspace/key` endpoints were removed).
@@ -167,3 +288,39 @@ Tracked so they aren't lost. **All recommended to defer** — none block shippin
 | Events-feed reconnect cursor (operator msgs lost in reconnect gaps) | v1 SSE | low | defer |
 | Invite create not transactional (tight race) | team members | low | defer |
 | Live E2Es unrun: tool round-trip, per-agent namespace isolation, overage metering, Gateway multi-provider | multiple | verification | run during/after this deploy with real keys |
+````
+
+- [ ] **Step 2: Consistency checks**
+
+Every env var named in the runbook's `--set-secrets`/`--set-env-vars` must exist in `apps/api/.env.example`; every script path must exist.
+
+```bash
+cd /Users/nick/Projects/ayooda
+echo "== scripts referenced exist =="
+for s in migrate-agents backfill-trials backfill-overage-item setup-stripe; do test -f "apps/api/scripts/$s.ts" && echo "OK $s" || echo "MISSING $s"; done
+echo "== env vars in runbook are all real (present in .env.example) =="
+comm -23 \
+  <(grep -oE "[A-Z_]{4,}=" docs/deploy.md | tr -d '=' | grep -E "FIREBASE|PINECONE|GEMINI|API_KEY_ENCRYPTION|AI_GATEWAY|STRIPE|BILLING|WIDGET_BASE|ALLOWED_ORIGINS|API_PUBLIC|WEB_PUBLIC|SCRAPER_JOB" | sort -u) \
+  <(grep -oE "^#? *[A-Z0-9_]+=" apps/api/.env.example | tr -d '#= ' | sort -u)
+echo "== (empty above = every runbook env var is a real one) =="
+```
+
+Expected: every script `OK`; the `comm` output empty. Fix any mismatch in `docs/deploy.md`.
+
+- [ ] **Step 3: Repo suite still green (no app code changed)**
+
+Run: `cd apps/api && bun test 2>&1 | tail -3`
+Expected: PASS (unchanged).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add docs/deploy.md
+git commit -m "docs: complete deploy runbook (env/secrets, stripe+overage, migrations, audit)"
+```
+
+---
+
+## Out of scope
+
+Running any deploy/migration/console step; creating cloud resources; fixing the deferred follow-ups; app-code changes beyond `firestore.rules`.
