@@ -284,9 +284,9 @@ function Hero() {
         </Reveal>
 
         <h1 className="display" style={{
-          fontSize: 'clamp(48px, 7.2vw, 104px)',
+          fontSize: 'clamp(34px, 5.4vw, 72px)',
           margin: '28px 0 22px', textAlign: 'center',
-          maxWidth: 1000, marginInline: 'auto',
+          maxWidth: 1000, marginInline: 'auto', textWrap: 'balance' as CSSProperties['textWrap'],
         }}>
           <Reveal style={{ display: 'block' }}>
             Resolve <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>up&nbsp;to&nbsp;60%</em> of
