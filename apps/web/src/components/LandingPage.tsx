@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo, CSSProperties, ReactNode } from 'react'
 import Link from 'next/link'
+import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier } from 'react-icons/si'
+import { Sparkles, Zap, Rocket } from 'lucide-react'
 
 // ─── Reveal ───────────────────────────────────────────────────────────────────
 
@@ -519,14 +521,23 @@ function FeatureMock({ kind }: { kind: string }) {
   }
 
   if (kind === 'integrate') {
-    const tools = ['Shopify', 'Stripe', 'HubSpot', 'Notion', 'Zendesk', 'Linear', 'Segment', 'Salesforce']
+    const tools = [
+      { name: 'Shopify', Icon: SiShopify, color: '#95BF47' },
+      { name: 'Stripe', Icon: SiStripe, color: '#635BFF' },
+      { name: 'HubSpot', Icon: SiHubspot, color: '#FF7A59' },
+      { name: 'Notion', Icon: SiNotion, color: '#f4f4f0' },
+      { name: 'Zendesk', Icon: SiZendesk, color: '#f4f4f0' },
+      { name: 'Linear', Icon: SiLinear, color: '#9CA3F0' },
+      { name: 'Intercom', Icon: SiIntercom, color: '#3B82F6' },
+      { name: 'Zapier', Icon: SiZapier, color: '#FF4F00' },
+    ]
     return (
       <div style={wrap}>
         <div className="pill" style={{ marginBottom: 18 }}><span className="dot" />MCP connections · live</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-          {tools.map((t, i) => (
-            <div key={t} style={{ padding: '12px 14px', border: '1px solid var(--line)', borderRadius: 12, background: 'var(--bg-2)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, animation: `fade-up .5s ${i * 0.06}s backwards ease` }}>
-              <span style={{ width: 22, height: 22, borderRadius: 6, background: `oklch(70% 0.12 ${20 + i * 40})`, flexShrink: 0 }} />{t}
+          {tools.map(({ name, Icon, color }, i) => (
+            <div key={name} style={{ padding: '12px 14px', border: '1px solid var(--line)', borderRadius: 12, background: 'var(--bg-2)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, animation: `fade-up .5s ${i * 0.06}s backwards ease` }}>
+              <Icon size={20} color={color} style={{ flexShrink: 0 }} />{name}
             </div>
           ))}
         </div>
@@ -941,7 +952,7 @@ function Testimonials() {
 
 const PLANS = [
   {
-    name: 'Lite', price: 25, featured: false,
+    name: 'Lite', price: 25, featured: false, Icon: Sparkles,
     gradient: 'linear-gradient(135deg, #60a5fa 0%, #2563eb 100%)',
     gradientSoft: 'linear-gradient(180deg, rgba(96,165,250,0.12) 0%, transparent 100%)',
     borderActive: '#60a5fa',
@@ -954,7 +965,7 @@ const PLANS = [
     ],
   },
   {
-    name: 'Core', price: 55, featured: true,
+    name: 'Core', price: 55, featured: true, Icon: Zap,
     gradient: 'linear-gradient(135deg, #f5a524 0%, #b45309 100%)',
     gradientSoft: 'linear-gradient(180deg, rgba(245,165,36,0.14) 0%, transparent 100%)',
     borderActive: 'var(--accent)',
@@ -967,7 +978,7 @@ const PLANS = [
     ],
   },
   {
-    name: 'Max', price: 195, featured: false,
+    name: 'Max', price: 195, featured: false, Icon: Rocket,
     gradient: 'linear-gradient(135deg, #c084fc 0%, #7c3aed 100%)',
     gradientSoft: 'linear-gradient(180deg, rgba(192,132,252,0.12) 0%, transparent 100%)',
     borderActive: '#c084fc',
@@ -1010,7 +1021,9 @@ function PlanCard({ plan, active }: { plan: typeof PLANS[number]; active?: boole
       {plan.featured && (
         <span style={{ position: 'absolute', top: -10, right: 18, padding: '3px 10px', borderRadius: 999, background: plan.gradient, color: plan.textColor, fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em' }}>MOST POPULAR</span>
       )}
-      <div style={{ width: 42, height: 42, borderRadius: 12, background: plan.gradient, marginBottom: 16 }} />
+      <div style={{ width: 42, height: 42, borderRadius: 12, background: plan.gradient, marginBottom: 16, display: 'grid', placeItems: 'center' }}>
+        <plan.Icon size={22} color={plan.textColor} strokeWidth={2.2} />
+      </div>
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 4 }}>Membership</div>
       <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, margin: 0, letterSpacing: '-0.02em' }}>{plan.name}</h3>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, margin: '14px 0 18px' }}>
@@ -1210,9 +1223,11 @@ function Footer() {
     { h: 'Company', links: ['About', 'Customers', 'Careers', 'Blog'] },
     { h: 'Resources', links: ['Docs', 'MCP guide', 'Status', 'Contact'] },
   ]
+  const showLinks = false // links block temporarily hidden
   return (
-    <footer style={{ padding: '60px 0 40px', borderTop: '1px solid var(--line)' }}>
+    <footer style={{ padding: showLinks ? '60px 0 40px' : '32px 0', borderTop: '1px solid var(--line)' }}>
       <div className="container">
+        {showLinks && (
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr repeat(3, 1fr)', gap: 40, marginBottom: 40 }}>
           <div>
             <Logo />
@@ -1231,7 +1246,8 @@ function Footer() {
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 16, justifyContent: 'space-between', paddingTop: 24, borderTop: '1px solid var(--line)', fontSize: 12, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
+        )}
+        <div style={{ display: 'flex', gap: 16, justifyContent: 'space-between', paddingTop: showLinks ? 24 : 0, borderTop: showLinks ? '1px solid var(--line)' : 'none', fontSize: 12, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
           <span>© 2026 Ayooda · All rights reserved</span>
           <span>Made for the humans behind the inbox.</span>
         </div>

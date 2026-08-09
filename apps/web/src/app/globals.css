@@ -36,9 +36,9 @@
   --shadow-soft: 0 1px 0 rgba(255,255,255,0.04) inset, 0 10px 40px rgba(0,0,0,0.35);
   --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 20px 60px rgba(0,0,0,0.45);
 
-  /* Fonts — set by next/font, fallbacks here */
-  --font-sans: var(--font-geist, "Geist"), ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: var(--font-fraunces, "Fraunces"), ui-serif, Georgia, serif;
+  /* Fonts — set by next/font, fallbacks here. Montserrat everywhere. */
+  --font-sans: var(--font-montserrat, "Montserrat"), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-montserrat, "Montserrat"), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -84,9 +84,9 @@ a { color: inherit; text-decoration: none; }
 
 .display {
   font-family: var(--font-display);
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: -0.025em;
-  line-height: 0.98;
+  line-height: 1.02;
 }
 
 .btn {

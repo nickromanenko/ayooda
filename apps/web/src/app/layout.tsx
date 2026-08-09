@@ -1,19 +1,13 @@
 import type { Metadata } from 'next'
-import { Geist } from 'next/font/google'
-import { Fraunces } from 'next/font/google'
+import { Montserrat } from 'next/font/google'
 import { JetBrains_Mono } from 'next/font/google'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import './globals.css'
 
-const geist = Geist({
-  variable: '--font-geist',
+const montserrat = Montserrat({
+  variable: '--font-montserrat',
   subsets: ['latin'],
-})
-
-const fraunces = Fraunces({
-  variable: '--font-fraunces',
-  subsets: ['latin'],
-  axes: ['opsz'],
+  style: ['normal', 'italic'],
 })
 
 const jetbrainsMono = JetBrains_Mono({
@@ -29,7 +23,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geist.variable} ${fraunces.variable} ${jetbrainsMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${montserrat.variable} ${jetbrainsMono.variable} h-full antialiased`}>
       <body className="h-full">
         <AuthProvider>{children}</AuthProvider>
       </body>
