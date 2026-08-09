@@ -24,6 +24,17 @@
           "run": { "serviceId": "ayooda-api", "region": "us-central1" }
         }
       ]
+    },
+    {
+      "target": "web",
+      "public": "apps/web/hosting",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        {
+          "source": "**",
+          "run": { "serviceId": "ayooda-web", "region": "us-central1" }
+        }
+      ]
     }
   ],
   "firestore": {

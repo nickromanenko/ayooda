@@ -6,7 +6,8 @@
     "ayooda-1791f": {
       "hosting": {
         "widget": ["ayooda-widget"],
-        "api": ["ayooda-api"]
+        "api": ["ayooda-api"],
+        "web": ["ayooda-1791f"]
       }
     }
   }
