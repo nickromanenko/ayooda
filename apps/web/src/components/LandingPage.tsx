@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo, CSSProperties, ReactNode } from 'react'
 import Link from 'next/link'
-import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier } from 'react-icons/si'
+import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier, SiWhatsapp, SiGmail, SiAirtable } from 'react-icons/si'
+import type { IconType } from 'react-icons'
 import { Sparkles, Zap, Rocket } from 'lucide-react'
 
 // ─── Reveal ───────────────────────────────────────────────────────────────────
@@ -817,10 +818,13 @@ function HowItWorks() {
 
 // ─── Integrations ─────────────────────────────────────────────────────────────
 
+type OrbitItem = { label: string; Icon?: IconType; color?: string }
+
 function OrbitRing({ radius, items, duration, reverse, size = 50, fontSize = 11, dashed }: {
-  radius: number; items: string[]; duration: number; reverse?: boolean
+  radius: number; items: OrbitItem[]; duration: number; reverse?: boolean
   size?: number; fontSize?: number; dashed?: boolean
 }) {
+  const iconSize = Math.round(size * 0.46)
   return (
     <div style={{
       position: 'absolute',
@@ -834,7 +838,7 @@ function OrbitRing({ radius, items, duration, reverse, size = 50, fontSize = 11,
         const x = Math.cos(angle) * radius + radius
         const y = Math.sin(angle) * radius + radius
         return (
-          <div key={it} style={{
+          <div key={it.label} title={it.label} style={{
             position: 'absolute', left: x - size / 2, top: y - size / 2,
             width: size, height: size, borderRadius: 50,
             background: 'var(--panel)', border: '1px solid var(--line-2)',
@@ -842,7 +846,9 @@ function OrbitRing({ radius, items, duration, reverse, size = 50, fontSize = 11,
             fontSize, fontWeight: 500, color: 'var(--ink-dim)',
             animation: `orbit-rotate ${duration}s linear infinite ${reverse ? '' : 'reverse'}`,
             boxShadow: 'var(--shadow-soft)',
-          }}>{it}</div>
+          }}>
+            {it.Icon ? <it.Icon size={iconSize} color={it.color ?? 'var(--ink-dim)'} /> : it.label}
+          </div>
         )
       })}
     </div>
@@ -884,9 +890,24 @@ function Integrations() {
                 animation: 'float 4s ease-in-out infinite',
                 zIndex: 3, position: 'relative',
               }}>Ayooda</div>
-              <OrbitRing radius={130} items={['Slack', 'Gmail', 'Intercom', 'Zendesk']} duration={40} size={52} fontSize={11} />
-              <OrbitRing radius={200} items={['Shopify', 'Stripe', 'HubSpot', 'Salesforce', 'Notion', 'Linear']} duration={70} reverse size={54} fontSize={11} />
-              <OrbitRing radius={260} items={['MCP', 'Webhooks', 'REST', 'GraphQL', 'SQL', 'S3', 'Segment', 'Zapier']} duration={100} size={48} fontSize={10} dashed />
+              <OrbitRing radius={130} duration={40} size={52} items={[
+                { label: 'WhatsApp', Icon: SiWhatsapp, color: '#25D366' },
+                { label: 'Gmail', Icon: SiGmail, color: '#EA4335' },
+                { label: 'Intercom', Icon: SiIntercom, color: '#3B82F6' },
+                { label: 'Zendesk', Icon: SiZendesk, color: '#f4f4f0' },
+              ]} />
+              <OrbitRing radius={200} duration={70} reverse size={54} items={[
+                { label: 'Shopify', Icon: SiShopify, color: '#95BF47' },
+                { label: 'Stripe', Icon: SiStripe, color: '#635BFF' },
+                { label: 'HubSpot', Icon: SiHubspot, color: '#FF7A59' },
+                { label: 'Airtable', Icon: SiAirtable, color: '#FCB400' },
+                { label: 'Notion', Icon: SiNotion, color: '#f4f4f0' },
+                { label: 'Linear', Icon: SiLinear, color: '#9CA3F0' },
+              ]} />
+              <OrbitRing radius={260} duration={100} size={48} fontSize={10} dashed items={[
+                { label: 'MCP' }, { label: 'Webhooks' }, { label: 'REST' }, { label: 'GraphQL' },
+                { label: 'SQL' }, { label: 'S3' }, { label: 'Segment' }, { label: 'Zapier' },
+              ]} />
             </div>
           </div>
         </div>
