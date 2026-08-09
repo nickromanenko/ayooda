@@ -1,0 +1,48 @@
+# Build-context ignore for the web image. BuildKit prefers
+# `<dockerfile>.dockerignore` over the repo-root `.dockerignore` (which excludes
+# apps/web, tuned for the API image). Requires DOCKER_BUILDKIT=1. Keeps the web
+# sources + shared package + root manifests.
+
+# Dependencies (re-installed inside the image)
+**/node_modules
+.pnpm-store
+
+# Build outputs
+**/dist
+**/.next
+**/out
+**/.turbo
+**/tsconfig.tsbuildinfo
+
+# Environment files & secrets
+.env
+.env.*
+service-account.json
+*.key.json
+gh-deployer-key.json
+
+# Firebase local state
+.firebase
+firebase-debug.log
+firestore-debug.log
+
+# Apps not built into this image
+apps/api
+apps/scraper
+apps/widget
+
+# VCS, OS, editor cruft
+.git
+.gitignore
+.github
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+.claude
+.playwright-mcp
+
+# Docs & generated assets
+docs
+design
+generated-images
