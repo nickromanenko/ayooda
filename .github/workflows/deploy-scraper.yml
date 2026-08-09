@@ -1,0 +1,54 @@
+name: Deploy Scraper to Cloud Run Jobs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/scraper/**'
+      - 'packages/shared/**'
+      - '.github/workflows/deploy-scraper.yml'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ayooda-1791f
+  REGION: us-central1
+  JOB: ayooda-scraper
+  AR_REPO: ayooda
+  DOCKER_BUILDKIT: '1'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # BuildKit picks apps/scraper/Dockerfile.dockerignore over the repo-root
+      # .dockerignore (which excludes apps/scraper), so the monorepo context
+      # includes the scraper sources.
+      - name: Build and push image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/scraper:${IMAGE_TAG}"
+          docker build -f apps/scraper/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Update Cloud Run Job
+        run: |
+          gcloud run jobs update "$JOB" \
+            --image="$IMAGE" \
+            --region="$REGION" \
+            --quiet

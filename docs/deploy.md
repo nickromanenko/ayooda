@@ -2,6 +2,8 @@
 
 Ships the whole stack to the `ayooda-1791f` Firebase/GCP project. Follow the sections in order — later steps depend on earlier ones. **Deploy the API and web together**: the web app calls only the current API surface (the old `/workspace/agent` and `/workspace/key` endpoints were removed).
 
+> **How deploys run.** The **API** (`ayooda-api` Cloud Run service) and **scraper** (`ayooda-scraper` Cloud Run Job) deploy via **GitHub Actions** on push to `master` — `.github/workflows/deploy-api.yml` and `deploy-scraper.yml` build to **Artifact Registry** (`us-central1-docker.pkg.dev/ayooda-1791f/ayooda/{api,scraper}`) and roll out; both also support manual `workflow_dispatch`. The **web** auto-deploys via Firebase App Hosting on `master`. These CI flows do **not** set env vars/secrets — those persist on the service/job and are configured once via the commands below. The **widget** and **Firestore** deploy from the CLI (§2, §4a).
+
 ## Prerequisites
 
 ```bash
@@ -16,7 +18,7 @@ firebase use ayooda-1791f
 ## 0. One-time infra & accounts
 
 - **Firebase**: Firestore (Native mode), Authentication (Google + Email/Password), a Storage bucket (`ayooda-1791f.firebasestorage.app`), and a service-account JSON (Project settings → Service accounts).
-- **Pinecone**: create the production index **`ayooda-prod`** — **768 dimensions, cosine** metric (must match `gemini-embedding-001` @ 768). The old `ayooda-dev` index is not reused; its vectors are incompatible (see §6).
+- **Pinecone**: the active index is **`ayooda-dev`** — **768 dimensions, cosine** (must match `gemini-embedding-001` @ 768). A dedicated `ayooda-prod` index is optional and currently deferred; if you create one, point `PINECONE_INDEX` on both the API service and the scraper job at it and re-index (§6).
 - **Vercel AI Gateway**: create an account and an API key. The free tier serves only some models (Gemini Flash); **add paid credits** to use Claude / GPT / Gemini Pro. A workspace agent can also bring its own Gateway key.
 - **Stripe**: a Stripe account (test or live) for billing (§3).
 
@@ -81,37 +83,38 @@ Served at `https://ayooda-1791f.web.app/widget.js` (set `WIDGET_BASE_URL` to thi
 
 ### 4b. API → Cloud Run
 
-```bash
-gcloud builds submit apps/api \
-  --tag gcr.io/ayooda-1791f/ayooda-api \
-  --ignore-file apps/api/.dockerignore
+The image build + rollout is automatic: pushing to `master` (any change under `apps/api/**` or `packages/shared/**`) runs `deploy-api.yml`, which builds `us-central1-docker.pkg.dev/ayooda-1791f/ayooda/api:<sha>` and `gcloud run deploy ayooda-api`. Trigger a build without a code change with `gh workflow run deploy-api.yml`.
 
-gcloud run deploy ayooda-api \
-  --image gcr.io/ayooda-1791f/ayooda-api \
-  --platform managed --region us-central1 --allow-unauthenticated \
-  --memory 512Mi --min-instances 0 --max-instances 10 \
-  --set-secrets "FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest,PINECONE_API_KEY=pinecone-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,API_KEY_ENCRYPTION_SECRET=api-key-encryption-secret:latest,AI_GATEWAY_API_KEY=ai-gateway-api-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest" \
-  --set-env-vars "FIREBASE_PROJECT_ID=ayooda-1791f,FIREBASE_STORAGE_BUCKET=ayooda-1791f.firebasestorage.app,PINECONE_INDEX=ayooda-prod,WIDGET_BASE_URL=https://ayooda-1791f.web.app,ALLOWED_ORIGINS=https://<web-domain>,API_PUBLIC_URL=https://<api-domain>,WEB_PUBLIC_URL=https://<web-domain>,STRIPE_PRICE_LITE=price_...,STRIPE_PRICE_CORE=price_...,STRIPE_PRICE_MAX=price_...,STRIPE_PRICE_OVERAGE=price_...,STRIPE_OVERAGE_METER_EVENT=ayooda_overage_conversations,BILLING_SUCCESS_URL=https://<web-domain>/dashboard/billing?checkout=success,BILLING_CANCEL_URL=https://<web-domain>/dashboard/billing?checkout=cancel,SCRAPER_JOB_URL=<set-after-4c>"
+CI never touches env/secrets. Configure them **once** on the service (they persist across revisions). Create the four sensitive Secret Manager secrets per §1, grant the runtime service account `roles/secretmanager.secretAccessor` on each, then:
+
+```bash
+gcloud run services update ayooda-api --region us-central1 \
+  --update-secrets "FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest,PINECONE_API_KEY=pinecone-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,API_KEY_ENCRYPTION_SECRET=api-key-encryption-secret:latest,AI_GATEWAY_API_KEY=ai-gateway-api-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest" \
+  --update-env-vars "FIREBASE_PROJECT_ID=ayooda-1791f,FIREBASE_STORAGE_BUCKET=ayooda-1791f.firebasestorage.app,PINECONE_INDEX=ayooda-dev,WIDGET_BASE_URL=https://ayooda-1791f.web.app,ALLOWED_ORIGINS=https://<web-domain>,API_PUBLIC_URL=https://<api-domain>,WEB_PUBLIC_URL=https://<web-domain>,STRIPE_PRICE_LITE=price_...,STRIPE_PRICE_CORE=price_...,STRIPE_PRICE_MAX=price_...,STRIPE_PRICE_OVERAGE=price_...,STRIPE_OVERAGE_METER_EVENT=ayooda_overage_conversations,BILLING_SUCCESS_URL=https://<web-domain>/dashboard/billing?checkout=success,BILLING_CANCEL_URL=https://<web-domain>/dashboard/billing?checkout=cancel,SCRAPER_JOB_URL=<set-after-4c>"
 ```
 
-**Env checklist (must all be present):** secrets — `FIREBASE_SERVICE_ACCOUNT_KEY`, `PINECONE_API_KEY`, `GEMINI_API_KEY`, `API_KEY_ENCRYPTION_SECRET`, `AI_GATEWAY_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; config — `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `PINECONE_INDEX=ayooda-prod`, `WIDGET_BASE_URL`, `ALLOWED_ORIGINS`, `API_PUBLIC_URL`, `WEB_PUBLIC_URL`, `STRIPE_PRICE_LITE/CORE/MAX`, `STRIPE_PRICE_OVERAGE`, `STRIPE_OVERAGE_METER_EVENT`, `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`, `SCRAPER_JOB_URL`. Note the deployed service URL and use it for `API_PUBLIC_URL` + the web's `NEXT_PUBLIC_API_URL`.
+Any `--update-env-vars` / `--update-secrets` call mints a new revision — that *is* the redeploy that picks up the config.
+
+**Env checklist (must all be present):** secrets — `FIREBASE_SERVICE_ACCOUNT_KEY`, `PINECONE_API_KEY`, `GEMINI_API_KEY`, `API_KEY_ENCRYPTION_SECRET`, `AI_GATEWAY_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; config — `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `PINECONE_INDEX=ayooda-dev`, `WIDGET_BASE_URL`, `ALLOWED_ORIGINS`, `API_PUBLIC_URL`, `WEB_PUBLIC_URL`, `STRIPE_PRICE_LITE/CORE/MAX`, `STRIPE_PRICE_OVERAGE`, `STRIPE_OVERAGE_METER_EVENT`, `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`, `SCRAPER_JOB_URL`. Note the deployed service URL and use it for `API_PUBLIC_URL` + the web's `NEXT_PUBLIC_API_URL`.
 
 ### 4c. Scraper → Cloud Run Job
 
-```bash
-gcloud builds submit apps/scraper \
-  --tag gcr.io/ayooda-1791f/ayooda-scraper --ignore-file apps/scraper/.dockerignore
+The image updates automatically: pushing to `master` (any change under `apps/scraper/**` or `packages/shared/**`) runs `deploy-scraper.yml`, which builds `us-central1-docker.pkg.dev/ayooda-1791f/ayooda/scraper:<sha>` and `gcloud run jobs update ayooda-scraper`. The build uses `apps/scraper/Dockerfile.dockerignore` (BuildKit picks it over the repo-root `.dockerignore`, which excludes `apps/scraper`) — do not delete it or the CI build breaks.
 
+Create the job **once** (CI only updates the image thereafter):
+
+```bash
 gcloud run jobs create ayooda-scraper \
-  --image gcr.io/ayooda-1791f/ayooda-scraper --region us-central1 \
-  --memory 1Gi --cpu 2 --task-timeout 10m --max-retries 1 \
+  --image us-central1-docker.pkg.dev/ayooda-1791f/ayooda/scraper:latest --region us-central1 \
+  --memory 2Gi --cpu 2 --task-timeout 900s --max-retries 1 \
+  --service-account <runtime-sa> \
   --set-secrets "FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest,PINECONE_API_KEY=pinecone-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest" \
-  --set-env-vars "FIREBASE_PROJECT_ID=ayooda-1791f,FIREBASE_STORAGE_BUCKET=ayooda-1791f.firebasestorage.app,PINECONE_INDEX=ayooda-prod"
+  --set-env-vars "FIREBASE_PROJECT_ID=ayooda-1791f,FIREBASE_STORAGE_BUCKET=ayooda-1791f.firebasestorage.app,PINECONE_INDEX=ayooda-dev"
 ```
 
-Then set `SCRAPER_JOB_URL` on the API service to the job's run URL:
-`https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/ayooda-1791f/jobs/ayooda-scraper:run`
-and grant the API's service account `roles/run.invoker` on the job. (Per-doc vars `WORKSPACE_ID`/`AGENT_ID`/`DOC_ID`/`DOC_TYPE`/`URL`/`STORAGE_PATH`/`PINECONE_NAMESPACE` are injected per run by the API — do not set them on the job.)
+Then set `SCRAPER_JOB_URL` on the API service to the job's **Cloud Run v2** run URL (the trigger in `apps/api/src/lib/scraper.ts` posts the `overrides.containerOverrides` v2 body and authenticates with a metadata access token):
+`https://run.googleapis.com/v2/projects/ayooda-1791f/locations/us-central1/jobs/ayooda-scraper:run`
+and grant the API's runtime service account `roles/run.invoker` on the job. (Per-doc vars `WORKSPACE_ID`/`AGENT_ID`/`DOC_ID`/`DOC_TYPE`/`URL`/`STORAGE_PATH`/`PINECONE_NAMESPACE` are injected per run by the API — do not set them on the job.)
 
 ### 4d. Web → Firebase App Hosting
 
@@ -137,7 +140,7 @@ Run each from a machine with the production env loaded (`cd apps/api && set -a &
 
 ## 6. Re-index existing knowledge
 
-Existing knowledge vectors are not carried over: they were embedded against the old index and now belong in **per-agent namespaces** in `ayooda-prod`. For each existing knowledge doc, re-run ingestion — via the dashboard **Knowledge → re-index** button per doc, or a scripted pass that re-triggers `triggerIngestion` for every `agents/{id}/knowledge` doc. New scrapes/uploads index correctly with no action.
+Because the deployment stays on **`ayooda-dev`**, existing vectors are preserved in their original (legacy) namespaces — `migrate-agents.ts` does not re-embed. Re-indexing is only needed if you (a) move to a fresh `ayooda-prod` index, or (b) want existing docs served from their new **per-agent namespaces**. In either case, re-run ingestion per doc — the dashboard **Knowledge → re-index** button, or a scripted pass re-triggering `triggerIngestion` for every `agents/{id}/knowledge` doc. New scrapes/uploads always index into the per-agent namespace with no action.
 
 ---
 
@@ -145,7 +148,7 @@ Existing knowledge vectors are not carried over: they were embedded against the 
 
 - [ ] Sign up (Google or email/password) → land in the dashboard.
 - [ ] Complete onboarding → a **default agent** is created.
-- [ ] Add a knowledge URL/file → it reaches **`indexed`** (validates the scraper + Pinecone `ayooda-prod` path).
+- [ ] Add a knowledge URL/file → it reaches **`indexed`** (validates the scraper job trigger + Pinecone `ayooda-dev` path).
 - [ ] Open the widget embed on a test page → chat returns a **grounded** answer (use a **Gemini** model — works on the free Gateway tier).
 - [ ] **Billing** page shows usage against the included pack; a checkout creates a subscription with **two items** (flat + metered).
 - [ ] Add a **Workflow** rule (e.g. "ask for a human") → a matching message moves the conversation to the inbox **Waiting** queue; take it over.
