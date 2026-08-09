@@ -2,7 +2,7 @@
 
 Ships the whole stack to the `ayooda-1791f` Firebase/GCP project. Follow the sections in order — later steps depend on earlier ones. **Deploy the API and web together**: the web app calls only the current API surface (the old `/workspace/agent` and `/workspace/key` endpoints were removed).
 
-> **How deploys run.** The **API** (`ayooda-api` Cloud Run service) and **scraper** (`ayooda-scraper` Cloud Run Job) deploy via **GitHub Actions** on push to `master` — `.github/workflows/deploy-api.yml` and `deploy-scraper.yml` build to **Artifact Registry** (`us-central1-docker.pkg.dev/ayooda-1791f/ayooda/{api,scraper}`) and roll out; both also support manual `workflow_dispatch`. The **web** auto-deploys via Firebase App Hosting on `master`. These CI flows do **not** set env vars/secrets — those persist on the service/job and are configured once via the commands below. The **widget** and **Firestore** deploy from the CLI (§2, §4a).
+> **How deploys run.** The **API** (`ayooda-api` Cloud Run service), **web** (`ayooda-web` Cloud Run service), and **scraper** (`ayooda-scraper` Cloud Run Job) each deploy via **GitHub Actions** on push to `master` — `.github/workflows/deploy-api.yml`, `deploy-web.yml`, and `deploy-scraper.yml` build to **Artifact Registry** (`us-central1-docker.pkg.dev/ayooda-1791f/ayooda/{api,web,scraper}`) and roll out; all support manual `workflow_dispatch`. These CI flows do **not** set env vars/secrets — those persist on the service/job and are configured once via the commands below. **Firebase Hosting** fronts the web (`ayooda.live`) and API (`api.ayooda.live`) with a CDN via rewrites to their Cloud Run services; the **widget** (`cdn.ayooda.live`), Hosting rewrites, and **Firestore** deploy from the CLI (§2, §4a, §4d). Firebase **App Hosting is not used** — its buildpack can't install this pnpm workspace ([firebase-tools#10435](https://github.com/firebase/firebase-tools/issues/10435)).
 
 ## Prerequisites
 
@@ -79,7 +79,7 @@ pnpm --filter widget build
 firebase deploy --only hosting:widget
 ```
 
-Served at `https://ayooda-1791f.web.app/widget.js` (set `WIDGET_BASE_URL` to this origin below).
+Served at `https://ayooda-widget.web.app/widget.js`, with the branded custom domain `https://cdn.ayooda.live/widget.js` (a CNAME on the `ayooda-widget` site). Set `WIDGET_BASE_URL=https://cdn.ayooda.live` on the API (below) so generated embed codes use the branded URL. The `ayooda-widget` site also redirects its bare root to `https://ayooda.live` (see `firebase.json`).
 
 ### 4b. API → Cloud Run
 
@@ -116,13 +116,17 @@ Then set `SCRAPER_JOB_URL` on the API service to the job's **Cloud Run v2** run 
 `https://run.googleapis.com/v2/projects/ayooda-1791f/locations/us-central1/jobs/ayooda-scraper:run`
 and grant the API's runtime service account `roles/run.invoker` on the job. (Per-doc vars `WORKSPACE_ID`/`AGENT_ID`/`DOC_ID`/`DOC_TYPE`/`URL`/`STORAGE_PATH`/`PINECONE_NAMESPACE` are injected per run by the API — do not set them on the job.)
 
-### 4d. Web → Firebase App Hosting
+### 4d. Web → Cloud Run + Firebase Hosting
 
-Set `NEXT_PUBLIC_API_URL` (the Cloud Run API URL) and the `NEXT_PUBLIC_FIREBASE_*` values in `apps/web/apphosting.yaml`, plus the server-side `FIREBASE_SERVICE_ACCOUNT_KEY`. Then push to `master` (App Hosting auto-deploys) or:
+The web app runs on Cloud Run (`ayooda-web`, us-central1), built from `apps/web/Dockerfile` (Next.js `output: 'standalone'`) and deployed by `deploy-web.yml` on every `master` push touching `apps/web/**` or `packages/shared/**`. The public Firebase config (`NEXT_PUBLIC_*`) is baked at build time via `--build-arg` in the workflow; the server-side `FIREBASE_PROJECT_ID` (env) and `FIREBASE_SERVICE_ACCOUNT_KEY` (secret) are set on the service by the workflow's `gcloud run deploy`.
+
+`ayooda.live` is served by **Firebase Hosting** (default site `ayooda-1791f`) rewriting all requests to the `ayooda-web` Cloud Run service — same pattern as the API — which puts Hosting's CDN in front for static-asset caching. Deploy the rewrite config with:
 
 ```bash
-firebase apphosting:rollouts:create --project ayooda-1791f --backend <backend-id>
+firebase deploy --only hosting:web
 ```
+
+Then, one-time in the console: add `ayooda.live` (+ `www`) as a custom domain on the `ayooda-1791f` Hosting site, point DNS at the IPs it shows, and add `ayooda.live` to **Authentication → Settings → Authorized domains** (or via the Identity Toolkit `admin/v2/.../config` API) so Google sign-in works.
 
 **Deploy the web at the same time as the API (§4b).**
 
