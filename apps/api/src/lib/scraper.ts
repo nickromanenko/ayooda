@@ -34,7 +34,32 @@ export function triggerIngestion(params: IngestionJobParams): void {
   }
 }
 
-async function triggerCloudRunJob(jobUrl: string, params: IngestionJobParams): Promise<void> {
+/**
+ * Fetch an OAuth2 access token for the runtime service account from the GCP
+ * metadata server. Required to call the Cloud Run Admin API (run.googleapis.com):
+ * outbound fetch from Cloud Run is NOT auto-authenticated — the app must obtain
+ * and attach the token itself. Only reachable when running on GCP (Cloud Run);
+ * in local dev SCRAPER_JOB_URL is empty so this path never runs.
+ */
+async function fetchMetadataAccessToken(): Promise<string> {
+  const res = await fetch(
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+    { headers: { 'Metadata-Flavor': 'Google' } },
+  )
+  if (!res.ok) {
+    throw new Error(`metadata token request failed: HTTP ${res.status}`)
+  }
+  const json = (await res.json()) as { access_token?: string }
+  if (!json.access_token) {
+    throw new Error('metadata token response missing access_token')
+  }
+  return json.access_token
+}
+
+export async function triggerCloudRunJob(
+  jobUrl: string,
+  params: IngestionJobParams,
+): Promise<void> {
   const jobEnv = [
     { name: 'WORKSPACE_ID', value: params.workspaceId },
     { name: 'DOC_ID', value: params.docId },
@@ -55,12 +80,15 @@ async function triggerCloudRunJob(jobUrl: string, params: IngestionJobParams): P
     },
   }
 
-  // Cloud Run Jobs requires an OIDC token when called from another GCP service.
-  // When running on Cloud Run itself, the metadata server provides one automatically
-  // via the Authorization header populated by the service account.
+  // The Cloud Run Admin API requires an OAuth2 Bearer access token for the
+  // runtime service account (which must hold roles/run.invoker on the job).
+  const accessToken = await fetchMetadataAccessToken()
   const res = await fetch(jobUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: JSON.stringify(body),
   })
 
