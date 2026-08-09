@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo, CSSProperties, ReactNode } from 'react'
+import { useState, useEffect, useRef, useMemo, CSSProperties, ReactNode, ComponentType } from 'react'
 import Link from 'next/link'
-import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier, SiWhatsapp, SiGmail, SiAirtable } from 'react-icons/si'
-import type { IconType } from 'react-icons'
-import { Sparkles, Zap, Rocket } from 'lucide-react'
+import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier, SiWhatsapp, SiGmail, SiAirtable, SiGraphql, SiModelcontextprotocol } from 'react-icons/si'
+import { Sparkles, Zap, Rocket, Webhook, Braces, Database, Boxes, Network } from 'lucide-react'
 
 // ─── Reveal ───────────────────────────────────────────────────────────────────
 
@@ -818,7 +817,7 @@ function HowItWorks() {
 
 // ─── Integrations ─────────────────────────────────────────────────────────────
 
-type OrbitItem = { label: string; Icon?: IconType; color?: string }
+type OrbitItem = { label: string; Icon?: ComponentType<{ size?: number; color?: string }>; color?: string }
 
 function OrbitRing({ radius, items, duration, reverse, size = 50, fontSize = 11, dashed }: {
   radius: number; items: OrbitItem[]; duration: number; reverse?: boolean
@@ -904,9 +903,15 @@ function Integrations() {
                 { label: 'Notion', Icon: SiNotion, color: '#f4f4f0' },
                 { label: 'Linear', Icon: SiLinear, color: '#9CA3F0' },
               ]} />
-              <OrbitRing radius={260} duration={100} size={48} fontSize={10} dashed items={[
-                { label: 'MCP' }, { label: 'Webhooks' }, { label: 'REST' }, { label: 'GraphQL' },
-                { label: 'SQL' }, { label: 'S3' }, { label: 'Segment' }, { label: 'Zapier' },
+              <OrbitRing radius={260} duration={100} size={48} dashed items={[
+                { label: 'MCP', Icon: SiModelcontextprotocol, color: '#f4f4f0' },
+                { label: 'Webhooks', Icon: Webhook, color: '#9CA3F0' },
+                { label: 'REST', Icon: Braces, color: '#8be3b5' },
+                { label: 'GraphQL', Icon: SiGraphql, color: '#E10098' },
+                { label: 'SQL', Icon: Database, color: '#7aa2ff' },
+                { label: 'S3', Icon: Boxes, color: '#FF9900' },
+                { label: 'Segment', Icon: Network, color: '#52BD94' },
+                { label: 'Zapier', Icon: SiZapier, color: '#FF4F00' },
               ]} />
             </div>
           </div>
