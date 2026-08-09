@@ -55,6 +55,17 @@ html, body {
   color: var(--ink);
 }
 
+/* Anchor-nav offset for the fixed header + smooth scrolling (respecting
+   users who prefer reduced motion). */
+html {
+  scroll-padding-top: 84px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11";
