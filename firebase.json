@@ -4,6 +4,9 @@
       "target": "widget",
       "public": "apps/widget/dist",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "redirects": [
+        { "source": "/", "destination": "https://ayooda.live", "type": 301 }
+      ],
       "headers": [
         {
           "source": "/widget.js",
