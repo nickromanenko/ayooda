@@ -75,7 +75,7 @@ export default function AgentsPage() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Agents</h1>
           <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Each agent has its own persona, model, key, knowledge, and tools. Channels pick which agent answers.</p>
