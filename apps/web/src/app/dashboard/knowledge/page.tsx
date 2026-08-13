@@ -59,7 +59,11 @@ export default function KnowledgePage() {
       if (res.ok) {
         const d = await res.json() as { agents: { id: string; name: string; isDefault: boolean }[] }
         setAgentList(d.agents)
-        setAgentId((prev) => prev || d.agents.find((a) => a.isDefault)?.id || d.agents[0]?.id || '')
+        // Pre-select the agent passed via ?agent=<id> (e.g. from the agent
+        // editor's "Manage knowledge" link); else fall back to the default agent.
+        const wanted = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('agent') : null
+        const preselect = wanted && d.agents.some((a) => a.id === wanted) ? wanted : undefined
+        setAgentId((prev) => prev || preselect || d.agents.find((a) => a.isDefault)?.id || d.agents[0]?.id || '')
       }
     })()
   }, [])

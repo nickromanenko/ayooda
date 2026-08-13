@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, Plus, Trash2, Star } from 'lucide-react'
+import Link from 'next/link'
+import { Loader2, Plus, Trash2, Star, FileText, BookOpen } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { LLM_MODELS, type AgentDoc } from '@ayooda/shared'
 
@@ -19,6 +20,8 @@ export default function AgentsPage() {
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState('')
   const [creating, setCreating] = useState(false)
+  const [agentDocs, setAgentDocs] = useState<{ id: string; source: string; status: string }[]>([])
+  const [docsLoading, setDocsLoading] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -27,6 +30,20 @@ export default function AgentsPage() {
     } finally { setLoading(false) }
   }, [])
   useEffect(() => { void load() }, [load])
+
+  // Load the editing agent's connected knowledge (keyed on id so it doesn't
+  // refetch while typing in the editor fields).
+  const editorId = editor?.id
+  useEffect(() => {
+    if (!editorId) { setAgentDocs([]); return }
+    let cancelled = false
+    setDocsLoading(true)
+    apiRequest(`/agents/${editorId}/knowledge`)
+      .then(async (res) => { if (res.ok && !cancelled) setAgentDocs(await res.json() as { id: string; source: string; status: string }[]) })
+      .catch(() => { /* non-blocking */ })
+      .finally(() => { if (!cancelled) setDocsLoading(false) })
+    return () => { cancelled = true }
+  }, [editorId])
 
   function edit(a: AgentDoc) {
     setEditor({ id: a.id, name: a.name, description: a.description, systemPrompt: a.systemPrompt, llmModel: a.llmModel, isDefault: a.isDefault })
@@ -110,6 +127,29 @@ export default function AgentsPage() {
           <select value={editor.llmModel} onChange={(e) => setEditor({ ...editor, llmModel: e.target.value })} style={input}>
             {LLM_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label} — {m.description}</option>)}
           </select>
+
+          <p style={{ ...label, marginTop: 16 }}>Knowledge</p>
+          <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', padding: '12px 14px', background: 'var(--bg-2)' }}>
+            {docsLoading ? (
+              <p style={{ fontSize: 12.5, color: 'var(--ink-mute)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</p>
+            ) : agentDocs.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: 'var(--ink-mute)', margin: 0 }}>No knowledge connected to this agent yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {agentDocs.map((k) => (
+                  <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <FileText size={14} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} />
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.source}</span>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: k.status === 'indexed' ? 'var(--mint)' : k.status === 'error' ? '#f87171' : 'var(--accent)', flexShrink: 0 }}>{k.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <Link href={`/dashboard/knowledge?agent=${editor.id}`} className="btn btn-ghost" style={{ marginTop: 12, borderRadius: 'var(--r-sm)', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <BookOpen size={14} /> Manage knowledge
+          </Link>
+
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button type="button" onClick={() => void save()} disabled={saving} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>{saving ? 'Saving…' : 'Save agent'}</button>
             <button type="button" onClick={() => setEditor(null)} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>Cancel</button>
