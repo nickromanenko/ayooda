@@ -99,11 +99,11 @@ export async function triggerCloudRunJob(
 }
 
 function triggerLocal(params: IngestionJobParams): void {
-  // Resolve path to scraper entry relative to this file's location:
-  //   apps/api/src/lib/scraper.ts  →  ../../..  →  apps/
-  //   then ../scraper/src/index.ts
+  // Resolve path to the scraper entry relative to this file's location:
+  //   apps/api/src/lib/scraper.ts  →  ../../../ (up 3)  →  apps/
+  //   then scraper/src/index.ts
   const __dirname = path.dirname(fileURLToPath(import.meta.url))
-  const scraperEntry = path.resolve(__dirname, '../../../../scraper/src/index.ts')
+  const scraperEntry = path.resolve(__dirname, '../../../scraper/src/index.ts')
 
   const env = {
     ...process.env,
@@ -118,10 +118,14 @@ function triggerLocal(params: IngestionJobParams): void {
 
   console.log(`[scraper-trigger] Spawning local scraper for docId=${params.docId}`)
 
+  // Local dev only (triggerLocal runs when SCRAPER_JOB_URL is empty), so surface
+  // the scraper's stderr in the API console and log spawn failures — otherwise a
+  // broken spawn leaves the doc stuck at "pending" with no clue why.
   const child = spawn('bun', ['run', scraperEntry], {
     env,
     detached: true,
-    stdio: ['ignore', 'ignore', 'ignore'],
+    stdio: ['ignore', 'ignore', 'inherit'],
   })
+  child.on('error', (err) => console.error('[scraper-trigger] failed to spawn local scraper:', err))
   child.unref()
 }
