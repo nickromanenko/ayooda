@@ -138,4 +138,41 @@ describe('runAgentTurn', () => {
     while (!(await gen.next()).done) { /* drain */ }
     expect(seenTools).toBeUndefined()
   })
+
+  test('a customer tool wins a name collision with a skill tool of the same name', async () => {
+    let seenTools: Record<string, unknown> | undefined
+    const customerTool = mkTool({ name: 'lookup', description: 'customer version' })
+    const skillTools = { lookup: { description: 'skill version' } } as unknown as import('ai').ToolSet
+    const gen = runAgentTurn(
+      { model: 'm', systemPrompt: 's', messages: [], apiKey: 'k' }, [customerTool], fakeTrace,
+      { streamText: (o) => { seenTools = o.tools as Record<string, unknown>; return fakeStream(['x'], {}) } },
+      skillTools,
+    )
+    while (!(await gen.next()).done) { /* drain */ }
+    expect(seenTools).toBeDefined()
+    expect((seenTools!.lookup as { description: string }).description).toBe('customer version')
+  })
+
+  test('passes the skill tool set through when there are no customer tools', async () => {
+    let seenTools: Record<string, unknown> | undefined
+    const skillTools = { web_search: { description: 'search' } } as unknown as import('ai').ToolSet
+    const gen = runAgentTurn(
+      { model: 'm', systemPrompt: 's', messages: [], apiKey: 'k' }, [], fakeTrace,
+      { streamText: (o) => { seenTools = o.tools as Record<string, unknown>; return fakeStream(['x'], {}) } },
+      skillTools,
+    )
+    while (!(await gen.next()).done) { /* drain */ }
+    expect(seenTools).toEqual(skillTools as unknown as Record<string, unknown>)
+  })
+
+  test('passes undefined when both customer and skill tool sets are empty', async () => {
+    let seenTools: unknown = 'unset'
+    const gen = runAgentTurn(
+      { model: 'm', systemPrompt: 's', messages: [], apiKey: 'k' }, [], fakeTrace,
+      { streamText: (o) => { seenTools = o.tools; return fakeStream(['x'], {}) } },
+      {},
+    )
+    while (!(await gen.next()).done) { /* drain */ }
+    expect(seenTools).toBeUndefined()
+  })
 })

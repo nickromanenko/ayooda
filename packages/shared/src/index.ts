@@ -1,3 +1,6 @@
+import type { Subscription } from './plans'
+import type { SkillId, SkillConfig } from './skills'
+
 // LLM Providers (Claude, OpenAI, Gemini)
 export type LLMProvider = 'gemini' | 'claude' | 'openai'
 
@@ -147,6 +150,16 @@ export interface ConversationDoc {
   lastMessage: string
   channelType?: ChannelType
   telegramChatId?: number
+  agentId?: string                // which agent served this conversation (Task 7 writes it)
+  score?: number                  // 1–5, written by the scoring skill
+  summary?: string                // <= 500 chars
+  scoredAt?: Date
+  searchCallCount?: number        // web-search calls used by this conversation
+  autoClosedAt?: Date             // set when the sweep closed an idle conversation
+  pendingPostProcess?: boolean    // set on reaching `resolved`, cleared by the sweep
+  postProcessedAt?: Date          // stamped by the sweep once post-processing has run, regardless
+                                   // of which (if any) skills fired — the idempotency marker that
+                                   // doesn't depend on the scoring skill's own scoredAt field
 }
 
 // API types
@@ -195,49 +208,11 @@ export function validateKnowledgeFile(
 }
 
 // ---------------------------------------------------------------------------
-// Billing
-// ---------------------------------------------------------------------------
-
-export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired'
-export type PlanTier = 'lite' | 'core' | 'max'
-
-export interface Subscription {
-  status: SubscriptionStatus
-  tier: PlanTier | null
-  trialEndsAt: Date | null
-  currentPeriodEnd: Date | null
-  stripeCustomerId: string | null
-  stripeSubscriptionId: string | null
-}
-
-export interface PlanDef {
-  tier: PlanTier
-  name: string
-  priceUsd: number
-  conversationCap: number
-}
-
-export const PLANS: readonly PlanDef[] = [
-  { tier: 'lite', name: 'Lite', priceUsd: 25, conversationCap: 100 },
-  { tier: 'core', name: 'Core', priceUsd: 55, conversationCap: 500 },
-  { tier: 'max', name: 'Max', priceUsd: 195, conversationCap: 1500 },
-]
-
-export const TRIAL_DAYS = 14
-export const TRIAL_CONVERSATION_CAP = 50
-
-/** Overage: conversations beyond a plan's included pack are billed at this rate. */
-export const OVERAGE_RATE_USD = 0.05
-/** Safety ceiling for paying subscribers = includedCap × this multiplier. */
-export const OVERAGE_CEILING_MULTIPLIER = 10
-
-export function planFor(tier: PlanTier | null): PlanDef | undefined {
-  return tier ? PLANS.find((p) => p.tier === tier) : undefined
-}
-
-// ---------------------------------------------------------------------------
 // SSE events (widget <-> API)
 // ---------------------------------------------------------------------------
+
+export * from './plans'
+export * from './skills'
 
 export type ChatStreamEvent =
   | { type: 'chunk'; text: string }
@@ -491,4 +466,32 @@ export function applyTemplate(
     auth: { ...template.auth },
     kind: template.kind,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Skills — runtime documents and API views
+// ---------------------------------------------------------------------------
+
+export interface VisitorMemoryFact {
+  id: string
+  text: string
+  createdAt: Date
+  expiresAt: Date
+}
+
+/** workspaces/{ws}/visitorMemory/{visitorId} */
+export interface VisitorMemoryDoc {
+  facts: VisitorMemoryFact[]
+  nextExpiryAt: Date | null   // min(facts[].expiresAt); drives the purge query
+  updatedAt: Date
+}
+
+/** One row of GET /agents/:agentId/skills — catalogue merged with attachment state. */
+export interface AgentSkillView {
+  id: SkillId
+  label: string
+  description: string
+  enabled: boolean
+  config: SkillConfig
+  locked: boolean             // true when the workspace plan is below minTier
 }

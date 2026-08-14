@@ -1,4 +1,5 @@
 import { FieldValue } from 'firebase-admin/firestore'
+import type { ToolSet } from 'ai'
 import { adminDb } from '../firebase-admin'
 import { embedText, LEGACY_MODEL_MAP } from '../gemini'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
@@ -8,9 +9,12 @@ import { loadTools, type StoredTool } from './tools'
 import { resolveGatewayKey } from '../llm/resolve'
 import { resolveAgentDoc } from '../agents/agent-helpers'
 import { evaluateRules } from '../workflow/engine'
-import { type ChannelType, type WorkflowRule } from '@ayooda/shared'
+import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 import { emitOverageEvent } from '../billing/overage'
+import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
+import { gatherContext, gatherTools } from '../skills/run'
+import '../skills/all'
 
 export interface PrepareTurnInput {
   workspaceId: string
@@ -30,6 +34,7 @@ export interface ReadyTurn {
   trace: LangfuseTrace
   llmModel: string
   tools: StoredTool[]
+  skillTools: ToolSet
   persist: (reply: string, promptTokens: number, completionTokens: number) => Promise<string>
 }
 
@@ -41,6 +46,39 @@ export type PreparedTurn =
   | ReadyTurn
 
 const DEFAULT_HANDOFF = 'Let me connect you with someone from our team.'
+
+export type SilenceGate =
+  | { kind: 'proceed' }
+  | { kind: 'reopen'; update: Record<string, unknown> }
+  | { kind: 'silent' }
+
+/**
+ * Decides what a non-`bot` conversation status means for this turn.
+ *
+ * A human owning or queueing the conversation (`assigned`/`waiting`, or `resolved` from the
+ * inbox) still silences the bot — unchanged, long-standing behaviour. But a conversation the
+ * idle sweep closed carries `autoClosedAt`: WE ended it, the visitor did not, and the widget
+ * keeps the same conversationId in sessionStorage. Left silenced it would dead-end forever, so
+ * reopen it and answer normally.
+ *
+ * The reopen clears everything describing the closed state. Dropping `postProcessedAt` and
+ * `scoredAt` is deliberate: the conversation genuinely continued, so when it next closes its
+ * score and summary should cover the whole thing, not just the part before the visitor returned.
+ */
+export function evaluateSilenceGate(data: FirebaseFirestore.DocumentData | undefined): SilenceGate {
+  if (!data || !data.status || data.status === 'bot') return { kind: 'proceed' }
+  if (!data.autoClosedAt) return { kind: 'silent' }
+  return {
+    kind: 'reopen',
+    update: {
+      status: 'bot',
+      autoClosedAt: FieldValue.delete(),
+      pendingPostProcess: FieldValue.delete(),
+      postProcessedAt: FieldValue.delete(),
+      scoredAt: FieldValue.delete(),
+    },
+  }
+}
 
 /**
  * Channel-agnostic agent turn: billing gate → conversation setup → RAG → key resolution
@@ -94,6 +132,14 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const storedModel: string = agentRec.llmModel ?? 'gemini-flash-latest'
   const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
 
+  let skills: LoadedSkill[] = []
+  try {
+    const tier = (workspaceData.subscription?.tier as PlanTier | null | undefined) ?? null
+    skills = await loadEnabledSkills(workspaceId, agentRec.id, tier)
+  } catch (err) {
+    console.warn('[skills] load failed:', err)
+  }
+
   const trace = getLangfuse().trace({
     name: 'agent-chat',
     sessionId: conversationId,
@@ -109,11 +155,13 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
 
   // Silence guard: a conversation a human owns/queued never gets a bot reply.
-  if (convSnap.exists && convSnap.data()!.status && convSnap.data()!.status !== 'bot') {
+  const gate = evaluateSilenceGate(convSnap.exists ? convSnap.data() : undefined)
+  if (gate.kind === 'silent') {
     await convRef.collection('messages').add({ role: 'user', content: trimmed, createdAt: FieldValue.serverTimestamp() })
     await convRef.update({ updatedAt: FieldValue.serverTimestamp(), lastMessage: trimmed.slice(0, 200) })
     return { kind: 'silent' }
   }
+  if (gate.kind === 'reopen') await convRef.update(gate.update)
 
   if (!convSnap.exists) {
     // Billing gate — only NEW conversations are gated.
@@ -140,6 +188,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     await convRef.set({
       channelId,
       channelType,
+      agentId: agentRec.id,
       visitorId,
       status: 'bot',
       operatorId: null,
@@ -184,6 +233,19 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     console.warn('[agent-turn] RAG retrieval failed:', err)
   }
 
+  // Skill context (non-fatal): each skill's contributeContext hook is isolated in gatherContext,
+  // but guard the call itself too — belt and braces against gatherContext ever rejecting.
+  const skillCtx = {
+    workspaceId, agentId: agentRec.id, conversationId, visitorId,
+    message: trimmed, config: {}, trace,
+  }
+  let skillBlocks: string[] = []
+  try {
+    if (skills.length) skillBlocks = await gatherContext(skills, skillCtx)
+  } catch (err) {
+    console.warn('[skills] gatherContext failed:', err)
+  }
+
   // Escalation rules (non-fatal): evaluate after RAG so low-confidence is known.
   try {
     const rulesSnap = await adminDb.collection(`workspaces/${workspaceId}/workflowRules`).where('enabled', '==', true).get()
@@ -216,9 +278,10 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
   if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
 
+  const allBlocks = [...contextBlocks, ...skillBlocks]
   const contextSection =
-    contextBlocks.length > 0
-      ? `\n\nUse the following knowledge base context to inform your answer:\n---\n${contextBlocks.join('\n\n')}\n---`
+    allBlocks.length > 0
+      ? `\n\nUse the following knowledge base context to inform your answer:\n---\n${allBlocks.join('\n\n')}\n---`
       : ''
   const fullSystemPrompt = systemPrompt + contextSection
 
@@ -234,6 +297,15 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     tools = await loadTools(workspaceId, agentRec.id)
   } catch (err) {
     console.warn('[agent-turn] tool load failed:', err)
+  }
+
+  // Skill tools (non-fatal): each skill's contributeTools hook is isolated in gatherTools,
+  // but guard the call itself too — belt and braces against gatherTools ever rejecting.
+  let skillTools: ToolSet = {}
+  try {
+    if (skills.length) skillTools = await gatherTools(skills, skillCtx)
+  } catch (err) {
+    console.warn('[skills] gatherTools failed:', err)
   }
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
@@ -263,6 +335,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     trace,
     llmModel,
     tools,
+    skillTools,
     persist,
   }
 }

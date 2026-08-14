@@ -219,7 +219,7 @@ Backed by `POST https://api.tavily.com/search` with the platform key from `TAVIL
 
 **Cap**: `MAX_SEARCHES_PER_CONVERSATION = 3`, tracked as `searchCallCount` on the conversation document and incremented per call. Past the cap the tool returns the string `"Search limit reached for this conversation."` — the model reads it and adapts. A Tavily error likewise returns an error *string*, never a thrown exception: a rejected tool promise mid-stream would break the reply.
 
-Missing `TAVILY_API_KEY` disables the skill at load time with a logged warning, so a misconfigured deploy degrades instead of erroring per turn.
+When `TAVILY_API_KEY` is missing, `contributeTools` logs a warning and returns no tools, so the model never sees `web_search` at all and no LLM round trip is wasted calling a tool that cannot work. The check runs per turn rather than at module load — deliberately, since a key added later then takes effect without restarting the API. `runSearch` keeps its own empty-key guard as defence in depth.
 
 ## 8. Sweep — `POST /internal/sweep`
 
@@ -271,7 +271,7 @@ Locked skills render visibly, greyed, with an upgrade prompt — a skill the cus
 | Config fails schema at load | Falls back to `defaultConfig`, logged. A bad write cannot brick an agent. |
 | Unknown skill id in Firestore | Row skipped at load. |
 | Tavily error / cap exceeded | Tool returns an error string the model can read. Never throws. |
-| `TAVILY_API_KEY` missing | Skill disabled at load with a warning. |
+| `TAVILY_API_KEY` missing | `contributeTools` logs a warning and contributes no tool for that turn. |
 | Extraction or scoring fails | Logged; conversation still closes. |
 | One conversation fails in sweep | Caught per item; batch continues. |
 

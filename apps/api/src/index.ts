@@ -31,6 +31,8 @@ import teamRoutes from './routes/team'
 import toolRoutes from './routes/tools'
 import agentRoutes from './routes/agents'
 import workflowRoutes from './routes/workflows'
+import skillRoutes from './routes/skills'
+import internalRoutes from './routes/internal'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -42,10 +44,12 @@ app.route('/channels', channelRoutes)
 app.route('/conversations', conversationRoutes)
 app.route('/agents', agentRoutes)
 app.route('/agents/:agentId/tools', toolRoutes)
+app.route('/agents/:agentId/skills', skillRoutes)
 app.route('/workflows', workflowRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)
+app.route('/internal', internalRoutes)
 
 const port = parseInt(process.env.PORT ?? '3001')
 console.log(`API running on http://localhost:${port}`)

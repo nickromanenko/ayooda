@@ -112,7 +112,7 @@ telegram.post('/webhook/:channelId', async (c) => {
       }
 
       // Accumulate the full reply (Telegram doesn't stream), then send once.
-      const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace)
+      const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools)
       let reply = ''
       let promptTokens = 0
       let completionTokens = 0
