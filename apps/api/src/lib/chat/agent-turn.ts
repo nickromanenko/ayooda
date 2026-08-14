@@ -1,4 +1,5 @@
 import { FieldValue } from 'firebase-admin/firestore'
+import type { ToolSet } from 'ai'
 import { adminDb } from '../firebase-admin'
 import { embedText, LEGACY_MODEL_MAP } from '../gemini'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
@@ -8,9 +9,12 @@ import { loadTools, type StoredTool } from './tools'
 import { resolveGatewayKey } from '../llm/resolve'
 import { resolveAgentDoc } from '../agents/agent-helpers'
 import { evaluateRules } from '../workflow/engine'
-import { type ChannelType, type WorkflowRule } from '@ayooda/shared'
+import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 import { emitOverageEvent } from '../billing/overage'
+import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
+import { gatherContext, gatherTools } from '../skills/run'
+import '../skills/all'
 
 export interface PrepareTurnInput {
   workspaceId: string
@@ -30,6 +34,7 @@ export interface ReadyTurn {
   trace: LangfuseTrace
   llmModel: string
   tools: StoredTool[]
+  skillTools: ToolSet
   persist: (reply: string, promptTokens: number, completionTokens: number) => Promise<string>
 }
 
@@ -94,6 +99,14 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const storedModel: string = agentRec.llmModel ?? 'gemini-flash-latest'
   const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
 
+  let skills: LoadedSkill[] = []
+  try {
+    const tier = (workspaceData.subscription?.tier as PlanTier | null | undefined) ?? null
+    skills = await loadEnabledSkills(workspaceId, agentRec.id, tier)
+  } catch (err) {
+    console.warn('[skills] load failed:', err)
+  }
+
   const trace = getLangfuse().trace({
     name: 'agent-chat',
     sessionId: conversationId,
@@ -140,6 +153,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     await convRef.set({
       channelId,
       channelType,
+      agentId: agentRec.id,
       visitorId,
       status: 'bot',
       operatorId: null,
@@ -184,6 +198,13 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     console.warn('[agent-turn] RAG retrieval failed:', err)
   }
 
+  // Skill context (non-fatal): each skill's contributeContext hook is isolated in gatherContext.
+  const skillCtx = {
+    workspaceId, agentId: agentRec.id, conversationId, visitorId,
+    message: trimmed, config: {}, trace,
+  }
+  const skillBlocks = skills.length ? await gatherContext(skills, skillCtx) : []
+
   // Escalation rules (non-fatal): evaluate after RAG so low-confidence is known.
   try {
     const rulesSnap = await adminDb.collection(`workspaces/${workspaceId}/workflowRules`).where('enabled', '==', true).get()
@@ -216,9 +237,10 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
   if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
 
+  const allBlocks = [...contextBlocks, ...skillBlocks]
   const contextSection =
-    contextBlocks.length > 0
-      ? `\n\nUse the following knowledge base context to inform your answer:\n---\n${contextBlocks.join('\n\n')}\n---`
+    allBlocks.length > 0
+      ? `\n\nUse the following knowledge base context to inform your answer:\n---\n${allBlocks.join('\n\n')}\n---`
       : ''
   const fullSystemPrompt = systemPrompt + contextSection
 
@@ -235,6 +257,10 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   } catch (err) {
     console.warn('[agent-turn] tool load failed:', err)
   }
+
+  // Skill tools (non-fatal): each skill's contributeTools hook is isolated in gatherTools.
+  let skillTools: ToolSet = {}
+  if (skills.length) skillTools = await gatherTools(skills, skillCtx)
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
     const messageRef = await messagesRef.add({
@@ -263,6 +289,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     trace,
     llmModel,
     tools,
+    skillTools,
     persist,
   }
 }
