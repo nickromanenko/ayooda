@@ -34,11 +34,13 @@ echo -n "$API_KEY_ENCRYPTION_SECRET"          | gcloud secrets create api-key-en
 echo -n "$AI_GATEWAY_API_KEY"                 | gcloud secrets create ai-gateway-api-key          --data-file=-
 echo -n "$STRIPE_SECRET_KEY"                  | gcloud secrets create stripe-secret-key           --data-file=-
 echo -n "$STRIPE_WEBHOOK_SECRET"              | gcloud secrets create stripe-webhook-secret       --data-file=-
+echo -n "$TAVILY_API_KEY"                     | gcloud secrets create tavily-api-key              --data-file=-
+echo -n "$SWEEP_SECRET"                       | gcloud secrets create sweep-secret                --data-file=-
 # Optional tracing:
 # echo -n "$LANGFUSE_SECRET_KEY" | gcloud secrets create langfuse-secret-key --data-file=-
 ```
 
-> **`API_KEY_ENCRYPTION_SECRET` must stay stable** — rotating it invalidates every stored encrypted value (agent Gateway keys, tool secrets, Telegram bot tokens). `stripe-webhook-secret` is filled in after §3.
+> **`API_KEY_ENCRYPTION_SECRET` must stay stable** — rotating it invalidates every stored encrypted value (agent Gateway keys, tool secrets, Telegram bot tokens). `stripe-webhook-secret` is filled in after §3. Generate `SWEEP_SECRET` with something like `openssl rand -hex 32` — it only needs to match the value configured on the Cloud Scheduler job in §4e.
 
 ---
 
@@ -89,13 +91,34 @@ CI never touches env/secrets. Configure them **once** on the service (they persi
 
 ```bash
 gcloud run services update ayooda-api --region us-central1 \
-  --update-secrets "FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest,PINECONE_API_KEY=pinecone-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,API_KEY_ENCRYPTION_SECRET=api-key-encryption-secret:latest,AI_GATEWAY_API_KEY=ai-gateway-api-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest" \
+  --update-secrets "FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest,PINECONE_API_KEY=pinecone-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,API_KEY_ENCRYPTION_SECRET=api-key-encryption-secret:latest,AI_GATEWAY_API_KEY=ai-gateway-api-key:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,TAVILY_API_KEY=tavily-api-key:latest,SWEEP_SECRET=sweep-secret:latest" \
   --update-env-vars "FIREBASE_PROJECT_ID=ayooda-1791f,FIREBASE_STORAGE_BUCKET=ayooda-1791f.firebasestorage.app,PINECONE_INDEX=ayooda-dev,WIDGET_BASE_URL=https://ayooda-1791f.web.app,ALLOWED_ORIGINS=https://<web-domain>,API_PUBLIC_URL=https://<api-domain>,WEB_PUBLIC_URL=https://<web-domain>,STRIPE_PRICE_LITE=price_...,STRIPE_PRICE_CORE=price_...,STRIPE_PRICE_MAX=price_...,STRIPE_PRICE_OVERAGE=price_...,STRIPE_OVERAGE_METER_EVENT=ayooda_overage_conversations,BILLING_SUCCESS_URL=https://<web-domain>/dashboard/billing?checkout=success,BILLING_CANCEL_URL=https://<web-domain>/dashboard/billing?checkout=cancel,SCRAPER_JOB_URL=<set-after-4c>"
 ```
 
 Any `--update-env-vars` / `--update-secrets` call mints a new revision — that *is* the redeploy that picks up the config.
 
 **Env checklist (must all be present):** secrets — `FIREBASE_SERVICE_ACCOUNT_KEY`, `PINECONE_API_KEY`, `GEMINI_API_KEY`, `API_KEY_ENCRYPTION_SECRET`, `AI_GATEWAY_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; config — `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `PINECONE_INDEX=ayooda-dev`, `WIDGET_BASE_URL`, `ALLOWED_ORIGINS`, `API_PUBLIC_URL`, `WEB_PUBLIC_URL`, `STRIPE_PRICE_LITE/CORE/MAX`, `STRIPE_PRICE_OVERAGE`, `STRIPE_OVERAGE_METER_EVENT`, `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`, `SCRAPER_JOB_URL`. Note the deployed service URL and use it for `API_PUBLIC_URL` + the web's `NEXT_PUBLIC_API_URL`.
+
+**Skills — two more env vars (both optional, degrade gracefully rather than blocking boot):**
+- `TAVILY_API_KEY` — the Web Search skill's search provider key. Without it, a search call returns an "unavailable" message to the model instead of results — the turn still completes, it just can't search. Set it once you enable Web Search for any workspace (Core tier and above).
+- `SWEEP_SECRET` — a long random string shared with Cloud Scheduler (see §4e below). Without it, `POST /internal/sweep` rejects every request with `401` — idle conversations never auto-close, `afterConversation` skill hooks (scoring, memory extraction) never run, and expired memory facts never purge.
+
+Create both as Secret Manager secrets per §1 (`tavily-api-key`, `sweep-secret`) and grant the runtime service account `roles/secretmanager.secretAccessor` on each before running the `--update-secrets` command above.
+
+### 4e. Sweep → Cloud Scheduler
+
+`POST /internal/sweep` (idle-close, post-conversation scoring/memory extraction, expired-memory purge — see [Skills](architecture.md#skills) in the architecture doc) is not called by any client; it needs an external trigger. Create a Cloud Scheduler job to hit it every 15 minutes:
+
+```bash
+gcloud scheduler jobs create http ayooda-sweep \
+  --location=<REGION> \
+  --schedule="*/15 * * * *" \
+  --uri="https://<API_HOST>/internal/sweep" \
+  --http-method=POST \
+  --headers="x-sweep-secret=<SWEEP_SECRET>"
+```
+
+`<SWEEP_SECRET>` must match the value stored in the `sweep-secret` Secret Manager secret / set on the API service. Follow-up (not yet done): switch this job to `--oidc-service-account-email` and verify the OIDC token in `apps/api/src/routes/internal.ts` instead of comparing a shared header value — removes the long-lived secret from the scheduler job config.
 
 ### 4c. Scraper → Cloud Run Job
 

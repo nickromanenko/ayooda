@@ -17,6 +17,8 @@ interface Conversation {
   lastMessage: string
   updatedAt: Timestamp | null
   createdAt: Timestamp | null
+  score?: number
+  summary?: string
 }
 
 interface Message {
@@ -184,9 +186,22 @@ export default function InboxPage() {
                   <span style={{ fontSize: 10, color: 'var(--ink-faint)', flexShrink: 0 }}>{formatTime(conv.updatedAt)}</span>
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--ink-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '0 0 6px' }}>{conv.lastMessage}</p>
-                <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, ...STATUS_STYLE[conv.status] }}>
-                  {conv.status}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, ...STATUS_STYLE[conv.status] }}>
+                    {conv.status}
+                  </span>
+                  {typeof conv.score === 'number' && (
+                    <span
+                      style={{
+                        fontSize: 11, fontFamily: 'var(--font-mono)', padding: '2px 6px',
+                        borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', color: 'var(--ink-mute)',
+                      }}
+                      title="Conversation score"
+                    >
+                      {conv.score}/5
+                    </span>
+                  )}
+                </div>
               </button>
             ))
           )}
@@ -241,6 +256,10 @@ export default function InboxPage() {
               )}
             </div>
           </div>
+
+          {selectedConv.summary && (
+            <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: '12px 20px 0' }}>{selectedConv.summary}</p>
+          )}
 
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>

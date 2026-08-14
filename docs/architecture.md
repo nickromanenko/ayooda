@@ -55,6 +55,7 @@ Ayooda is a multi-tenant SaaS platform that lets companies deploy an AI-powered 
 │  │    channels/  │                                               │  │
 │  │    conversations/                                             │  │
 │  │      messages/│                                               │  │
+│  │    visitorMemory/                                             │  │
 │  └───────────────┘───────────────────────────────────────────────┘  │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
@@ -144,6 +145,24 @@ export type ConversationStatus = 'bot' | 'human' | 'resolved'
 export type ChannelType = 'web_widget' | 'telegram'
 // ... full models
 ```
+
+### Skills
+
+Per-agent, opt-in capabilities layered onto the chat turn without touching the core RAG flow.
+
+- **Catalogue** (`packages/shared/src/skills.ts`): a fixed `SKILLS` array — `memory`, `scoring`, `web_search` — each entry carrying `id`, `label`, `description`, `defaultConfig`, and `minTier` (the lowest plan tier the skill is available on; `null` means every plan, including trial). `validateSkillConfig` validates a skill's stored config against its shape before use, falling back to `defaultConfig` on invalid input.
+- **Attachment**: `workspaces/{workspaceId}/agents/{agentId}/skills/{skillId}` — one doc per skill per agent, `{ enabled: boolean, config: object }`. `loadEnabledSkills()` (`apps/api/src/lib/skills/registry.ts`) reads the enabled rows, drops any not entitled by the workspace's plan tier, and returns them ordered by the catalogue (not Firestore's return order) so hook execution is deterministic.
+- **Modules**: each skill is a `SkillModule` (`apps/api/src/lib/skills/types.ts`) implementing up to three hooks:
+  - `contributeContext(ctx)` — returns an optional string block folded into the system prompt (e.g. memory's recalled facts about the visitor).
+  - `contributeTools(ctx)` — returns an AI SDK `ToolSet` the model can call mid-turn (e.g. web search's `web_search` tool).
+  - `afterConversation(ctx)` — runs once a conversation is resolved, off the request path (e.g. scoring's score + summary, memory's fact extraction).
+  Modules register themselves via `registerSkill()` as a side effect of being imported by `apps/api/src/lib/skills/all.ts`, the single barrel both `prepareTurn` and the sweep import.
+- **Where `prepareTurn` calls them** (`apps/api/src/lib/chat/agent-turn.ts`): after RAG retrieval, `gatherContext()` calls every loaded skill's `contributeContext` and appends the results to the prompt; before dispatching to the LLM, `gatherTools()` calls `contributeTools` and merges the results into the tool set alongside the agent's configured webhook tools. Both (`apps/api/src/lib/skills/run.ts`) isolate each skill's hook in its own try/catch — one skill throwing never blocks another or fails the turn.
+- **The sweep** (`apps/api/src/lib/skills/sweep.ts`, exposed as `POST /internal/sweep`): a Cloud Scheduler-driven maintenance pass, authenticated by comparing the `x-sweep-secret` header to the `SWEEP_SECRET` env var (constant-time, byte-length compare — an unset secret never matches, so the endpoint stays closed by default). Each run does three independent, individually-isolated phases:
+  1. **Idle close** — bot conversations idle for 30+ minutes are marked `resolved`, stamped `autoClosedAt`, and flagged `pendingPostProcess: true`.
+  2. **Post-process** — every conversation flagged `pendingPostProcess` (auto-closed or operator-resolved) runs each loaded skill's `afterConversation` hook, then is stamped `postProcessedAt` and `pendingPostProcess: false` regardless of which (or whether any) skills fired. `postProcessedAt` is the idempotency marker: it's what makes a conversation "done," independent of `scoredAt` (written only by the scoring skill), so an agent with only the memory skill enabled doesn't get re-processed — and re-charged for the extraction LLM call — on every sweep run. If a skill's hook throws, the conversation still gets its flag cleared but the run is counted as `failed`, not `scored`, in the report.
+  3. **Memory purge** — `visitorMemory` docs with an expired `nextExpiryAt` have their stale facts dropped.
+  The endpoint returns a `{ closed, scored, purged, failed }` report per run.
 
 ---
 
