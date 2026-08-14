@@ -43,6 +43,8 @@ describe('validateSkillConfig', () => {
   test('memory defaults retentionDays and enforces its range', () => {
     expect(validateSkillConfig('memory', {})).toEqual({ ok: true, value: { retentionDays: 90 } })
     expect(validateSkillConfig('memory', { retentionDays: 30 })).toEqual({ ok: true, value: { retentionDays: 30 } })
+    expect(validateSkillConfig('memory', { retentionDays: 1 })).toEqual({ ok: true, value: { retentionDays: 1 } })
+    expect(validateSkillConfig('memory', { retentionDays: 365 })).toEqual({ ok: true, value: { retentionDays: 365 } })
     expect(validateSkillConfig('memory', { retentionDays: 0 }).ok).toBe(false)
     expect(validateSkillConfig('memory', { retentionDays: 366 }).ok).toBe(false)
     expect(validateSkillConfig('memory', { retentionDays: 1.5 }).ok).toBe(false)
@@ -50,10 +52,12 @@ describe('validateSkillConfig', () => {
   test('scoring accepts an omitted rubric and rejects an over-long one', () => {
     expect(validateSkillConfig('scoring', {})).toEqual({ ok: true, value: {} })
     expect(validateSkillConfig('scoring', { rubric: ' grade it ' })).toEqual({ ok: true, value: { rubric: 'grade it' } })
+    expect(validateSkillConfig('scoring', { rubric: 'x'.repeat(2000) })).toEqual({ ok: true, value: { rubric: 'x'.repeat(2000) } })
     expect(validateSkillConfig('scoring', { rubric: 'x'.repeat(2001) }).ok).toBe(false)
   })
   test('web_search defaults maxResults and enforces its range', () => {
     expect(validateSkillConfig('web_search', {})).toEqual({ ok: true, value: { maxResults: 3 } })
+    expect(validateSkillConfig('web_search', { maxResults: 1 })).toEqual({ ok: true, value: { maxResults: 1 } })
     expect(validateSkillConfig('web_search', { maxResults: 5 })).toEqual({ ok: true, value: { maxResults: 5 } })
     expect(validateSkillConfig('web_search', { maxResults: 6 }).ok).toBe(false)
     expect(validateSkillConfig('web_search', { maxResults: 0 }).ok).toBe(false)
