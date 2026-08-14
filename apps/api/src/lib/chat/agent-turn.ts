@@ -198,12 +198,18 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     console.warn('[agent-turn] RAG retrieval failed:', err)
   }
 
-  // Skill context (non-fatal): each skill's contributeContext hook is isolated in gatherContext.
+  // Skill context (non-fatal): each skill's contributeContext hook is isolated in gatherContext,
+  // but guard the call itself too — belt and braces against gatherContext ever rejecting.
   const skillCtx = {
     workspaceId, agentId: agentRec.id, conversationId, visitorId,
     message: trimmed, config: {}, trace,
   }
-  const skillBlocks = skills.length ? await gatherContext(skills, skillCtx) : []
+  let skillBlocks: string[] = []
+  try {
+    if (skills.length) skillBlocks = await gatherContext(skills, skillCtx)
+  } catch (err) {
+    console.warn('[skills] gatherContext failed:', err)
+  }
 
   // Escalation rules (non-fatal): evaluate after RAG so low-confidence is known.
   try {
@@ -258,9 +264,14 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     console.warn('[agent-turn] tool load failed:', err)
   }
 
-  // Skill tools (non-fatal): each skill's contributeTools hook is isolated in gatherTools.
+  // Skill tools (non-fatal): each skill's contributeTools hook is isolated in gatherTools,
+  // but guard the call itself too — belt and braces against gatherTools ever rejecting.
   let skillTools: ToolSet = {}
-  if (skills.length) skillTools = await gatherTools(skills, skillCtx)
+  try {
+    if (skills.length) skillTools = await gatherTools(skills, skillCtx)
+  } catch (err) {
+    console.warn('[skills] gatherTools failed:', err)
+  }
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
     const messageRef = await messagesRef.add({

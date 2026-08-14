@@ -207,7 +207,7 @@ export async function* runAgentTurn(
   const execute = deps.execute ?? executeTool
   const customerTools = tools.length ? toAiSdkTools(tools, trace, execute) : {}
   for (const name of Object.keys(customerTools)) {
-    if (name in skillTools) console.warn(`[skills] tool name "${name}" shadowed by a customer tool`)
+    if (Object.hasOwn(skillTools, name)) console.warn(`[skills] tool name "${name}" shadowed by a customer tool`)
   }
   const toolSet: ToolSet = { ...skillTools, ...customerTools }
   const result = run({

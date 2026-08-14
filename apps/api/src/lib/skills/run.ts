@@ -7,19 +7,29 @@ export async function gatherContext(skills: LoadedSkill[], ctx: SkillContext<any
   const results = await Promise.all(
     skills.map(async (s) => {
       if (!s.module.contributeContext) return null
-      const span = ctx.trace.span({ name: `skill:${s.def.id}:context` })
       try {
-        const block = await s.module.contributeContext({ ...ctx, config: s.config })
-        span.end({ output: { chars: block?.length ?? 0 } })
-        return block
+        const span = ctx.trace.span({ name: `skill:${s.def.id}:context` })
+        try {
+          const block = await s.module.contributeContext({ ...ctx, config: s.config })
+          span.end({ output: { chars: block?.length ?? 0 } })
+          return block
+        } catch (err) {
+          console.warn(`[skills] ${s.def.id} contributeContext failed:`, err)
+          try {
+            span.end({ output: { error: true } })
+          } catch (endErr) {
+            console.warn(`[skills] ${s.def.id} span.end failed:`, endErr)
+          }
+          return null
+        }
       } catch (err) {
-        console.warn(`[skills] ${s.def.id} contributeContext failed:`, err)
-        span.end({ output: { error: true } })
+        // trace.span() itself threw — the hook never ran. Still non-fatal.
+        console.warn(`[skills] ${s.def.id} contributeContext tracing failed:`, err)
         return null
       }
     }),
   )
-  return results.filter((b): b is string => !!b)
+  return results.filter((b): b is string => typeof b === 'string' && b.length > 0)
 }
 
 export async function gatherTools(skills: LoadedSkill[], ctx: SkillContext<any>): Promise<ToolSet> {

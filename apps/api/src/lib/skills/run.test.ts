@@ -30,6 +30,23 @@ describe('gatherContext', () => {
     const ok = loaded({ id: 'scoring', contributeContext: async () => 'OK' })
     expect(await gatherContext([boom, ok], ctx)).toEqual(['OK'])
   })
+  test('resolves (does not reject) when trace.span() itself throws', async () => {
+    const throwingTrace = { span: () => { throw new Error('langfuse down') } } as any
+    const throwingCtx = { ...ctx, trace: throwingTrace } as SkillContext<any>
+    const a = loaded({ id: 'memory', contributeContext: async () => 'A' })
+    await expect(gatherContext([a], throwingCtx)).resolves.toEqual([])
+  })
+  test('resolves (does not reject) when span.end() itself throws', async () => {
+    const endThrowsTrace = { span: () => ({ end: () => { throw new Error('end failed') } }) } as any
+    const endThrowsCtx = { ...ctx, trace: endThrowsTrace } as SkillContext<any>
+    const a = loaded({ id: 'memory', contributeContext: async () => 'A' })
+    await expect(gatherContext([a], endThrowsCtx)).resolves.toEqual([])
+  })
+  test('filters out a non-string return so it cannot leak into the prompt', async () => {
+    const bad = loaded({ id: 'memory', contributeContext: async () => ({ not: 'a string' }) as any })
+    const ok = loaded({ id: 'scoring', contributeContext: async () => 'OK' })
+    expect(await gatherContext([bad, ok], ctx)).toEqual(['OK'])
+  })
 })
 
 describe('gatherTools', () => {
