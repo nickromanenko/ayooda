@@ -1,4 +1,5 @@
 import type { Subscription } from './plans'
+import type { SkillId, SkillConfig } from './skills'
 
 // LLM Providers (Claude, OpenAI, Gemini)
 export type LLMProvider = 'gemini' | 'claude' | 'openai'
@@ -149,6 +150,13 @@ export interface ConversationDoc {
   lastMessage: string
   channelType?: ChannelType
   telegramChatId?: number
+  agentId?: string                // which agent served this conversation (Task 7 writes it)
+  score?: number                  // 1–5, written by the scoring skill
+  summary?: string                // <= 500 chars
+  scoredAt?: Date
+  searchCallCount?: number        // web-search calls used by this conversation
+  autoClosedAt?: Date             // set when the sweep closed an idle conversation
+  pendingPostProcess?: boolean    // set on reaching `resolved`, cleared by the sweep
 }
 
 // API types
@@ -201,6 +209,7 @@ export function validateKnowledgeFile(
 // ---------------------------------------------------------------------------
 
 export * from './plans'
+export * from './skills'
 
 export type ChatStreamEvent =
   | { type: 'chunk'; text: string }
@@ -454,4 +463,32 @@ export function applyTemplate(
     auth: { ...template.auth },
     kind: template.kind,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Skills — runtime documents and API views
+// ---------------------------------------------------------------------------
+
+export interface VisitorMemoryFact {
+  id: string
+  text: string
+  createdAt: Date
+  expiresAt: Date
+}
+
+/** workspaces/{ws}/visitorMemory/{visitorId} */
+export interface VisitorMemoryDoc {
+  facts: VisitorMemoryFact[]
+  nextExpiryAt: Date | null   // min(facts[].expiresAt); drives the purge query
+  updatedAt: Date
+}
+
+/** One row of GET /agents/:agentId/skills — catalogue merged with attachment state. */
+export interface AgentSkillView {
+  id: SkillId
+  label: string
+  description: string
+  enabled: boolean
+  config: SkillConfig
+  locked: boolean             // true when the workspace plan is below minTier
 }
