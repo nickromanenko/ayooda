@@ -1666,7 +1666,7 @@ async function postProcess(doc: FirebaseFirestore.QueryDocumentSnapshot): Promis
     .filter((s) => !!s.module.afterConversation)
   if (skills.length === 0) return
 
-  const key = resolveGatewayKey(agentDoc.data().gatewayKey)
+  const key = resolveGatewayKey(agentDoc.data()?.gatewayKey)
   if (!key.ok) return
 
   const msgSnap = await doc.ref.collection('messages').orderBy('createdAt', 'asc').limit(50).get()
