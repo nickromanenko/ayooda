@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Loader2, Plus, Trash2, Star, FileText, BookOpen } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { LLM_MODELS, type AgentDoc } from '@ayooda/shared'
+import AgentSkills from '@/components/dashboard/AgentSkills'
 
 const card: React.CSSProperties = { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 24, marginBottom: 20 }
 const label: React.CSSProperties = { fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }
@@ -149,6 +150,9 @@ export default function AgentsPage() {
           <Link href={`/dashboard/knowledge?agent=${editor.id}`} className="btn btn-ghost" style={{ marginTop: 12, borderRadius: 'var(--r-sm)', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <BookOpen size={14} /> Manage knowledge
           </Link>
+
+          <p style={{ ...label, marginTop: 16 }}>Skills</p>
+          <AgentSkills agentId={editor.id} />
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button type="button" onClick={() => void save()} disabled={saving} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>{saving ? 'Saving…' : 'Save agent'}</button>
