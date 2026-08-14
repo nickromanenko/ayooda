@@ -15,8 +15,14 @@ export function idleCutoff(now: Date): Date {
 
 /** Constant-time compare; an empty expected secret never matches, so an unset env var stays closed. */
 export function secretMatches(provided: string, expected: string): boolean {
-  if (!provided || !expected || provided.length !== expected.length) return false
-  return timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
+  if (!provided || !expected) return false
+  // Compare BYTE length, not string length — a multi-byte character can have the same
+  // string .length as a single-byte one but a different Buffer length, and timingSafeEqual
+  // throws (not returns false) when its two buffers differ in byte length.
+  const providedBuf = Buffer.from(provided)
+  const expectedBuf = Buffer.from(expected)
+  if (providedBuf.length !== expectedBuf.length) return false
+  return timingSafeEqual(providedBuf, expectedBuf)
 }
 
 export function purgeFacts(
@@ -32,69 +38,95 @@ export interface SweepReport { closed: number; scored: number; purged: number; f
 export async function runSweep(now = new Date()): Promise<SweepReport> {
   const report: SweepReport = { closed: 0, scored: 0, purged: 0, failed: 0 }
 
-  // 1. Close idle bot conversations.
-  const idle = await adminDb
-    .collectionGroup('conversations')
-    .where('status', '==', 'bot')
-    .where('updatedAt', '<', idleCutoff(now))
-    .limit(SWEEP_BATCH)
-    .get()
-  for (const doc of idle.docs) {
-    try {
-      await doc.ref.update({ status: 'resolved', autoClosedAt: now, pendingPostProcess: true })
-      report.closed++
-    } catch (err) {
-      console.warn('[sweep] close failed:', doc.ref.path, err)
-      report.failed++
+  // 1. Close idle bot conversations. The query itself (not just each document update) is
+  // wrapped so a transient failure — e.g. the composite index still building right after
+  // a fresh `firebase deploy --only firestore:indexes` — can't take down the other phases.
+  try {
+    const idle = await adminDb
+      .collectionGroup('conversations')
+      .where('status', '==', 'bot')
+      .where('updatedAt', '<', idleCutoff(now))
+      .limit(SWEEP_BATCH)
+      .get()
+    for (const doc of idle.docs) {
+      try {
+        await doc.ref.update({ status: 'resolved', autoClosedAt: now, pendingPostProcess: true })
+        report.closed++
+      } catch (err) {
+        console.warn('[sweep] close failed:', doc.ref.path, err)
+        report.failed++
+      }
     }
+  } catch (err) {
+    console.warn('[sweep] idle-close query failed:', err)
+    report.failed++
   }
 
   // 2. Post-process everything flagged — auto-closed and operator-resolved alike.
-  const pending = await adminDb
-    .collectionGroup('conversations')
-    .where('pendingPostProcess', '==', true)
-    .limit(SWEEP_BATCH)
-    .get()
-  for (const doc of pending.docs) {
-    try {
-      await postProcess(doc)
-      await doc.ref.update({ pendingPostProcess: false })
-      report.scored++
-    } catch (err) {
-      // The flag stays set, so the next run retries this conversation.
-      console.warn('[sweep] post-process failed:', doc.ref.path, err)
-      report.failed++
+  try {
+    const pending = await adminDb
+      .collectionGroup('conversations')
+      .where('pendingPostProcess', '==', true)
+      .limit(SWEEP_BATCH)
+      .get()
+    for (const doc of pending.docs) {
+      try {
+        const { hookFailed } = await postProcess(doc)
+        // Stamp postProcessedAt regardless of which skills ran (or whether any are enabled):
+        // the marker's job is to make this conversation idempotent, independent of whether the
+        // scoring skill (the only one that writes scoredAt) happened to run. Without it, a
+        // memory-only agent whose flag-clearing update keeps failing would re-run fact
+        // extraction — and re-charge the LLM — on every single sweep, forever.
+        await doc.ref.update({ pendingPostProcess: false, postProcessedAt: now })
+        if (hookFailed) report.failed++
+        else report.scored++
+      } catch (err) {
+        // The flag stays set, so the next run retries this conversation.
+        console.warn('[sweep] post-process failed:', doc.ref.path, err)
+        report.failed++
+      }
     }
+  } catch (err) {
+    console.warn('[sweep] pending-post-process query failed:', err)
+    report.failed++
   }
 
   // 3. Purge expired memory.
-  const stale = await adminDb
-    .collectionGroup('visitorMemory')
-    .where('nextExpiryAt', '<=', now)
-    .limit(SWEEP_BATCH)
-    .get()
-  for (const doc of stale.docs) {
-    try {
-      const raw = (doc.data().facts ?? []) as Array<Record<string, any>>
-      const facts: VisitorMemoryFact[] = raw.map((f) => ({
-        id: String(f.id), text: String(f.text),
-        createdAt: f.createdAt?.toDate?.() ?? new Date(f.createdAt),
-        expiresAt: f.expiresAt?.toDate?.() ?? new Date(f.expiresAt),
-      }))
-      await doc.ref.update({ ...purgeFacts(facts, now), updatedAt: now })
-      report.purged++
-    } catch (err) {
-      console.warn('[sweep] purge failed:', doc.ref.path, err)
-      report.failed++
+  try {
+    const stale = await adminDb
+      .collectionGroup('visitorMemory')
+      .where('nextExpiryAt', '<=', now)
+      .limit(SWEEP_BATCH)
+      .get()
+    for (const doc of stale.docs) {
+      try {
+        const raw = (doc.data().facts ?? []) as Array<Record<string, any>>
+        const facts: VisitorMemoryFact[] = raw.map((f) => ({
+          id: String(f.id), text: String(f.text),
+          createdAt: f.createdAt?.toDate?.() ?? new Date(f.createdAt),
+          expiresAt: f.expiresAt?.toDate?.() ?? new Date(f.expiresAt),
+        }))
+        await doc.ref.update({ ...purgeFacts(facts, now), updatedAt: now })
+        report.purged++
+      } catch (err) {
+        console.warn('[sweep] purge failed:', doc.ref.path, err)
+        report.failed++
+      }
     }
+  } catch (err) {
+    console.warn('[sweep] purge query failed:', err)
+    report.failed++
   }
 
   return report
 }
 
-async function postProcess(doc: FirebaseFirestore.QueryDocumentSnapshot): Promise<void> {
+async function postProcess(doc: FirebaseFirestore.QueryDocumentSnapshot): Promise<{ hookFailed: boolean }> {
   const data = doc.data()
-  if (data.scoredAt) return               // already processed; never double-charge
+  // Already processed — scoredAt (written only by the scoring skill) is honoured for
+  // conversations processed before postProcessedAt existed; postProcessedAt is the
+  // skill-agnostic marker that makes this idempotent even when no skill writes its own flag.
+  if (data.scoredAt || data.postProcessedAt) return { hookFailed: false }
   // workspaces/{ws}/conversations/{id}
   const workspaceId = doc.ref.parent.parent!.id
   const conversationId = doc.id
@@ -114,21 +146,22 @@ async function postProcess(doc: FirebaseFirestore.QueryDocumentSnapshot): Promis
     const defaultSnap = await agentsCol.where('isDefault', '==', true).limit(1).get()
     agentDoc = defaultSnap.empty ? null : defaultSnap.docs[0]!
   }
-  if (!agentDoc) return
+  if (!agentDoc) return { hookFailed: false }
 
   const skills = (await loadEnabledSkills(workspaceId, agentDoc.id, tier))
     .filter((s) => !!s.module.afterConversation)
-  if (skills.length === 0) return
+  if (skills.length === 0) return { hookFailed: false }
 
   const key = resolveGatewayKey(agentDoc.data()?.gatewayKey)
-  if (!key.ok) return
+  if (!key.ok) return { hookFailed: false }
 
   const msgSnap = await doc.ref.collection('messages').orderBy('createdAt', 'asc').limit(50).get()
   const messages = msgSnap.docs.map((m) => ({
     role: String(m.data().role), content: String(m.data().content),
   }))
-  if (messages.length === 0) return
+  if (messages.length === 0) return { hookFailed: false }
 
+  let hookFailed = false
   for (const s of skills) {
     try {
       await s.module.afterConversation!({
@@ -137,7 +170,11 @@ async function postProcess(doc: FirebaseFirestore.QueryDocumentSnapshot): Promis
         messages, apiKey: key.apiKey, config: s.config,
       })
     } catch (err) {
+      // Kept isolated per skill so one failing hook doesn't block another, but surfaced to
+      // the caller so the sweep report counts this conversation as failed, not scored.
       console.warn(`[sweep] ${s.def.id} afterConversation failed:`, doc.ref.path, err)
+      hookFailed = true
     }
   }
+  return { hookFailed }
 }

@@ -22,6 +22,13 @@ describe('secretMatches', () => {
     expect(secretMatches('abc', '')).toBe(false)
     expect(secretMatches('', 'abc')).toBe(false)
   })
+  test('returns false rather than throwing for equal string length but unequal byte length', () => {
+    // 'é' is 1 UTF-16 code unit (string length 1) but 2 bytes in UTF-8/latin1 decoding;
+    // 'a' is 1 byte. Comparing string .length instead of Buffer .length would pass this
+    // pair through to timingSafeEqual, which throws RangeError on unequal buffer lengths.
+    expect(() => secretMatches('é', 'a')).not.toThrow()
+    expect(secretMatches('é', 'a')).toBe(false)
+  })
 })
 
 describe('purgeFacts', () => {

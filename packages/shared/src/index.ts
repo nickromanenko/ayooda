@@ -157,6 +157,9 @@ export interface ConversationDoc {
   searchCallCount?: number        // web-search calls used by this conversation
   autoClosedAt?: Date             // set when the sweep closed an idle conversation
   pendingPostProcess?: boolean    // set on reaching `resolved`, cleared by the sweep
+  postProcessedAt?: Date          // stamped by the sweep once post-processing has run, regardless
+                                   // of which (if any) skills fired — the idempotency marker that
+                                   // doesn't depend on the scoring skill's own scoredAt field
 }
 
 // API types
