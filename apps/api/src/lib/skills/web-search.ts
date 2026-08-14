@@ -17,7 +17,8 @@ export function formatSearchResults(results: SearchResult[]): string {
   return results.map((r) => `${r.title}\n${r.url}\n${r.content}`).join('\n\n')
 }
 
-export interface SearchDeps { apiKey: string; fetch: typeof globalThis.fetch }
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
+export interface SearchDeps { apiKey: string; fetch: FetchLike }
 
 /** Never throws — every failure returns text the model can read and work around. */
 export async function runSearch(query: string, maxResults: number, deps: SearchDeps): Promise<string> {
