@@ -19,6 +19,7 @@
 - Tier gate: `memory` and `scoring` are `minTier: null`; `web_search` is `minTier: 'core'`. Trial (tier `null`) ranks below every paid plan.
 - Tests are colocated `*.test.ts` using `bun:test` and dependency injection, not mocking libraries — follow `apps/api/src/lib/workflow/engine.test.ts` and the injectable-deps style of `runAgentTurn`.
 - Run tests with `cd apps/api && bun test <path>` or `cd packages/shared && bun test <path>`. Typecheck with `pnpm typecheck` from the repo root.
+- **`@ayooda/shared` resolves through `packages/shared/dist/`.** After ANY change to `packages/shared`, run `pnpm --filter @ayooda/shared build` before running `apps/api` tests or `pnpm typecheck` — otherwise both fail with `Cannot find module '@ayooda/shared'`, which looks like a code error but is a stale build.
 
 ---
 
@@ -331,6 +332,7 @@ export * from './skills'
 Add these fields to the existing `ConversationDoc` interface:
 
 ```ts
+  agentId?: string                // which agent served this conversation (Task 7 writes it)
   score?: number                  // 1–5, written by the scoring skill
   summary?: string                // <= 500 chars
   scoredAt?: Date
@@ -338,6 +340,8 @@ Add these fields to the existing `ConversationDoc` interface:
   autoClosedAt?: Date             // set when the sweep closed an idle conversation
   pendingPostProcess?: boolean    // set on reaching `resolved`, cleared by the sweep
 ```
+
+`agentId` is optional because conversations created before this ships will not have it; the sweep falls back to the workspace's default agent for those.
 
 Add these new types at the end of the file:
 
@@ -1076,6 +1080,7 @@ The critical deliverable is the last test: an always-throwing skill must still y
 **Files:**
 - Create: `apps/api/src/lib/skills/run.ts`
 - Create: `apps/api/src/lib/skills/run.test.ts`
+- Create: `apps/api/src/lib/skills/all.ts`
 - Modify: `apps/api/src/lib/chat/agent-turn.ts`
 - Modify: `apps/api/src/lib/chat/tools.ts:196-215` (`runAgentTurn` signature and tool merge)
 
@@ -1195,17 +1200,26 @@ Expected: PASS, all five tests.
 
 - [ ] **Step 5: Wire the hooks into `prepareTurn`**
 
-In `apps/api/src/lib/chat/agent-turn.ts`, add the imports:
+First create the registration barrel `apps/api/src/lib/skills/all.ts`:
+
+```ts
+/**
+ * Importing a skill module runs its registerSkill() side effect. Every entry point
+ * that reads SKILL_MODULES — the turn and the sweep — imports this barrel, so
+ * registration has one owner. Without it, selectSkills silently skips the skill.
+ */
+import './memory'
+import './scoring'
+import './web-search'
+```
+
+Then in `apps/api/src/lib/chat/agent-turn.ts`, add the imports:
 
 ```ts
 import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
 import { gatherContext, gatherTools } from '../skills/run'
-import '../skills/memory'
-import '../skills/scoring'
-import '../skills/web-search'
+import '../skills/all'
 ```
-
-The three bare imports run each module's `registerSkill()` side effect. Without them the registry is empty and every skill is silently skipped.
 
 Immediately after `const llmModel: string = ...` (the end of agent resolution, around line 96), load the skills:
 
@@ -1249,6 +1263,14 @@ After the existing `loadTools` block, gather skill tools:
 ```
 
 Import `type ToolSet` from `'ai'`. Add `skillTools` to the `ReadyTurn` interface and to the returned object.
+
+Finally, record which agent served the conversation. In the `convRef.set({...})` call that creates a new conversation (inside the `if (!convSnap.exists)` block), add one field:
+
+```ts
+      agentId: agentRec.id,
+```
+
+Without it the sweep cannot tell which agent answered, and would score every conversation under the workspace's default agent — wrong skills, wrong config, whenever a non-default agent served the chat.
 
 - [ ] **Step 6: Merge skill tools in `runAgentTurn`**
 
@@ -1528,6 +1550,7 @@ import { adminDb } from '../firebase-admin'
 import { resolveGatewayKey } from '../llm/resolve'
 import { liveFacts, nextExpiry } from './memory'
 import { loadEnabledSkills } from './registry'
+import './all'   // registers every skill module; without it the sweep silently skips scoring
 
 export const IDLE_CLOSE_MINUTES = 30
 export const SWEEP_BATCH = 100
@@ -1625,9 +1648,18 @@ async function postProcess(doc: FirebaseFirestore.QueryDocumentSnapshot): Promis
   const wsSnap = await adminDb.doc(`workspaces/${workspaceId}`).get()
   const tier = (wsSnap.data()?.subscription?.tier as PlanTier | null | undefined) ?? null
 
+  // Prefer the agent that actually served the conversation. Conversations created
+  // before this feature shipped have no agentId — fall back to the default agent.
   const agentsCol = adminDb.collection(`workspaces/${workspaceId}/agents`)
-  const defaultSnap = await agentsCol.where('isDefault', '==', true).limit(1).get()
-  const agentDoc = defaultSnap.empty ? null : defaultSnap.docs[0]!
+  let agentDoc: FirebaseFirestore.DocumentSnapshot | null = null
+  if (typeof data.agentId === 'string' && data.agentId) {
+    const byId = await agentsCol.doc(data.agentId).get()
+    if (byId.exists) agentDoc = byId
+  }
+  if (!agentDoc) {
+    const defaultSnap = await agentsCol.where('isDefault', '==', true).limit(1).get()
+    agentDoc = defaultSnap.empty ? null : defaultSnap.docs[0]!
+  }
   if (!agentDoc) return
 
   const skills = (await loadEnabledSkills(workspaceId, agentDoc.id, tier))
