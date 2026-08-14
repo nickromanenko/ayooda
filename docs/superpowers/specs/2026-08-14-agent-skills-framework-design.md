@@ -40,23 +40,26 @@ A new file, re-exported from `index.ts` (already 494 lines and not the place for
 ```ts
 export type SkillId = 'memory' | 'scoring' | 'web_search'
 
-export interface SkillDef<C = unknown> {
+export interface SkillDef {
   id: SkillId
   label: string
   description: string
-  configSchema: z.ZodType<C>
-  defaultConfig: C
+  defaultConfig: SkillConfig
   minTier: PlanTier | null      // null = every plan, including trial
 }
 
 export const SKILLS: readonly SkillDef[]
-export function skillDef(id: SkillId): SkillDef | undefined
+export function skillDef(id: string): SkillDef | undefined
 export function isSkillId(v: string): v is SkillId
+export function validateSkillConfig(id: SkillId, raw: unknown):
+  { ok: true; value: SkillConfig } | { ok: false; error: string }
 ```
 
-Each skill's zod schema is defined once here and consumed by three callers: the API's `PUT` validation, the web config form, and the skill module's typed access to its own config. There is no second definition to drift.
+Validation is a hand-rolled function returning `{ ok, value | error }` with a human-readable message — the established pattern in this codebase (`validateKnowledgeFile` in shared, `validateToolInput` in `apps/api/src/lib/tools/validate.ts`). **Not zod**: `packages/shared` has zero runtime dependencies today and is imported by `apps/web`, so a zod schema here would pull zod into the web bundle to validate three small config objects. zod stays in `apps/api`, where the AI SDK genuinely requires it for tool `inputSchema` and `generateObject`.
 
-Config schemas:
+`validateSkillConfig` is the single definition, called by the API's `PUT` handler and again at load time. The web form renders from the config's known fields and lets the API reject bad input, rather than duplicating the rules.
+
+Config shapes:
 
 ```ts
 memory:     { retentionDays: number }              // int 1–365, default 90
@@ -129,6 +132,7 @@ export interface ConversationContext<C> {
   conversationId: string
   visitorId: string
   messages: Array<{ role: string; content: string }>
+  apiKey: string         // resolved Gateway key for the agent; hooks make their own LLM calls
   config: C
 }
 
@@ -167,7 +171,7 @@ persist()
 
 Each hook is individually try/caught, logged and skipped. This is the established convention in that function: RAG, escalation and tool loading are all already non-fatal. A failing skill must never cost a visitor their reply.
 
-Every hook opens a Langfuse span (`skill:memory:context`, `skill:web_search:tools`), alongside the existing `pinecone-query` and `tool:*` spans.
+Both turn hooks open a Langfuse span (`skill:memory:context`, `skill:web_search:call`), alongside the existing `pinecone-query` and `tool:*` spans. `afterConversation` runs from the sweep, outside any turn, so it has no trace to attach to — the sweep's per-run counts are its observability instead.
 
 ## 5. Memory — `apps/api/src/lib/skills/memory.ts`
 
@@ -275,7 +279,7 @@ Locked skills render visibly, greyed, with an upgrade prompt — a skill the cus
 
 Colocated `*.test.ts` under `bun test`, using dependency injection rather than mocks — the pattern `runAgentTurn` already establishes with its injectable `streamText` and `execute` ([tools.ts:186](../../../apps/api/src/lib/chat/tools.ts#L186)). Each skill module takes its LLM and HTTP callables the same way and is testable without network.
 
-- **`packages/shared`** — every config schema accepts its default and rejects representative bad input; `skillDef`/`isSkillId` round-trip.
+- **`packages/shared`** — `validateSkillConfig` accepts each default and rejects representative bad input per skill; `skillDef`/`isSkillId` round-trip; tier comparison ranks trial below every paid plan.
 - **Registry** — disabled rows skipped; above-tier rows filtered; unknown ids skipped; bad config falls back to default; ordering follows the `SKILLS` array regardless of input order.
 - **Memory** — recall filters expired facts even with `nextExpiryAt` stale; recall returns `null` when empty; extraction dedupes case-insensitively; the 20-fact cap evicts oldest-first; `nextExpiryAt` recomputes correctly, including to `null`.
 - **Scoring** — result written to the conversation doc; `scoredAt` makes a second run a no-op.
