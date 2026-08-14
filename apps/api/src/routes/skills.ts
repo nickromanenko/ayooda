@@ -57,16 +57,29 @@ skills.put('/:skillId', async (c) => {
   const body = await c.req.json<{ enabled?: unknown; config?: unknown }>().catch(() => null)
   if (!body || typeof body.enabled !== 'boolean') return c.json({ error: 'enabled is required.' }, 400)
 
-  const parsed = validateSkillConfig(skillId, body.config ?? def.defaultConfig)
-  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+  const ref = adminDb.doc(`workspaces/${ws}/agents/${agentId}/skills/${skillId}`)
+  const snap = await ref.get()
+
+  // Fallback chain for config: request body -> existing stored config -> catalogue default.
+  // `enabled: false` is an archive state, not a delete — a plain disable toggle (no `config`
+  // in the body) must never clobber a previously saved config. An explicit bad config in the
+  // request is still a 400; a bad *stored* config (e.g. schema drift) must not block a toggle
+  // the user can't otherwise fix, so it silently falls back to the default instead of erroring.
+  let parsed: ReturnType<typeof validateSkillConfig>
+  if (body.config !== undefined) {
+    parsed = validateSkillConfig(skillId, body.config)
+    if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+  } else {
+    const stored = validateSkillConfig(skillId, snap.data()?.config ?? def.defaultConfig)
+    parsed = stored.ok ? stored : { ok: true, value: def.defaultConfig }
+  }
 
   if (body.enabled && !meetsTier(await workspaceTier(ws), def.minTier)) {
     return c.json({ error: `${def.label} is not available on your plan.` }, 403)
   }
 
-  const ref = adminDb.doc(`workspaces/${ws}/agents/${agentId}/skills/${skillId}`)
   const now = new Date()
-  const exists = (await ref.get()).exists
+  const exists = snap.exists
   await ref.set(
     { enabled: body.enabled, config: parsed.value, updatedAt: now, ...(exists ? {} : { createdAt: now }) },
     { merge: true },
