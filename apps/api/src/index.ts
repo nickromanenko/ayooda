@@ -31,6 +31,7 @@ import teamRoutes from './routes/team'
 import toolRoutes from './routes/tools'
 import agentRoutes from './routes/agents'
 import workflowRoutes from './routes/workflows'
+import skillRoutes from './routes/skills'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -42,6 +43,7 @@ app.route('/channels', channelRoutes)
 app.route('/conversations', conversationRoutes)
 app.route('/agents', agentRoutes)
 app.route('/agents/:agentId/tools', toolRoutes)
+app.route('/agents/:agentId/skills', skillRoutes)
 app.route('/workflows', workflowRoutes)
 
 app.route('/widget', widgetRoutes)
