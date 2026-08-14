@@ -7,10 +7,21 @@ import { loadEnabledSkills } from './registry'
 import './all'   // registers every skill module; without it the sweep silently skips scoring
 
 export const IDLE_CLOSE_MINUTES = 30
+export const IDLE_LOOKBACK_HOURS = 24
 export const SWEEP_BATCH = 100
 
 export function idleCutoff(now: Date): Date {
   return new Date(now.getTime() - IDLE_CLOSE_MINUTES * 60_000)
+}
+
+/**
+ * Lower bound for the idle-close query. Without it the query matches every historical `bot`
+ * conversation in the database, so the first run would resolve the entire backlog 100 at a
+ * time — visible in every customer's inbox — and flag it all for LLM post-processing.
+ * Conversations that predate this feature are never picked up, by design.
+ */
+export function idleFloor(now: Date): Date {
+  return new Date(now.getTime() - IDLE_LOOKBACK_HOURS * 60 * 60_000)
 }
 
 /** Constant-time compare; an empty expected secret never matches, so an unset env var stays closed. */
@@ -46,6 +57,9 @@ export async function runSweep(now = new Date()): Promise<SweepReport> {
       .collectionGroup('conversations')
       .where('status', '==', 'bot')
       .where('updatedAt', '<', idleCutoff(now))
+      // Bounded below so only recently-active conversations are considered; the existing
+      // `status ASC, updatedAt ASC` composite index already covers this range predicate.
+      .where('updatedAt', '>', idleFloor(now))
       .limit(SWEEP_BATCH)
       .get()
     for (const doc of idle.docs) {

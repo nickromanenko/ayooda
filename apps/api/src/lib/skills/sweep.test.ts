@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { idleCutoff, secretMatches, purgeFacts, IDLE_CLOSE_MINUTES, SWEEP_BATCH } from './sweep'
+import { idleCutoff, idleFloor, secretMatches, purgeFacts, IDLE_CLOSE_MINUTES, IDLE_LOOKBACK_HOURS, SWEEP_BATCH } from './sweep'
 import type { VisitorMemoryFact } from '@ayooda/shared'
 
 const now = new Date('2026-08-14T12:00:00Z')
@@ -8,6 +8,20 @@ describe('idleCutoff', () => {
   test('is IDLE_CLOSE_MINUTES before now', () => {
     expect(idleCutoff(now).toISOString()).toBe('2026-08-14T11:30:00.000Z')
     expect(IDLE_CLOSE_MINUTES).toBe(30)
+  })
+})
+
+describe('idleFloor', () => {
+  test('is IDLE_LOOKBACK_HOURS before now, bounding the query below', () => {
+    expect(idleFloor(now).toISOString()).toBe('2026-08-13T12:00:00.000Z')
+    expect(IDLE_LOOKBACK_HOURS).toBe(24)
+  })
+  test('leaves a usable window: the floor is well before the idle cutoff', () => {
+    expect(idleFloor(now).getTime()).toBeLessThan(idleCutoff(now).getTime())
+  })
+  test('excludes the historical backlog — a year-old conversation is below the floor', () => {
+    const ancient = new Date('2025-08-14T12:00:00Z')
+    expect(ancient.getTime()).toBeLessThan(idleFloor(now).getTime())
   })
 })
 

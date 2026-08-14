@@ -47,6 +47,39 @@ export type PreparedTurn =
 
 const DEFAULT_HANDOFF = 'Let me connect you with someone from our team.'
 
+export type SilenceGate =
+  | { kind: 'proceed' }
+  | { kind: 'reopen'; update: Record<string, unknown> }
+  | { kind: 'silent' }
+
+/**
+ * Decides what a non-`bot` conversation status means for this turn.
+ *
+ * A human owning or queueing the conversation (`assigned`/`waiting`, or `resolved` from the
+ * inbox) still silences the bot — unchanged, long-standing behaviour. But a conversation the
+ * idle sweep closed carries `autoClosedAt`: WE ended it, the visitor did not, and the widget
+ * keeps the same conversationId in sessionStorage. Left silenced it would dead-end forever, so
+ * reopen it and answer normally.
+ *
+ * The reopen clears everything describing the closed state. Dropping `postProcessedAt` and
+ * `scoredAt` is deliberate: the conversation genuinely continued, so when it next closes its
+ * score and summary should cover the whole thing, not just the part before the visitor returned.
+ */
+export function evaluateSilenceGate(data: FirebaseFirestore.DocumentData | undefined): SilenceGate {
+  if (!data || !data.status || data.status === 'bot') return { kind: 'proceed' }
+  if (!data.autoClosedAt) return { kind: 'silent' }
+  return {
+    kind: 'reopen',
+    update: {
+      status: 'bot',
+      autoClosedAt: FieldValue.delete(),
+      pendingPostProcess: FieldValue.delete(),
+      postProcessedAt: FieldValue.delete(),
+      scoredAt: FieldValue.delete(),
+    },
+  }
+}
+
 /**
  * Channel-agnostic agent turn: billing gate → conversation setup → RAG → key resolution
  * → prompt + ChatParams, plus a persist() closure. The caller drives streamChat (SSE for the
@@ -122,11 +155,13 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
 
   // Silence guard: a conversation a human owns/queued never gets a bot reply.
-  if (convSnap.exists && convSnap.data()!.status && convSnap.data()!.status !== 'bot') {
+  const gate = evaluateSilenceGate(convSnap.exists ? convSnap.data() : undefined)
+  if (gate.kind === 'silent') {
     await convRef.collection('messages').add({ role: 'user', content: trimmed, createdAt: FieldValue.serverTimestamp() })
     await convRef.update({ updatedAt: FieldValue.serverTimestamp(), lastMessage: trimmed.slice(0, 200) })
     return { kind: 'silent' }
   }
+  if (gate.kind === 'reopen') await convRef.update(gate.update)
 
   if (!convSnap.exists) {
     // Billing gate — only NEW conversations are gated.

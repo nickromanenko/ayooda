@@ -115,8 +115,12 @@ gcloud scheduler jobs create http ayooda-sweep \
   --schedule="*/15 * * * *" \
   --uri="https://<API_HOST>/internal/sweep" \
   --http-method=POST \
-  --headers="x-sweep-secret=<SWEEP_SECRET>"
+  --headers="x-sweep-secret=<SWEEP_SECRET>" \
+  --attempt-deadline=1800s \
+  --max-retry-attempts=0
 ```
+
+Both flags matter: a full batch (100 conversations, up to 2 LLM calls each) can easily outrun Cloud Scheduler's default 180s attempt deadline, and with retries enabled every timed-out attempt would start another sweep on top of the still-running one — overlapping runs re-processing the same conversations and multiplying LLM spend. `1800s` is the maximum Cloud Scheduler allows for HTTP targets; with retries off, a run that fails is simply picked up by the next 15-minute tick, which is exactly what the `pendingPostProcess` flag is designed for.
 
 `<SWEEP_SECRET>` must match the value stored in the `sweep-secret` Secret Manager secret / set on the API service. Follow-up (not yet done): switch this job to `--oidc-service-account-email` and verify the OIDC token in `apps/api/src/routes/internal.ts` instead of comparing a shared header value — removes the long-lived secret from the scheduler job config.
 
