@@ -81,6 +81,7 @@ conversations.post('/:id/resolve', async (c) => {
   await convRef.update({
     status: 'resolved',
     operatorId: null,
+    pendingPostProcess: true,
     updatedAt: FieldValue.serverTimestamp(),
   })
 
