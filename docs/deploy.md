@@ -52,6 +52,15 @@ firebase deploy --only firestore
 
 Deploys `firestore.rules` (agents/tools/workflowRules are server-only; knowledge/tools secrets are never client-readable) and `firestore.indexes.json`. Watch the Firebase console for index builds to finish. If a query later needs a composite index, add it to `firestore.indexes.json` and re-run this command.
 
+Two things that bite on first deploy:
+
+- **`HTTP Error: 409, index already exists`** — the CLI can create a composite index and then re-issue the same create within one run. The 409 aborts the deploy *before* it reaches `fieldOverrides`, so single-field overrides silently never get applied. Just re-run the command once the index shows `READY`; the second run is a no-op for the composite and applies the overrides. Verify with `gcloud firestore indexes fields list`.
+- **Index builds are not instant.** Field overrides in particular take a few minutes, and until they finish, queries against them fail with `FAILED_PRECONDITION: ... index is not ready yet`. The sweep degrades gracefully here — its per-phase error handling reports `{"failed": N}` rather than 500ing — so a first sweep reporting failures right after a deploy usually means "still building", not "misconfigured". Confirm with:
+
+```bash
+gcloud firestore indexes fields list --format=json | grep -E '"state"|collectionGroups'
+```
+
 ---
 
 ## 3. Stripe — products, prices, overage meter, webhook
@@ -107,18 +116,30 @@ Create both as Secret Manager secrets per §1 (`tavily-api-key`, `sweep-secret`)
 
 ### 4e. Sweep → Cloud Scheduler
 
-`POST /internal/sweep` (idle-close, post-conversation scoring/memory extraction, expired-memory purge — see [Skills](architecture.md#skills) in the architecture doc) is not called by any client; it needs an external trigger. Create a Cloud Scheduler job to hit it every 15 minutes:
+`POST /internal/sweep` (idle-close, post-conversation scoring/memory extraction, expired-memory purge — see [Skills](architecture.md#skills) in the architecture doc) is not called by any client; it needs an external trigger.
+
+The Cloud Scheduler API is **not** enabled on a fresh project — enable it first, or `jobs create` fails with `PERMISSION_DENIED`:
+
+```bash
+gcloud services enable cloudscheduler.googleapis.com
+```
+
+Then create a job to hit the endpoint every 15 minutes:
 
 ```bash
 gcloud scheduler jobs create http ayooda-sweep \
-  --location=<REGION> \
+  --location=us-central1 \
   --schedule="*/15 * * * *" \
-  --uri="https://<API_HOST>/internal/sweep" \
+  --time-zone="UTC" \
+  --uri="$(gcloud run services describe ayooda-api --region=us-central1 --format='value(status.url)')/internal/sweep" \
   --http-method=POST \
   --headers="x-sweep-secret=<SWEEP_SECRET>" \
   --attempt-deadline=1800s \
-  --max-retry-attempts=0
+  --max-retry-attempts=0 \
+  --description="Skills sweep: idle-close, post-conversation scoring/memory, expired-memory purge"
 ```
+
+> **Target the direct Cloud Run URL, not `api.ayooda.live`.** The public host is a Firebase Hosting rewrite, and Hosting enforces a **60-second** request timeout — a full batch would be cut off there regardless of `--attempt-deadline`, and the sweep would never finish a large run. The `$(gcloud run services describe …)` substitution above resolves the direct `*.run.app` URL, which has no such limit.
 
 Both flags matter: a full batch (100 conversations, up to 2 LLM calls each) can easily outrun Cloud Scheduler's default 180s attempt deadline, and with retries enabled every timed-out attempt would start another sweep on top of the still-running one — overlapping runs re-processing the same conversations and multiplying LLM spend. `1800s` is the maximum Cloud Scheduler allows for HTTP targets; with retries off, a run that fails is simply picked up by the next 15-minute tick, which is exactly what the `pendingPostProcess` flag is designed for.
 
