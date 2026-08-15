@@ -4,14 +4,16 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Loader2, Plus, Trash2, Star, FileText, BookOpen } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
-import { LLM_MODELS, type AgentDoc } from '@ayooda/shared'
+import { LLM_MODELS, validateAgentImage, type AgentDoc } from '@ayooda/shared'
 import AgentSkills from '@/components/dashboard/AgentSkills'
+import AgentAvatar from '@/components/dashboard/AgentAvatar'
+import NewAgentForm from '@/components/dashboard/NewAgentForm'
 
 const card: React.CSSProperties = { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 24, marginBottom: 20 }
 const label: React.CSSProperties = { fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }
 const input: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
 
-interface Editor { id: string; name: string; description: string; systemPrompt: string; llmModel: string; isDefault: boolean }
+interface Editor { id: string; name: string; description: string; systemPrompt: string; llmModel: string; isDefault: boolean; photoURL: string | null }
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentDoc[]>([])
@@ -20,7 +22,8 @@ export default function AgentsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState('')
-  const [creating, setCreating] = useState(false)
+  const [showNew, setShowNew] = useState(false)
+  const [notice, setNotice] = useState('')
   const [agentDocs, setAgentDocs] = useState<{ id: string; source: string; status: string }[]>([])
   const [docsLoading, setDocsLoading] = useState(false)
 
@@ -47,18 +50,41 @@ export default function AgentsPage() {
   }, [editorId])
 
   function edit(a: AgentDoc) {
-    setEditor({ id: a.id, name: a.name, description: a.description, systemPrompt: a.systemPrompt, llmModel: a.llmModel, isDefault: a.isDefault })
+    setEditor({ id: a.id, name: a.name, description: a.description, systemPrompt: a.systemPrompt, llmModel: a.llmModel, isDefault: a.isDefault, photoURL: a.photoURL })
     setError('')
   }
 
-  async function create() {
-    setCreating(true); setError('')
+  async function uploadLogo(f: File | null) {
+    if (!f || !editor) return
+    const v = validateAgentImage(f.name, f.size)
+    if (!v.ok) { setError(v.error); return }
+    setError(''); setBusyId(editor.id)
     try {
-      const res = await apiRequest('/agents', { method: 'POST', body: JSON.stringify({ name: 'New agent' }) })
-      const d = await res.json().catch(() => ({})) as AgentDoc & { error?: string }
-      if (!res.ok) { setError(d.error ?? 'Could not create the agent'); return }
-      await load(); edit(d)
-    } finally { setCreating(false) }
+      const form = new FormData()
+      form.append('file', f)
+      const res = await apiRequest(`/agents/${editor.id}/photo`, { method: 'POST', body: form })
+      const d = await res.json().catch(() => ({})) as { photoURL?: string; error?: string }
+      if (!res.ok) { setError(d.error ?? 'Could not upload the logo'); return }
+      setEditor({ ...editor, photoURL: d.photoURL ?? null })
+      await load()
+    } finally { setBusyId('') }
+  }
+
+  async function removeLogo() {
+    if (!editor) return
+    setBusyId(editor.id)
+    try {
+      await apiRequest(`/agents/${editor.id}/photo`, { method: 'DELETE' })
+      setEditor({ ...editor, photoURL: null })
+      await load()
+    } finally { setBusyId('') }
+  }
+
+  async function handleCreated(agent: AgentDoc, warning?: string) {
+    setShowNew(false)
+    setNotice(warning ?? '')
+    await load()
+    edit(agent)
   }
 
   async function save() {
@@ -95,19 +121,25 @@ export default function AgentsPage() {
           <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Agents</h1>
           <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Each agent has its own persona, model, knowledge, and tools. Channels pick which agent answers.</p>
         </div>
-        {!editor && <button type="button" onClick={() => void create()} disabled={creating} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px', flexShrink: 0, whiteSpace: 'nowrap' }}><Plus size={14} /> {creating ? 'Creating…' : 'New agent'}</button>}
+        {!editor && !showNew && <button type="button" onClick={() => { setShowNew(true); setError(''); setNotice('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px', flexShrink: 0, whiteSpace: 'nowrap' }}><Plus size={14} /> New agent</button>}
       </div>
 
       {error && <p style={{ fontSize: 12, color: '#f87171', marginBottom: 12 }}>{error}</p>}
+      {notice && <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 12 }}>{notice}</p>}
 
-      {!editor && (
+      {showNew && !editor && (
+        <NewAgentForm onCreated={handleCreated} onCancel={() => setShowNew(false)} />
+      )}
+
+      {!editor && !showNew && (
         <div style={card}>
           <p style={label}>Your agents</p>
           {agents.map((a) => (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--line)' }}>
+              <AgentAvatar name={a.name} photoURL={a.photoURL} seed={a.id} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>{a.name} {a.isDefault && <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>· default</span>}</p>
-                <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0 }}>{a.llmModel}</p>
+                <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.description || a.llmModel}</p>
               </div>
               {!a.isDefault && <button type="button" onClick={() => void makeDefault(a.id)} disabled={busyId === a.id} className="btn btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 4, borderRadius: 'var(--r-sm)', padding: '6px 10px', fontSize: 12 }}><Star size={13} /> Set default</button>}
               <button type="button" onClick={() => edit(a)} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13 }}>Edit</button>
@@ -120,6 +152,18 @@ export default function AgentsPage() {
       {editor && (
         <div style={card}>
           <p style={label}>Edit agent</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <AgentAvatar name={editor.name} photoURL={editor.photoURL} seed={editor.id} size={56} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <label className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 12.5, cursor: 'pointer' }}>
+                {editor.photoURL ? 'Replace logo' : 'Upload logo'}
+                <input type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={(e) => { void uploadLogo(e.target.files?.[0] ?? null); e.target.value = '' }} />
+              </label>
+              {editor.photoURL && (
+                <button type="button" onClick={() => void removeLogo()} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 12.5 }}>Remove</button>
+              )}
+            </div>
+          </div>
           <div style={{ marginBottom: 12 }}><input placeholder="Agent name" value={editor.name} onChange={(e) => setEditor({ ...editor, name: e.target.value })} style={input} /></div>
           <div style={{ marginBottom: 12 }}><input placeholder="Short description" value={editor.description} onChange={(e) => setEditor({ ...editor, description: e.target.value })} style={input} /></div>
           <div style={{ marginBottom: 12 }}><textarea placeholder="System prompt — the agent's personality and instructions" value={editor.systemPrompt} onChange={(e) => setEditor({ ...editor, systemPrompt: e.target.value })} style={{ ...input, minHeight: 100, resize: 'vertical' }} /></div>

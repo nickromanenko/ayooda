@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
-import type { DocumentData } from 'firebase-admin/firestore'
+import { FieldValue, type DocumentData } from 'firebase-admin/firestore'
 import { adminDb, adminBucket } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { encryptSecret } from '../lib/crypto'
 import { namespaceFor } from '../lib/pinecone'
 import { agentNamespace, agentDeleteGuard } from '../lib/agents/agent-helpers'
-import { LLM_MODELS, type AgentDoc } from '@ayooda/shared'
+import { LLM_MODELS, agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, type AgentDoc } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
 agents.use('*', requireAuth)
@@ -19,6 +19,7 @@ function toAgentDoc(id: string, d: DocumentData): AgentDoc {
     id,
     name: d.name,
     photoURL: d.photoURL ?? null,
+    role: d.role ?? null,
     description: d.description ?? '',
     systemPrompt: d.systemPrompt ?? '',
     llmModel: d.llmModel ?? DEFAULT_MODEL,
@@ -39,18 +40,25 @@ agents.get('/', async (c) => {
 /** POST /agents — create a non-default agent with a fresh namespace. */
 agents.post('/', async (c) => {
   const ws = c.get('workspaceId')
-  const body = await c.req.json<{ name?: string; description?: string; systemPrompt?: string; llmModel?: string }>().catch(() => ({} as { name?: string; description?: string; systemPrompt?: string; llmModel?: string }))
+  const body = await c.req.json<{ name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string }>().catch(() => ({} as { name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string }))
   const name = body.name?.trim()
   if (!name || name.length > 80) return c.json({ error: 'name is required (max 80 chars)' }, 400)
   if (body.llmModel !== undefined && !LLM_MODELS.some((m) => m.id === body.llmModel)) return c.json({ error: 'Invalid llmModel' }, 400)
+  if (body.role !== undefined && !isAgentRoleId(body.role)) return c.json({ error: 'Invalid role' }, 400)
+
+  // The role's only job: seed the starting prompt so a freshly created agent is
+  // already useful. An explicit systemPrompt in the body always wins.
+  const role = body.role ?? DEFAULT_AGENT_ROLE_ID
+  const seededPrompt = agentRole(role)?.systemPrompt ?? DEFAULT_PROMPT
 
   const ref = adminDb.collection(`workspaces/${ws}/agents`).doc()
   const now = new Date()
   const doc = {
     name,
     photoURL: null,
+    role,
     description: body.description?.trim() ?? '',
-    systemPrompt: body.systemPrompt?.trim() || DEFAULT_PROMPT,
+    systemPrompt: body.systemPrompt?.trim() || seededPrompt,
     llmModel: body.llmModel ?? DEFAULT_MODEL,
     knowledgeNamespace: agentNamespace(ws, ref.id),
     isDefault: false,
@@ -76,10 +84,14 @@ agents.put('/:id', async (c) => {
   const ref = adminDb.doc(`workspaces/${ws}/agents/${id}`)
   const snap = await ref.get()
   if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
-  const body = await c.req.json<{ name?: string; photoURL?: string | null; description?: string; systemPrompt?: string; llmModel?: string }>().catch(() => ({} as { name?: string; photoURL?: string | null; description?: string; systemPrompt?: string; llmModel?: string }))
+  const body = await c.req.json<{ name?: string; photoURL?: string | null; description?: string; systemPrompt?: string; llmModel?: string; role?: string }>().catch(() => ({} as { name?: string; photoURL?: string | null; description?: string; systemPrompt?: string; llmModel?: string; role?: string }))
   if (body.llmModel !== undefined && !LLM_MODELS.some((m) => m.id === body.llmModel)) return c.json({ error: 'Invalid llmModel' }, 400)
+  if (body.role !== undefined && !isAgentRoleId(body.role)) return c.json({ error: 'Invalid role' }, 400)
 
   const update: Record<string, unknown> = { updatedAt: new Date() }
+  // Changing the role later relabels the agent; it deliberately does not rewrite
+  // a systemPrompt the owner may have customised.
+  if (body.role !== undefined) update.role = body.role
   if (body.name !== undefined) { const n = body.name.trim(); if (!n || n.length > 80) return c.json({ error: 'name is required (max 80 chars)' }, 400); update.name = n }
   if (body.photoURL !== undefined) update.photoURL = body.photoURL
   if (body.description !== undefined) update.description = body.description
@@ -168,6 +180,74 @@ agents.delete('/:id', async (c) => {
   for (const d of toolsSnap.docs) await d.ref.delete()
 
   await ref.delete()
+  return c.json({ ok: true })
+})
+
+/**
+ * POST /agents/:id/photo — upload the agent's logo (multipart, field "file").
+ *
+ * The object is made publicly readable because the chat widget renders it with a
+ * plain <img src> on the customer's own site, where no credentials exist. Only
+ * this one object is exposed, not the bucket.
+ */
+agents.post('/:id/photo', async (c) => {
+  const ws = c.get('workspaceId')
+  const id = c.req.param('id')
+  const ref = adminDb.doc(`workspaces/${ws}/agents/${id}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+
+  const form = await c.req.formData().catch(() => null)
+  const file = form?.get('file')
+  if (!(file instanceof File)) return c.json({ error: 'file is required (multipart form-data)' }, 400)
+
+  const validation = validateAgentImage(file.name, file.size)
+  if (!validation.ok) {
+    return c.json({ error: validation.error }, file.size > MAX_AGENT_IMAGE_BYTES ? 413 : 400)
+  }
+
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+  // Cache-bust on replacement: a fixed key would keep serving the old image from
+  // CDN/browser caches long after the owner changed it.
+  const storagePath = `workspaces/${ws}/agents/${id}/logo-${Date.now()}${ext}`
+  const object = adminBucket().file(storagePath)
+
+  await object.save(Buffer.from(await file.arrayBuffer()), {
+    contentType: file.type || 'image/png',
+    metadata: { cacheControl: 'public, max-age=31536000, immutable' },
+  })
+
+  try {
+    await object.makePublic()
+  } catch (err) {
+    await object.delete().catch(() => {})
+    console.error('[agents] makePublic failed for agent logo:', err)
+    return c.json({ error: 'Could not publish the image. Check bucket public-access settings.' }, 500)
+  }
+
+  const photoURL = `https://storage.googleapis.com/${adminBucket().name}/${storagePath}`
+  const previousPath = snap.data()!.photoStoragePath as string | undefined
+  await ref.update({ photoURL, photoStoragePath: storagePath, updatedAt: new Date() })
+
+  // Best-effort cleanup of the object we just replaced.
+  if (previousPath && previousPath !== storagePath) {
+    await adminBucket().file(previousPath).delete().catch(() => {})
+  }
+
+  return c.json({ photoURL })
+})
+
+/** DELETE /agents/:id/photo — clear the logo and remove the stored object. */
+agents.delete('/:id/photo', async (c) => {
+  const ws = c.get('workspaceId')
+  const id = c.req.param('id')
+  const ref = adminDb.doc(`workspaces/${ws}/agents/${id}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+
+  const path = snap.data()!.photoStoragePath as string | undefined
+  if (path) await adminBucket().file(path).delete().catch(() => {})
+  await ref.update({ photoURL: null, photoStoragePath: FieldValue.delete(), updatedAt: new Date() })
   return c.json({ ok: true })
 })
 

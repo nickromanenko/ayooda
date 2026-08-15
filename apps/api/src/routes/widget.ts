@@ -55,9 +55,33 @@ widget.get('/config/:channelId', async (c) => {
   if (!channelDoc) return c.json({ error: 'Channel not found' }, 404)
 
   const data = channelDoc.data()
+
+  // The channel carries a cached copy of the agent's name and photo, refreshed
+  // only when a channel is reassigned to a different agent. Renaming an agent or
+  // uploading a logo would therefore never reach an already-embedded widget, so
+  // read the agent live and fall back to the cache only if it has gone.
+  // Appearance (colour, position, welcome message) stays channel-level.
+  let agentName: string = data.config.agentName
+  let agentPhotoURL: string | null = data.config.agentPhotoURL ?? null
+  const workspaceId = channelDoc.ref.parent.parent?.id
+  const agentId = data.agentId as string | undefined
+  if (workspaceId && agentId) {
+    try {
+      const agentSnap = await adminDb.doc(`workspaces/${workspaceId}/agents/${agentId}`).get()
+      if (agentSnap.exists) {
+        const a = agentSnap.data()!
+        agentName = a.name ?? agentName
+        agentPhotoURL = a.photoURL ?? null
+      }
+    } catch (err) {
+      // Non-fatal: a stale name beats a widget that fails to load.
+      console.warn('[widget] live agent lookup failed, using cached identity:', err)
+    }
+  }
+
   return c.json({
-    agentName: data.config.agentName,
-    agentPhotoURL: data.config.agentPhotoURL ?? null,
+    agentName,
+    agentPhotoURL,
     widgetColor: data.config.widgetColor,
     widgetPosition: data.config.widgetPosition,
     welcomeMessage: data.config.welcomeMessage,

@@ -185,6 +185,39 @@ export interface WidgetConfigResponse {
 export const KNOWLEDGE_FILE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.csv', '.md'] as const
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
+// ---------------------------------------------------------------------------
+// Agent logo uploads
+// ---------------------------------------------------------------------------
+
+/** SVG is deliberately excluded — it can carry script and is served publicly. */
+export const AGENT_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'] as const
+export const MAX_AGENT_IMAGE_BYTES = 2 * 1024 * 1024
+
+export function validateAgentImage(
+  filename: string,
+  sizeBytes: number,
+): { ok: true } | { ok: false; error: string } {
+  // The filename becomes part of a Storage object key — no path separators
+  if (/[\\/]|\.\./.test(filename)) {
+    return { ok: false, error: 'Invalid filename.' }
+  }
+  const dot = filename.lastIndexOf('.')
+  const ext = dot === -1 ? '' : filename.slice(dot).toLowerCase()
+  if (!(AGENT_IMAGE_EXTENSIONS as readonly string[]).includes(ext)) {
+    return {
+      ok: false,
+      error: `Unsupported image type "${ext || filename}". Allowed: ${AGENT_IMAGE_EXTENSIONS.join(', ')}`,
+    }
+  }
+  if (sizeBytes <= 0) {
+    return { ok: false, error: 'File is empty.' }
+  }
+  if (sizeBytes > MAX_AGENT_IMAGE_BYTES) {
+    return { ok: false, error: 'Image is too large. Maximum size is 2 MB.' }
+  }
+  return { ok: true }
+}
+
 export function validateKnowledgeFile(
   filename: string,
   sizeBytes: number,
@@ -213,6 +246,7 @@ export function validateKnowledgeFile(
 
 export * from './plans'
 export * from './skills'
+export * from './agent-roles'
 
 export type ChatStreamEvent =
   | { type: 'chunk'; text: string }
@@ -275,6 +309,8 @@ export interface AgentDoc {
   id: string
   name: string
   photoURL: string | null
+  /** Role id from AGENT_ROLES; seeds systemPrompt at creation. Absent on agents created before roles existed. */
+  role: string | null
   description: string
   systemPrompt: string
   llmModel: string
