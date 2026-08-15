@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   MessageSquare,
+  MessagesSquare,
   BookOpen,
   Bot,
   Radio,
@@ -20,6 +21,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 const navItems = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
   { label: 'Inbox', href: '/dashboard/inbox', icon: MessageSquare },
+  { label: 'Copilot', href: '/dashboard/copilot', icon: MessagesSquare },
   { label: 'Knowledge', href: '/dashboard/knowledge', icon: BookOpen },
   { label: 'Agents', href: '/dashboard/agents', icon: Bot },
   { label: 'Channels', href: '/dashboard/channels', icon: Radio },
@@ -37,7 +39,11 @@ export function Sidebar({ role }: { role: 'owner' | 'member' }) {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
 
-  const visibleNav = role === 'owner' ? navItems : navItems.filter((i) => i.href === '/dashboard/inbox')
+  // Copilot is per-member internal chat, not an owner-only admin surface — every
+  // team member needs a way to reach it, same as Inbox.
+  const visibleNav = role === 'owner'
+    ? navItems
+    : navItems.filter((i) => i.href === '/dashboard/inbox' || i.href === '/dashboard/copilot')
   const visibleBottom = role === 'owner' ? bottomItems : []
 
   function isActive(item: { href: string; exact?: boolean }) {
