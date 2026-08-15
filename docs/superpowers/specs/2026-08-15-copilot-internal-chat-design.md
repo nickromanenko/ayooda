@@ -38,7 +38,7 @@ Four modules come out of `prepareTurn`, each consumed by **both** orchestrators:
 | `chat/agent-resolution.ts` | `resolveAgentRec(workspaceId, agentId)` | Picking the specific agent, else the workspace default, else the legacy inline `workspace.agent` config. |
 | `chat/retrieval.ts` | `retrieveContext(namespace, message, trace)` → `{ contextBlocks, sources }` | The embed + Pinecone query + 0.6 score filter. Keeps its own try/catch, so both callers inherit non-fatal retrieval. |
 | `chat/prompt.ts` | `buildChatParams({ systemPrompt, contextBlocks, skillBlocks, history, message, apiKey, model })` → `ChatParams` | Context-section assembly and message-array construction. Pure. |
-| `chat/turn-tools.ts` | `loadTurnTools(workspaceId, agentId, skillCtx, skills)` → `{ tools, skillTools }` | Wraps the existing `loadTools` + `gatherTools`. |
+| `chat/turn-tools.ts` | `loadTurnTools(workspaceId, agentId, skills, skillCtx)` → `{ tools, skillTools }` | Wraps the existing `loadTools` + `gatherTools`; each independently non-fatal. |
 
 What **stays** in `prepareTurn`: the billing gate, the silence/reopen gate, conversation-document lifecycle, escalation rules, and the `persist` closure. These are channel concerns.
 
