@@ -46,6 +46,20 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
         }
       }
+
+      // Copilot threads are private to the member who created them. The {uid}
+      // path segment does the enforcing — there is no field comparison and no
+      // get() lookup, and another member's threads are simply not addressable.
+      // Writes are server-only; the client reads so the UI can stream a thread.
+      match /copilotUsers/{uid}/threads/{threadId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+
+        match /messages/{messageId} {
+          allow read: if request.auth != null && request.auth.uid == uid;
+          allow write: if false;
+        }
+      }
     }
   }
 }
