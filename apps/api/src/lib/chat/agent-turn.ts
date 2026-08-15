@@ -1,13 +1,13 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import type { ToolSet } from 'ai'
 import { adminDb } from '../firebase-admin'
-import { embedText, LEGACY_MODEL_MAP } from '../gemini'
+import { LEGACY_MODEL_MAP } from '../gemini'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
-import { namespaceFor } from '../pinecone'
 import { type ChatParams } from '../llm/chat'
 import { loadTools, type StoredTool } from './tools'
 import { resolveGatewayKey } from '../llm/resolve'
 import { resolveAgentRec } from './agent-resolution'
+import { retrieveContext } from './retrieval'
 import { evaluateRules } from '../workflow/engine'
 import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
@@ -185,20 +185,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const historySnap = await messagesRef.orderBy('createdAt', 'asc').limitToLast(10).get()
   const history = historySnap.docs.map((d) => d.data() as { role: string; content: string })
 
-  // RAG (non-fatal)
-  let contextBlocks: string[] = []
-  let sources: Array<{ docId: string; source: string; score: number }> = []
-  try {
-    const queryEmbedding = await embedText(trimmed, trace)
-    const retrievalSpan = trace.span({ name: 'pinecone-query', input: { topK: 5 } })
-    const results = await namespaceFor(agentRec.knowledgeNamespace).query({ vector: queryEmbedding, topK: 5, includeMetadata: true })
-    retrievalSpan.end({ output: { matches: results.matches?.length ?? 0 } })
-    const good = (results.matches ?? []).filter((m) => (m.score ?? 0) > 0.6)
-    sources = good.map((m) => ({ docId: (m.metadata?.docId as string) ?? '', source: (m.metadata?.source as string) ?? '', score: m.score ?? 0 }))
-    contextBlocks = good.map((m) => (m.metadata?.text as string) ?? '').filter(Boolean)
-  } catch (err) {
-    console.warn('[agent-turn] RAG retrieval failed:', err)
-  }
+  const { contextBlocks, sources } = await retrieveContext(agentRec.knowledgeNamespace, trimmed, trace)
 
   // Skill context (non-fatal): each skill's contributeContext hook is isolated in gatherContext,
   // but guard the call itself too — belt and braces against gatherContext ever rejecting.
