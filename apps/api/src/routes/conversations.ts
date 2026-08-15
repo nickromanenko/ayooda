@@ -63,6 +63,10 @@ conversations.post('/:id/takeover', async (c) => {
     status: 'human',
     operatorId: uid,
     hadTakeover: true,
+    // `autoClosedAt` means "the sweep closed this and no human has touched it since" —
+    // prepareTurn reopens such a conversation on the next visitor message. Clearing it
+    // here stops the bot answering over an operator who has just taken over.
+    autoClosedAt: FieldValue.delete(),
     updatedAt: FieldValue.serverTimestamp(),
   })
 
@@ -82,6 +86,10 @@ conversations.post('/:id/resolve', async (c) => {
     status: 'resolved',
     operatorId: null,
     pendingPostProcess: true,
+    // Same invariant as takeover: an operator resolving an already auto-closed
+    // conversation is an explicit human decision, so it must not be undone by the
+    // next visitor message reopening it.
+    autoClosedAt: FieldValue.delete(),
     updatedAt: FieldValue.serverTimestamp(),
   })
 
