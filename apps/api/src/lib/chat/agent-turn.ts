@@ -1,19 +1,21 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import type { ToolSet } from 'ai'
 import { adminDb } from '../firebase-admin'
-import { embedText, LEGACY_MODEL_MAP } from '../gemini'
+import { LEGACY_MODEL_MAP } from '../gemini'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
-import { namespaceFor } from '../pinecone'
 import { type ChatParams } from '../llm/chat'
-import { loadTools, type StoredTool } from './tools'
+import { type StoredTool } from './tools'
 import { resolveGatewayKey } from '../llm/resolve'
-import { resolveAgentDoc } from '../agents/agent-helpers'
+import { resolveAgentRec } from './agent-resolution'
+import { retrieveContext } from './retrieval'
+import { buildChatParams } from './prompt'
+import { loadTurnTools } from './turn-tools'
 import { evaluateRules } from '../workflow/engine'
 import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 import { emitOverageEvent } from '../billing/overage'
 import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
-import { gatherContext, gatherTools } from '../skills/run'
+import { gatherContext } from '../skills/run'
 import '../skills/all'
 
 export interface PrepareTurnInput {
@@ -94,40 +96,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   if (!workspaceSnap.exists) return { kind: 'error', error: 'Workspace not found' }
   const workspaceData = workspaceSnap.data()!
 
-  // Resolve the agent for this turn: the channel's agent, else the workspace default,
-  // else the inline workspace.agent (pre-migration safety net).
-  const agentsCol = adminDb.collection(`workspaces/${workspaceId}/agents`)
-  type AgentRec = { id: string; systemPrompt: string; llmModel: string; gatewayKey?: string; knowledgeNamespace: string }
-  let agentRec: AgentRec | undefined
-  try {
-    const toRec = (id: string, d: FirebaseFirestore.DocumentData): AgentRec => ({
-      id,
-      systemPrompt: d.systemPrompt ?? '',
-      llmModel: d.llmModel ?? 'google/gemini-2.5-flash',
-      gatewayKey: d.gatewayKey,
-      knowledgeNamespace: d.knowledgeNamespace ?? `ws_${workspaceId}`,
-    })
-    const [specificSnap, defaultSnap] = await Promise.all([
-      agentId ? agentsCol.doc(agentId).get() : Promise.resolve(null),
-      agentsCol.where('isDefault', '==', true).limit(1).get(),
-    ])
-    const byId = new Map<string, AgentRec>()
-    if (specificSnap && specificSnap.exists) { const r = toRec(specificSnap.id, specificSnap.data()!); byId.set(r.id, r) }
-    const defaultAgent = defaultSnap.empty ? undefined : toRec(defaultSnap.docs[0]!.id, defaultSnap.docs[0]!.data())
-    agentRec = resolveAgentDoc(agentId, byId, defaultAgent)
-  } catch (err) {
-    console.warn('[agent-turn] agent resolution failed:', err)
-  }
-  if (!agentRec) {
-    const inline = workspaceData.agent ?? {}
-    agentRec = {
-      id: 'inline',
-      systemPrompt: inline.systemPrompt ?? '',
-      llmModel: inline.llmModel ?? 'google/gemini-2.5-flash',
-      gatewayKey: workspaceData.gatewayKey,
-      knowledgeNamespace: `ws_${workspaceId}`,
-    }
-  }
+  const agentRec = await resolveAgentRec(workspaceId, agentId, workspaceData)
   const systemPrompt: string = agentRec.systemPrompt
   const storedModel: string = agentRec.llmModel ?? 'gemini-flash-latest'
   const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
@@ -199,7 +168,12 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     })
     const update: Record<string, unknown> = { 'usage.conversationCount': FieldValue.increment(1) }
     if (reset) {
+      // usage.periodStart is shared between this counter and Copilot's usage.copilotPeriodCount
+      // (see routes/copilot.ts). Every writer that advances periodStart must reset BOTH counters,
+      // or the other one compares its stale count against the fresh period and stays wrongly
+      // gated for the rest of it. No Copilot thread was created by a customer conversation, hence 0.
       update['usage.periodConversationCount'] = 1
+      update['usage.copilotPeriodCount'] = 0
       update['usage.periodStart'] = FieldValue.serverTimestamp()
     } else {
       update['usage.periodConversationCount'] = FieldValue.increment(1)
@@ -218,20 +192,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const historySnap = await messagesRef.orderBy('createdAt', 'asc').limitToLast(10).get()
   const history = historySnap.docs.map((d) => d.data() as { role: string; content: string })
 
-  // RAG (non-fatal)
-  let contextBlocks: string[] = []
-  let sources: Array<{ docId: string; source: string; score: number }> = []
-  try {
-    const queryEmbedding = await embedText(trimmed, trace)
-    const retrievalSpan = trace.span({ name: 'pinecone-query', input: { topK: 5 } })
-    const results = await namespaceFor(agentRec.knowledgeNamespace).query({ vector: queryEmbedding, topK: 5, includeMetadata: true })
-    retrievalSpan.end({ output: { matches: results.matches?.length ?? 0 } })
-    const good = (results.matches ?? []).filter((m) => (m.score ?? 0) > 0.6)
-    sources = good.map((m) => ({ docId: (m.metadata?.docId as string) ?? '', source: (m.metadata?.source as string) ?? '', score: m.score ?? 0 }))
-    contextBlocks = good.map((m) => (m.metadata?.text as string) ?? '').filter(Boolean)
-  } catch (err) {
-    console.warn('[agent-turn] RAG retrieval failed:', err)
-  }
+  const { contextBlocks, sources } = await retrieveContext(agentRec.knowledgeNamespace, trimmed, trace)
 
   // Skill context (non-fatal): each skill's contributeContext hook is isolated in gatherContext,
   // but guard the call itself too — belt and braces against gatherContext ever rejecting.
@@ -278,35 +239,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
   if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
 
-  const allBlocks = [...contextBlocks, ...skillBlocks]
-  const contextSection =
-    allBlocks.length > 0
-      ? `\n\nUse the following knowledge base context to inform your answer:\n---\n${allBlocks.join('\n\n')}\n---`
-      : ''
-  const fullSystemPrompt = systemPrompt + contextSection
-
-  const chatMessages = history.slice(0, -1).map((m) => ({
-    role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
-    content: m.content,
-  }))
-  chatMessages.push({ role: 'user', content: trimmed })
-
-  // Tool/webhook actions (non-fatal): the model may call these during the turn.
-  let tools: StoredTool[] = []
-  try {
-    tools = await loadTools(workspaceId, agentRec.id)
-  } catch (err) {
-    console.warn('[agent-turn] tool load failed:', err)
-  }
-
-  // Skill tools (non-fatal): each skill's contributeTools hook is isolated in gatherTools,
-  // but guard the call itself too — belt and braces against gatherTools ever rejecting.
-  let skillTools: ToolSet = {}
-  try {
-    if (skills.length) skillTools = await gatherTools(skills, skillCtx)
-  } catch (err) {
-    console.warn('[skills] gatherTools failed:', err)
-  }
+  const { tools, skillTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
     const messageRef = await messagesRef.add({
@@ -330,7 +263,15 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
 
   return {
     kind: 'ready',
-    chatParams: { model: llmModel, systemPrompt: fullSystemPrompt, messages: chatMessages, apiKey: keyResult.apiKey },
+    chatParams: buildChatParams({
+      systemPrompt,
+      contextBlocks,
+      skillBlocks,
+      history,
+      message: trimmed,
+      apiKey: keyResult.apiKey,
+      model: llmModel,
+    }),
     sources,
     trace,
     llmModel,

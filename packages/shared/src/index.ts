@@ -80,6 +80,7 @@ export interface WorkspaceUsage {
   tokenCount: number
   periodConversationCount: number
   periodStart: Date | null
+  copilotPeriodCount?: number   // internal Copilot threads this period
 }
 
 export interface WorkspaceDoc {
@@ -530,4 +531,18 @@ export interface AgentSkillView {
   enabled: boolean
   config: SkillConfig
   locked: boolean             // true when the workspace plan is below minTier
+}
+
+// ---------------------------------------------------------------------------
+// Copilot — internal in-app chat with a team member's own agent
+// ---------------------------------------------------------------------------
+
+/** workspaces/{ws}/copilotUsers/{uid}/threads/{threadId} */
+export interface CopilotThreadDoc {
+  uid: string
+  agentId: string
+  title: string          // first user message, truncated to 80 chars
+  createdAt: Date
+  updatedAt: Date
+  lastMessage: string    // truncated to 200 chars
 }

@@ -100,6 +100,8 @@ match /copilotUsers/{uid}/threads/{threadId} {
 | max | 1500 | 3000 |
 | *trial* | `TRIAL_CONVERSATION_CAP` = 50 | `TRIAL_COPILOT_CAP` = 50 (new constant, not a `PlanDef` field) |
 
+**The cap is not the only gate.** `checkCopilotEntitlement` must mirror the status ladder in `checkEntitlement`: `active`/`past_due` get the plan cap (failing open on an unknown tier, so a transient Stripe sync state never locks out a paying customer); `trialing` gets `TRIAL_COPILOT_CAP` and is refused once `trialEndsAt` has passed; `canceled`, `expired` and a missing subscription are refused outright. Reading `tier` alone would let an expired trial or a cancelled customer keep free LLM spend through Copilot — the exact abuse this cap exists to prevent.
+
 The cap is checked **once per thread, when its first message is sent** — mirroring how customer conversations gate on creation, so a long thread is not punished per message. Creating an empty thread therefore consumes nothing; a thread that is never messaged never counts. Over cap returns HTTP 402 with reason `copilot_limit`, distinct from the customer-conversation reason so the UI never tells someone their customers are blocked when it is their own internal allowance.
 
 No overage billing. This cap is a spend guard, not a revenue line.

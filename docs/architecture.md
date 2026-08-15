@@ -56,6 +56,7 @@ Ayooda is a multi-tenant SaaS platform that lets companies deploy an AI-powered 
 │  │    conversations/                                             │  │
 │  │      messages/│                                               │  │
 │  │    visitorMemory/                                             │  │
+│  │    copilotUsers/                                              │  │
 │  └───────────────┘───────────────────────────────────────────────┘  │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
@@ -163,6 +164,14 @@ Per-agent, opt-in capabilities layered onto the chat turn without touching the c
   2. **Post-process** — every conversation flagged `pendingPostProcess` (auto-closed or operator-resolved) runs each loaded skill's `afterConversation` hook, then is stamped `postProcessedAt` and `pendingPostProcess: false` regardless of which (or whether any) skills fired. `postProcessedAt` is the idempotency marker: it's what makes a conversation "done," independent of `scoredAt` (written only by the scoring skill), so an agent with only the memory skill enabled doesn't get re-processed — and re-charged for the extraction LLM call — on every sweep run. If a skill's hook throws, the conversation still gets its flag cleared but the run is counted as `failed`, not `scored`, in the report.
   3. **Memory purge** — `visitorMemory` docs with an expired `nextExpiryAt` have their stale facts dropped.
   The endpoint returns a `{ closed, scored, purged, failed }` report per run.
+
+### Copilot
+
+An authenticated in-app chat surface (`/dashboard/copilot`) where team members talk to their own workspace agents — a test/staff-assist surface, not a customer channel.
+
+- **Threads**: `workspaces/{workspaceId}/copilotUsers/{uid}/threads/{threadId}`, with a `messages` subcollection. The thread *list* is server-served — `GET /copilot/threads` (`apps/api/src/routes/copilot.ts`) reads it via the Admin SDK, which bypasses Firestore rules. The **only** client-side Firestore read is opening a thread: `apps/web/src/app/dashboard/copilot/page.tsx` attaches an `onSnapshot` listener directly to that thread's `messages` subcollection, and the `{uid}` path segment is the entire privacy mechanism for it (see [Firestore Security Rules](#firestore-security-rules)). The collection is deliberately named `threads`, not `conversations`: the sweep's `collectionGroup('conversations')` queries (`apps/api/src/lib/skills/sweep.ts`) match only that literal collection name, so Copilot threads are structurally invisible to it — never auto-closed, scored, or extracted into visitor memory.
+- **Orchestration**: `prepareCopilotTurn` (`apps/api/src/lib/chat/copilot-turn.ts`) is a second orchestrator alongside `prepareTurn` (`apps/api/src/lib/chat/agent-turn.ts`). Both share the four modules extracted from `prepareTurn` for this reuse — agent resolution (`agent-resolution.ts`), RAG retrieval (`retrieval.ts`), prompt assembly (`prompt.ts`), and tool loading (`turn-tools.ts`). Copilot filters the scoring skill out of its loaded skill set (`skillsForCopilot`), since scoring exists to grade customer conversations, not staff testing.
+- **Usage**: Copilot has its own cap, `usage.copilotPeriodCount`, checked once per thread on creation (never per message) via `checkCopilotEntitlement` (`apps/api/src/lib/billing/copilot-entitlement.ts`), and it never touches `usage.periodConversationCount`, the customer-conversation quota. The two counters share one `usage.periodStart`, so both `prepareTurn` and the Copilot route (`apps/api/src/routes/copilot.ts`) reset **both** counters together whenever `shouldResetPeriod` detects a rollover — resetting only one would either lock out paying customers or leave Copilot's cap permanently exhausted for a workspace with no customer traffic.
 
 ---
 
@@ -461,6 +470,7 @@ Resolved server-side on each gated request, no Stripe secrets exposed:
 ### Firestore Security Rules
 - Client-side reads/writes from `apps/web` use Firestore rules requiring `request.auth.uid`
 - The `workspaces/{id}` document itself is server-only (`allow read, write: if false`) — only the Admin SDK (which bypasses rules) can read or write it, so the AES-256-GCM-encrypted `openRouterKey` is never client-readable; no API endpoint returns the key either (only `hasOpenRouterKey`)
+- `copilotUsers/{uid}/threads/{threadId}` (and its `messages` subcollection) allow read only `if request.auth.uid == uid` — a one-line comparison with no `get()` lookup, so another member's threads are simply not addressable. Writes are `allow write: if false`; only the API (Admin SDK) creates and appends to threads
 - Server-side (API) uses Firebase Admin SDK which bypasses Firestore rules
 
 ### OpenRouter API Keys (bring-your-own-key)

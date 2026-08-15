@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { validateKnowledgeFile, MAX_UPLOAD_BYTES, LLM_MODELS, GEMINI_MODELS, findModel, providerOf, PLANS, planFor, TRIAL_DAYS, TRIAL_CONVERSATION_CAP } from './index'
+import { validateKnowledgeFile, MAX_UPLOAD_BYTES, LLM_MODELS, GEMINI_MODELS, findModel, providerOf, PLANS, planFor, TRIAL_DAYS, TRIAL_CONVERSATION_CAP, TRIAL_COPILOT_CAP } from './index'
 
 describe('validateKnowledgeFile', () => {
   test('accepts allowed extensions under the size cap', () => {
@@ -63,6 +63,8 @@ describe('billing plans', () => {
     expect(PLANS.map((p) => p.tier)).toEqual(['lite', 'core', 'max'])
     expect(PLANS.map((p) => p.conversationCap)).toEqual([100, 500, 1500])
     expect(PLANS.map((p) => p.priceUsd)).toEqual([25, 55, 195])
+    expect(PLANS.map((p) => p.copilotCap)).toEqual([200, 1000, 3000])
+    expect(TRIAL_COPILOT_CAP).toBe(50)
   })
   test('planFor resolves a tier, undefined for null/unknown', () => {
     expect(planFor('core')?.conversationCap).toBe(500)

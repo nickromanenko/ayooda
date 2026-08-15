@@ -52,6 +52,8 @@ firebase deploy --only firestore
 
 Deploys `firestore.rules` (agents/tools/workflowRules are server-only; knowledge/tools secrets are never client-readable) and `firestore.indexes.json`. Watch the Firebase console for index builds to finish. If a query later needs a composite index, add it to `firestore.indexes.json` and re-run this command.
 
+**Run this before the web release (§4d)**, even on a web-only deploy: opening a Copilot thread reads its `messages` subcollection directly from Firestore in the browser, and that read is denied until the per-user `copilotUsers/{uid}/threads` rule is live.
+
 Two things that bite on first deploy:
 
 - **`HTTP Error: 409, index already exists`** — the CLI can create a composite index and then re-issue the same create within one run. The 409 aborts the deploy *before* it reaches `fieldOverrides`, so single-field overrides silently never get applied. Just re-run the command once the index shows `READY`; the second run is a no-op for the composite and applies the overrides. Verify with `gcloud firestore indexes fields list`.
@@ -177,6 +179,8 @@ firebase deploy --only hosting:web
 Then, one-time in the console: add `ayooda.live` (+ `www`) as a custom domain on the `ayooda-1791f` Hosting site, point DNS at the IPs it shows, and add `ayooda.live` to **Authentication → Settings → Authorized domains** (or via the Identity Toolkit `admin/v2/.../config` API) so Google sign-in works.
 
 **Deploy the web at the same time as the API (§4b).**
+
+**Deploy `firestore.rules` (§2) before this release, not after.** The Copilot thread *list* comes from `GET /copilot/threads` (Admin SDK, bypasses rules) — it renders fine either way. It's *opening* a thread that reads Firestore directly from the browser via `onSnapshot`, on that thread's `messages` subcollection (`apps/web/src/app/dashboard/copilot/page.tsx`). If the web build reaches production before the per-user `copilotUsers/{uid}/threads/{threadId}/messages` rule does, threads still list, but opening one shows an empty pane (permission-denied on the listener). No new environment variables and no new Firestore indexes come with Copilot: the server-side thread list (`copilotUsers/{uid}/threads` ordered by `updatedAt`) and the client-side messages listener (`.../messages` ordered by `createdAt`) are both single-field queries, served by Firestore's automatic single-field indexes.
 
 ---
 

@@ -19,16 +19,23 @@ const state = {
   docs: new Map<string, Record<string, any>>(),
   updates: [] as Array<{ path: string; data: Record<string, any> }>,
   added: [] as Array<{ path: string; data: Record<string, any> }>,
+  /** Docs a query on a given collection path returns. Unseeded paths stay empty, so
+   *  agent resolution, workflow rules and skills keep falling back exactly as before. */
+  queries: new Map<string, Array<Record<string, any>>>(),
+  /** Raw Pinecone matches retrieveContext sees. Empty unless a test seeds them. */
+  matches: [] as Array<Record<string, any>>,
 }
-
-const emptyQuery = { docs: [] as unknown[], empty: true, size: 0 }
 
 const queryRef = (path: string): any => ({
   where: () => queryRef(path),
   orderBy: () => queryRef(path),
   limit: () => queryRef(path),
   limitToLast: () => queryRef(path),
-  get: async () => emptyQuery,
+  get: async () => {
+    const rows = state.queries.get(path) ?? []
+    const docs = rows.map((data, i) => ({ id: `${path}-${i}`, data: () => data, ref: docRef(`${path}/${i}`) }))
+    return { docs, empty: docs.length === 0, size: docs.length }
+  },
 })
 
 const docRef = (path: string): any => ({
@@ -61,7 +68,7 @@ const traceStub: any = { span: () => ({ end: () => {} }), update: () => {}, gene
 mock.module('../firebase-admin', () => ({ adminDb, adminAuth: {}, adminBucket: () => ({}) }))
 mock.module('../langfuse', () => ({ getLangfuse: () => ({ trace: () => traceStub }) }))
 mock.module('../gemini', () => ({ LEGACY_MODEL_MAP: {}, embedText: async () => [0.1, 0.2] }))
-mock.module('../pinecone', () => ({ namespaceFor: () => ({ query: async () => ({ matches: [] }) }) }))
+mock.module('../pinecone', () => ({ namespaceFor: () => ({ query: async () => ({ matches: state.matches }) }) }))
 mock.module('../llm/resolve', () => ({ resolveGatewayKey: () => ({ ok: true, apiKey: 'k' }) }))
 
 const { prepareTurn, evaluateSilenceGate } = await import('./agent-turn')
@@ -72,6 +79,8 @@ const seed = (conversation: Record<string, any>) => {
   state.docs.clear()
   state.updates = []
   state.added = []
+  state.queries.clear()
+  state.matches = []
   state.docs.set('workspaces/w', {
     createdAt: new Date('2026-01-01T00:00:00Z'),
     subscription: { tier: 'core', status: 'active' },
@@ -126,6 +135,61 @@ describe('prepareTurn silence guard', () => {
     seed({ visitorId: 'v', status: 'bot' })
     expect((await turn()).kind).toBe('ready')
     expect(reopenUpdate()).toBeUndefined()
+  })
+})
+
+/**
+ * End-to-end prompt assembly. prepareTurn hands buildChatParams the pieces four extracted
+ * modules produce (agent resolution, retrieval, skills, key resolution); asserting only on
+ * result.kind would let any of them drift silently on the path every visitor turn takes.
+ */
+describe('prepareTurn prompt assembly', () => {
+  test('a ready turn carries the agent prompt, the retrieved context and the current message last', async () => {
+    seed({ visitorId: 'v', status: 'bot' })
+    state.matches = [
+      { score: 0.9, metadata: { docId: 'd1', source: 'faq.md', text: 'Refunds take 5 business days.' } },
+      { score: 0.1, metadata: { docId: 'd2', source: 'stale.md', text: 'BELOW-THRESHOLD-BLOCK' } },
+    ]
+    // Oldest-first, ending with the message this turn just wrote — buildChatParams drops
+    // that last entry and re-adds it as the current user message.
+    state.queries.set(`${CONV}/messages`, [
+      { role: 'user', content: 'do you do refunds?' },
+      { role: 'assistant', content: 'Yes, we do.' },
+      { role: 'user', content: 'are you still there?' },
+    ])
+
+    const result = await turn()
+    if (result.kind !== 'ready') throw new Error(`expected ready, got ${result.kind}`)
+    const { chatParams } = result
+
+    // The agent's configured prompt leads; retrieval is appended, never prepended or replaced.
+    expect(chatParams.systemPrompt.startsWith('You are helpful.')).toBe(true)
+    expect(chatParams.systemPrompt).toContain('Refunds take 5 business days.')
+    // Below the score threshold: retrieved but discarded, so it must not reach the model.
+    expect(chatParams.systemPrompt).not.toContain('BELOW-THRESHOLD-BLOCK')
+    expect(chatParams.model).toBe('google/gemini-2.5-flash')
+    expect(chatParams.apiKey).toBe('k')
+
+    // History in order, no duplicate of the current message, and the visitor speaks last.
+    expect(chatParams.messages).toEqual([
+      { role: 'user', content: 'do you do refunds?' },
+      { role: 'assistant', content: 'Yes, we do.' },
+      { role: 'user', content: 'are you still there?' },
+    ])
+    expect(chatParams.messages[chatParams.messages.length - 1]).toEqual({
+      role: 'user',
+      content: 'are you still there?',
+    })
+    expect(result.sources.map((s) => s.docId)).toEqual(['d1'])
+  })
+
+  test('with nothing retrieved the system prompt is exactly the agent prompt', async () => {
+    seed({ visitorId: 'v', status: 'bot' })
+    const result = await turn()
+    if (result.kind !== 'ready') throw new Error(`expected ready, got ${result.kind}`)
+    expect(result.chatParams.systemPrompt).toBe('You are helpful.')
+    expect(result.chatParams.messages).toEqual([{ role: 'user', content: 'are you still there?' }])
+    expect(result.sources).toEqual([])
   })
 })
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Loader2, Plus, Trash2, Star, FileText, BookOpen } from 'lucide-react'
+import { Loader2, Plus, Trash2, Star, FileText, BookOpen, MessagesSquare } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { LLM_MODELS, validateAgentImage, type AgentDoc } from '@ayooda/shared'
 import AgentSkills from '@/components/dashboard/AgentSkills'
@@ -193,6 +193,9 @@ export default function AgentsPage() {
           </div>
           <Link href={`/dashboard/knowledge?agent=${editor.id}`} className="btn btn-ghost" style={{ marginTop: 12, borderRadius: 'var(--r-sm)', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <BookOpen size={14} /> Manage knowledge
+          </Link>
+          <Link href={`/dashboard/copilot?agent=${editor.id}`} className="btn btn-ghost" style={{ marginTop: 12, marginLeft: 8, borderRadius: 'var(--r-sm)', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <MessagesSquare size={14} /> Test agent
           </Link>
 
           <p style={{ ...label, marginTop: 16 }}>Skills</p>
