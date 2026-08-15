@@ -40,6 +40,23 @@ export interface ReadyCopilotTurn {
 export type PreparedCopilotTurn = ReadyCopilotTurn | { kind: 'error'; error: string }
 
 /**
+ * The one place Copilot's Firestore paths are built.
+ *
+ * The leaf collection is `threads` and must NEVER be named `conversations`:
+ * lib/skills/sweep.ts runs two `collectionGroup('conversations')` queries that
+ * auto-close and score whatever they match, workspace-wide. A rename here would
+ * silently hand every member's private internal chats to that sweep. Guarded by
+ * the path tests in ./copilot-turn.test.ts.
+ */
+export function copilotThreadsPath(workspaceId: string, uid: string): string {
+  return `workspaces/${workspaceId}/copilotUsers/${uid}/threads`
+}
+
+export function copilotThreadPath(workspaceId: string, uid: string, threadId: string): string {
+  return `${copilotThreadsPath(workspaceId, uid)}/${threadId}`
+}
+
+/**
  * Scoring exists to grade customer conversations for the owner; running it on
  * internal chats would pollute those metrics with staff traffic.
  */
@@ -69,7 +86,7 @@ export async function prepareCopilotTurn(
     metadata: { workspaceId, agentId: agentRec.id, llmModel, surface: 'copilot' },
   })
 
-  const threadRef = adminDb.doc(`workspaces/${workspaceId}/copilotUsers/${uid}/threads/${threadId}`)
+  const threadRef = adminDb.doc(copilotThreadPath(workspaceId, uid, threadId))
   const messagesRef = threadRef.collection('messages')
   await messagesRef.add({ role: 'user', content: trimmed, createdAt: FieldValue.serverTimestamp() })
 

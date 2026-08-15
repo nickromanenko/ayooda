@@ -6,8 +6,8 @@
  * this path, so a cross-user attempt simply 404s rather than needing an ownership check.
  *
  * There is deliberately no "create thread" route — POST /copilot/chat takes either a
- * threadId (continue) or an agentId (start) and creates the thread as it writes the first
- * message, so empty threads are structurally impossible.
+ * threadId (continue) or an agentId (start) and creates the thread only once the turn is
+ * known to be preparable, so empty threads are structurally impossible.
  *
  * GET    /copilot/agents         — minimal agent list for the picker (member-readable)
  * GET    /copilot/threads        — the caller's own threads, newest first
@@ -24,7 +24,7 @@ import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { rateLimit } from '../lib/rate-limit'
 import { checkCopilotEntitlement } from '../lib/billing/copilot-entitlement'
 import { shouldResetPeriod } from '../lib/billing/entitlement'
-import { prepareCopilotTurn } from '../lib/chat/copilot-turn'
+import { copilotThreadsPath, prepareCopilotTurn } from '../lib/chat/copilot-turn'
 import { runAgentTurn } from '../lib/chat/tools'
 
 const copilot = new Hono<{ Variables: AuthVariables }>()
@@ -59,8 +59,7 @@ export function validateChatBody(
   return { ok: true, value: { message, ...(threadId ? { threadId } : {}), ...(agentId ? { agentId } : {}) } }
 }
 
-const threadsCol = (ws: string, uid: string) =>
-  adminDb.collection(`workspaces/${ws}/copilotUsers/${uid}/threads`)
+const threadsCol = (ws: string, uid: string) => adminDb.collection(copilotThreadsPath(ws, uid))
 
 /** Firestore Timestamps come back with .toDate() — convert the subscription's date
  *  fields to real Date objects the same way agent-turn.ts / billing.ts do, otherwise
@@ -141,6 +140,9 @@ copilot.post('/chat', async (c) => {
 
   let resolvedThreadId = threadId
   let resolvedAgentId = agentId
+  /** Set on the create branch; run only once the turn is known to be preparable, so a
+   *  turn that can never reach the model neither creates a thread nor spends a cap unit. */
+  let commitNewThread: (() => Promise<void>) | null = null
 
   if (resolvedThreadId) {
     // A thread belonging to another user is not addressable under this path, so
@@ -148,6 +150,24 @@ copilot.post('/chat', async (c) => {
     const snap = await threadsCol(ws, uid).doc(resolvedThreadId).get()
     if (!snap.exists) return c.json({ error: 'Thread not found' }, 404)
     resolvedAgentId = snap.data()!.agentId as string
+
+    // Status-only entitlement check. The cap is deliberately per-thread, so an existing
+    // thread must NOT be counted against copilotCap — hence copilotPeriodCount: 0, which
+    // leaves only the status ladder able to fail this. Without it a canceled workspace or
+    // an expired trial could keep reaching the paid LLM forever on threads it already has.
+    // An active/past_due subscription whose tier can't be resolved still fails open.
+    const wsSnap = await adminDb.doc(`workspaces/${ws}`).get()
+    const ent = checkCopilotEntitlement({
+      subscription: toSubscription(wsSnap.data()?.subscription),
+      copilotPeriodCount: 0,
+      now: new Date(),
+    })
+    if (!ent.entitled) {
+      return c.json(
+        { error: 'Internal chat needs an active subscription.', reason: 'copilot_limit' },
+        402,
+      )
+    }
   } else {
     const agentSnap = await adminDb.doc(`workspaces/${ws}/agents/${resolvedAgentId}`).get()
     if (!agentSnap.exists) return c.json({ error: 'Agent not found' }, 404)
@@ -180,32 +200,40 @@ copilot.post('/chat', async (c) => {
       )
     }
 
+    // .doc() only mints an id — nothing is written yet. Both the thread document and the
+    // cap unit are committed below, after prepareCopilotTurn proves the turn is viable.
+    // A workspace with no AI Gateway key fails prepare deterministically on EVERY attempt,
+    // so writing either one first would let it burn its whole allowance on empty threads
+    // and never see a reply. A failed prepare still leaves the user message it wrote under
+    // an unreferenced thread id — invisible to every listing, and no cap unit spent.
     const ref = threadsCol(ws, uid).doc()
-    await ref.set({
-      uid,
-      agentId: resolvedAgentId,
-      title: threadTitle(message),
-      createdAt: now,
-      updatedAt: now,
-      lastMessage: message.slice(0, LAST_MESSAGE_MAX),
-    })
-
-    // Both counters share one periodStart, so a rollover must reset BOTH in a single
-    // update. Advancing periodStart while leaving periodConversationCount high would
-    // block the workspace's real customers — far worse than the bug this fixes. No
-    // customer conversation happened here, hence 0.
-    //
-    // usage.periodStart is written by two independent writers on possibly different
-    // Cloud Run instances (this route and agent-turn.ts's customer gate). Use the server
-    // timestamp for the persisted boundary so clock skew between instances can't move it
-    // backwards; `now` (already computed above) still drives the in-process
-    // shouldResetPeriod/checkCopilotEntitlement comparisons.
-    await wsRef.update(
-      reset
-        ? { 'usage.periodStart': FieldValue.serverTimestamp(), 'usage.periodConversationCount': 0, 'usage.copilotPeriodCount': 1 }
-        : { 'usage.copilotPeriodCount': FieldValue.increment(1) },
-    )
     resolvedThreadId = ref.id
+    commitNewThread = async () => {
+      await ref.set({
+        uid,
+        agentId: resolvedAgentId,
+        title: threadTitle(message),
+        createdAt: now,
+        updatedAt: now,
+        lastMessage: message.slice(0, LAST_MESSAGE_MAX),
+      })
+
+      // Both counters share one periodStart, so a rollover must reset BOTH in a single
+      // update. Advancing periodStart while leaving periodConversationCount high would
+      // block the workspace's real customers — far worse than the bug this fixes. No
+      // customer conversation happened here, hence 0.
+      //
+      // usage.periodStart is written by two independent writers on possibly different
+      // Cloud Run instances (this route and agent-turn.ts's customer gate). Use the server
+      // timestamp for the persisted boundary so clock skew between instances can't move it
+      // backwards; `now` (already computed above) still drives the in-process
+      // shouldResetPeriod/checkCopilotEntitlement comparisons.
+      await wsRef.update(
+        reset
+          ? { 'usage.periodStart': FieldValue.serverTimestamp(), 'usage.periodConversationCount': 0, 'usage.copilotPeriodCount': 1 }
+          : { 'usage.copilotPeriodCount': FieldValue.increment(1) },
+      )
+    }
   }
 
   const prepared = await prepareCopilotTurn({
@@ -216,6 +244,7 @@ copilot.post('/chat', async (c) => {
     message,
   })
   if (prepared.kind === 'error') return c.json({ error: prepared.error }, 502)
+  if (commitNewThread) await commitNewThread()
 
   return streamSSE(c, async (stream) => {
     let reply = ''
