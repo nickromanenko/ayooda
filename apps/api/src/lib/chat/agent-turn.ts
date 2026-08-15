@@ -8,6 +8,7 @@ import { loadTools, type StoredTool } from './tools'
 import { resolveGatewayKey } from '../llm/resolve'
 import { resolveAgentRec } from './agent-resolution'
 import { retrieveContext } from './retrieval'
+import { buildChatParams } from './prompt'
 import { evaluateRules } from '../workflow/engine'
 import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
@@ -232,19 +233,6 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
   if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
 
-  const allBlocks = [...contextBlocks, ...skillBlocks]
-  const contextSection =
-    allBlocks.length > 0
-      ? `\n\nUse the following knowledge base context to inform your answer:\n---\n${allBlocks.join('\n\n')}\n---`
-      : ''
-  const fullSystemPrompt = systemPrompt + contextSection
-
-  const chatMessages = history.slice(0, -1).map((m) => ({
-    role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
-    content: m.content,
-  }))
-  chatMessages.push({ role: 'user', content: trimmed })
-
   // Tool/webhook actions (non-fatal): the model may call these during the turn.
   let tools: StoredTool[] = []
   try {
@@ -284,7 +272,15 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
 
   return {
     kind: 'ready',
-    chatParams: { model: llmModel, systemPrompt: fullSystemPrompt, messages: chatMessages, apiKey: keyResult.apiKey },
+    chatParams: buildChatParams({
+      systemPrompt,
+      contextBlocks,
+      skillBlocks,
+      history,
+      message: trimmed,
+      apiKey: keyResult.apiKey,
+      model: llmModel,
+    }),
     sources,
     trace,
     llmModel,
