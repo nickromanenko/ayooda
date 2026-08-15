@@ -80,7 +80,12 @@ export interface WorkspaceUsage {
   tokenCount: number
   periodConversationCount: number
   periodStart: Date | null
-  copilotPeriodCount?: number   // internal Copilot threads this period
+  copilotPeriodCount?: number  // internal Copilot threads this period
+  /** Copilot message and token totals, kept separate from messageCount/tokenCount so the
+   *  dashboard's avgMessages (messageCount / conversationCount) stays a support metric —
+   *  Copilot increments no conversationCount, so folding it in would inflate that ratio. */
+  copilotMessageCount?: number
+  copilotTokenCount?: number
 }
 
 export interface WorkspaceDoc {

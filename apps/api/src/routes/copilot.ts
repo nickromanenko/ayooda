@@ -246,23 +246,44 @@ copilot.post('/chat', async (c) => {
   if (prepared.kind === 'error') return c.json({ error: prepared.error }, 502)
   if (commitNewThread) await commitNewThread()
 
+  // Opened before the stream so a failure mid-turn still closes a span, matching widget.ts.
+  const generation = prepared.trace.generation({
+    name: 'llm-chat',
+    model: prepared.chatParams.model,
+    input: { system: prepared.chatParams.systemPrompt, messages: prepared.chatParams.messages },
+  })
+
   return streamSSE(c, async (stream) => {
     let reply = ''
+    let generationEnded = false
     try {
       const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools)
+      let promptTokens = 0
+      let completionTokens = 0
       while (true) {
         const next = await gen.next()
-        if (next.done) break
+        // The generator's terminal value carries the token counts — dropping it is why
+        // Copilot spend was invisible.
+        if (next.done) { promptTokens = next.value.promptTokens; completionTokens = next.value.completionTokens; break }
         reply += next.value.text
         await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: next.value.text }) })
       }
-      const messageId = await prepared.persist(reply)
+      generation.end({
+        output: reply,
+        usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens },
+      })
+      generationEnded = true
+
+      const messageId = await prepared.persist(reply, promptTokens, completionTokens)
       await stream.writeSSE({
         event: 'done',
         data: JSON.stringify({ threadId: resolvedThreadId, messageId, sources: prepared.sources }),
       })
     } catch (err) {
       console.error('[copilot] stream failed:', err)
+      if (!generationEnded) {
+        generation.end({ level: 'ERROR', statusMessage: err instanceof Error ? err.message : String(err) })
+      }
       await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Something went wrong' }) }).catch(() => {})
     }
   })

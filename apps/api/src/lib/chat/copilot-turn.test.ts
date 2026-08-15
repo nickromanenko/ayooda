@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { copilotThreadPath, copilotThreadsPath, skillsForCopilot } from './copilot-turn'
+import { COPILOT_USAGE_FIELDS, copilotThreadPath, copilotThreadsPath, copilotUsageDelta, skillsForCopilot } from './copilot-turn'
 import type { LoadedSkill } from '../skills/registry'
 
 const loaded = (id: string): LoadedSkill => ({
@@ -37,5 +37,31 @@ describe('skillsForCopilot', () => {
   test('keeps everything else, including an empty list', () => {
     expect(skillsForCopilot([])).toEqual([])
     expect(skillsForCopilot([loaded('memory')]).map((s) => s.def.id)).toEqual(['memory'])
+  })
+})
+
+describe('copilot usage accounting', () => {
+  test('increments Copilot-specific counters, never the shared support ones', () => {
+    // usage.messageCount feeds the dashboard's avgMessages = messageCount / conversationCount.
+    // Copilot increments no conversationCount, so pointing these at the shared fields would
+    // silently inflate a support metric with internal chat.
+    expect(COPILOT_USAGE_FIELDS.messageCount).toBe('usage.copilotMessageCount')
+    expect(COPILOT_USAGE_FIELDS.tokenCount).toBe('usage.copilotTokenCount')
+    for (const field of Object.values(COPILOT_USAGE_FIELDS)) {
+      expect(field).not.toBe('usage.messageCount')
+      expect(field).not.toBe('usage.tokenCount')
+    }
+  })
+
+  test('counts two messages per turn and sums both token directions', () => {
+    expect(copilotUsageDelta(120, 45)).toEqual({ messages: 2, tokens: 165 })
+  })
+
+  test('treats missing or non-finite token counts as zero', () => {
+    // runAgentTurn yields 0s when the provider omits usage; guard against NaN reaching Firestore,
+    // which would corrupt the running total permanently rather than just losing one turn.
+    expect(copilotUsageDelta(0, 0)).toEqual({ messages: 2, tokens: 0 })
+    expect(copilotUsageDelta(NaN, 10)).toEqual({ messages: 2, tokens: 10 })
+    expect(copilotUsageDelta(undefined as never, undefined as never)).toEqual({ messages: 2, tokens: 0 })
   })
 })

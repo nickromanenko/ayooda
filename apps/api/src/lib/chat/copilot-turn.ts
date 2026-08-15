@@ -34,7 +34,7 @@ export interface ReadyCopilotTurn {
   /** The live Langfuse trace. The route passes it to runAgentTurn so tool-call
    *  spans attach to this turn instead of a throwaway trace. */
   trace: LangfuseTrace
-  persist: (reply: string) => Promise<string>
+  persist: (reply: string, promptTokens: number, completionTokens: number) => Promise<string>
 }
 
 export type PreparedCopilotTurn = ReadyCopilotTurn | { kind: 'error'; error: string }
@@ -60,6 +60,26 @@ export function copilotThreadPath(workspaceId: string, uid: string, threadId: st
  * Scoring exists to grade customer conversations for the owner; running it on
  * internal chats would pollute those metrics with staff traffic.
  */
+/**
+ * Copilot writes its own usage aggregates. `usage.messageCount` feeds the dashboard's
+ * avgMessages (messageCount / conversationCount) and Copilot increments no
+ * conversationCount, so sharing those fields would inflate a support metric with
+ * internal chat.
+ */
+export const COPILOT_USAGE_FIELDS = {
+  messageCount: 'usage.copilotMessageCount',
+  tokenCount: 'usage.copilotTokenCount',
+} as const
+
+/** Two messages per turn (the user's and the assistant's), matching the channel path. */
+export function copilotUsageDelta(
+  promptTokens: number,
+  completionTokens: number,
+): { messages: number; tokens: number } {
+  const safe = (n: number) => (Number.isFinite(n) ? n : 0)
+  return { messages: 2, tokens: safe(promptTokens) + safe(completionTokens) }
+}
+
 export function skillsForCopilot(skills: LoadedSkill[]): LoadedSkill[] {
   return skills.filter((s) => s.def.id !== 'scoring')
 }
@@ -127,14 +147,29 @@ export async function prepareCopilotTurn(
 
   const { tools, skillTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
 
-  const persist = async (reply: string): Promise<string> => {
+  const persist = async (
+    reply: string,
+    promptTokens: number,
+    completionTokens: number,
+  ): Promise<string> => {
     const ref = await messagesRef.add({
       role: 'assistant', content: reply, createdAt: FieldValue.serverTimestamp(),
-      metadata: { sources, llmModel },
+      metadata: { sources, llmModel, promptTokens, completionTokens },
     })
-    await threadRef
-      .set({ updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200) }, { merge: true })
-      .catch((err) => console.warn('[copilot] thread bookkeeping failed:', err))
+    // Bookkeeping is best-effort: it must never cost the user their reply.
+    try {
+      const delta = copilotUsageDelta(promptTokens, completionTokens)
+      await threadRef.set(
+        { updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200) },
+        { merge: true },
+      )
+      await adminDb.doc(`workspaces/${workspaceId}`).update({
+        [COPILOT_USAGE_FIELDS.messageCount]: FieldValue.increment(delta.messages),
+        [COPILOT_USAGE_FIELDS.tokenCount]: FieldValue.increment(delta.tokens),
+      })
+    } catch (err) {
+      console.warn('[copilot] post-reply bookkeeping failed:', err)
+    }
     trace.update({ output: { message: reply, sources } })
     return ref.id
   }
