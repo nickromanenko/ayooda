@@ -1033,7 +1033,7 @@ git commit -m "feat(api): prepareCopilotTurn — internal chat orchestrator"
 - Modify: `apps/api/src/index.ts` (mount `/copilot`)
 
 **Interfaces:**
-- Consumes: `prepareCopilotTurn` (Task 6), `checkCopilotEntitlement` (Task 5), `runAgentTurn` from `../lib/chat/tools`, `requireAuth` from `../middleware/auth`.
+- Consumes: `prepareCopilotTurn` (Task 6), `checkCopilotEntitlement` (Task 5), `shouldResetPeriod` from `../lib/billing/entitlement`, `runAgentTurn` from `../lib/chat/tools`, `requireAuth` from `../middleware/auth`.
 - Produces: `GET /copilot/threads`, `POST /copilot/chat`, `DELETE /copilot/threads/:id`; and the exported pure helpers `threadTitle(message)` and `validateChatBody(raw)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1095,6 +1095,7 @@ import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { rateLimit } from '../lib/rate-limit'
 import { checkCopilotEntitlement } from '../lib/billing/copilot-entitlement'
+import { shouldResetPeriod } from '../lib/billing/entitlement'
 import { prepareCopilotTurn } from '../lib/chat/copilot-turn'
 import { runAgentTurn } from '../lib/chat/tools'
 
@@ -1177,22 +1178,39 @@ copilot.post('/chat', async (c) => {
 
     // The cap is checked once per thread, on creation — never per message.
     const wsSnap = await adminDb.doc(`workspaces/${ws}`).get()
-    const usage = wsSnap.data()?.usage ?? {}
-    const ent = checkCopilotEntitlement({
-      subscription: wsSnap.data()?.subscription,
-      copilotPeriodCount: usage.copilotPeriodCount,
-    })
+    const wsData = wsSnap.data() ?? {}
+    const usage = wsData.usage ?? {}
+    const now = new Date()
+
+    // Copilot must perform the SAME period rollover prepareTurn does. It is the
+    // only other writer of this counter, and a workspace that uses Copilot but
+    // has no customer traffic would otherwise never advance periodStart — the
+    // cap would be permanently exhausted after the first period.
+    const periodStart = usage.periodStart?.toDate?.() ?? usage.periodStart ?? null
+    const sub = wsData.subscription
+    const reset = shouldResetPeriod(periodStart, now, sub)
+    const effectiveCount = reset ? 0 : (usage.copilotPeriodCount ?? 0)
+
+    const ent = checkCopilotEntitlement({ subscription: sub, copilotPeriodCount: effectiveCount })
     if (!ent.entitled) {
       return c.json({ error: `Internal chat limit reached (${ent.cap} threads this period).`, reason: 'copilot_limit' }, 402)
     }
 
     const ref = threadsCol(ws, uid).doc()
-    const now = new Date()
     await ref.set({
       uid, agentId: resolvedAgentId, title: threadTitle(message),
       createdAt: now, updatedAt: now, lastMessage: message.slice(0, 200),
     })
-    await adminDb.doc(`workspaces/${ws}`).update({ 'usage.copilotPeriodCount': FieldValue.increment(1) })
+
+    // Both counters share one periodStart, so a rollover must reset BOTH in a
+    // single update. Advancing periodStart while leaving periodConversationCount
+    // high would block the workspace's real customers — far worse than the bug
+    // this fixes. No customer conversation happened here, hence 0.
+    await adminDb.doc(`workspaces/${ws}`).update(
+      reset
+        ? { 'usage.periodStart': now, 'usage.periodConversationCount': 0, 'usage.copilotPeriodCount': 1 }
+        : { 'usage.copilotPeriodCount': FieldValue.increment(1) },
+    )
     resolvedThreadId = ref.id
   }
 
