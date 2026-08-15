@@ -4,17 +4,18 @@ import { adminDb } from '../firebase-admin'
 import { LEGACY_MODEL_MAP } from '../gemini'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
 import { type ChatParams } from '../llm/chat'
-import { loadTools, type StoredTool } from './tools'
+import { type StoredTool } from './tools'
 import { resolveGatewayKey } from '../llm/resolve'
 import { resolveAgentRec } from './agent-resolution'
 import { retrieveContext } from './retrieval'
 import { buildChatParams } from './prompt'
+import { loadTurnTools } from './turn-tools'
 import { evaluateRules } from '../workflow/engine'
 import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 import { emitOverageEvent } from '../billing/overage'
 import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
-import { gatherContext, gatherTools } from '../skills/run'
+import { gatherContext } from '../skills/run'
 import '../skills/all'
 
 export interface PrepareTurnInput {
@@ -233,22 +234,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
   if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
 
-  // Tool/webhook actions (non-fatal): the model may call these during the turn.
-  let tools: StoredTool[] = []
-  try {
-    tools = await loadTools(workspaceId, agentRec.id)
-  } catch (err) {
-    console.warn('[agent-turn] tool load failed:', err)
-  }
-
-  // Skill tools (non-fatal): each skill's contributeTools hook is isolated in gatherTools,
-  // but guard the call itself too — belt and braces against gatherTools ever rejecting.
-  let skillTools: ToolSet = {}
-  try {
-    if (skills.length) skillTools = await gatherTools(skills, skillCtx)
-  } catch (err) {
-    console.warn('[skills] gatherTools failed:', err)
-  }
+  const { tools, skillTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
     const messageRef = await messagesRef.add({
