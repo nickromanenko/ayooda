@@ -1,4 +1,5 @@
 import type { ToolSet } from 'ai'
+import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from '../firebase-admin'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
 import { LEGACY_MODEL_MAP } from '../gemini'
@@ -70,7 +71,7 @@ export async function prepareCopilotTurn(
 
   const threadRef = adminDb.doc(`workspaces/${workspaceId}/copilotUsers/${uid}/threads/${threadId}`)
   const messagesRef = threadRef.collection('messages')
-  await messagesRef.add({ role: 'user', content: trimmed, createdAt: new Date() })
+  await messagesRef.add({ role: 'user', content: trimmed, createdAt: FieldValue.serverTimestamp() })
 
   const historySnap = await messagesRef.orderBy('createdAt', 'asc').limitToLast(HISTORY_WINDOW).get()
   const history = historySnap.docs.map((d) => d.data() as { role: string; content: string })
@@ -111,10 +112,12 @@ export async function prepareCopilotTurn(
 
   const persist = async (reply: string): Promise<string> => {
     const ref = await messagesRef.add({
-      role: 'assistant', content: reply, createdAt: new Date(),
+      role: 'assistant', content: reply, createdAt: FieldValue.serverTimestamp(),
       metadata: { sources, llmModel },
     })
-    await threadRef.update({ updatedAt: new Date(), lastMessage: reply.slice(0, 200) }).catch(() => {})
+    await threadRef
+      .set({ updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200) }, { merge: true })
+      .catch((err) => console.warn('[copilot] thread bookkeeping failed:', err))
     trace.update({ output: { message: reply, sources } })
     return ref.id
   }
