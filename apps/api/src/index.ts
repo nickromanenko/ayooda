@@ -33,6 +33,7 @@ import agentRoutes from './routes/agents'
 import workflowRoutes from './routes/workflows'
 import skillRoutes from './routes/skills'
 import internalRoutes from './routes/internal'
+import copilotRoutes from './routes/copilot'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -50,6 +51,7 @@ app.route('/workflows', workflowRoutes)
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)
 app.route('/internal', internalRoutes)
+app.route('/copilot', copilotRoutes)
 
 const port = parseInt(process.env.PORT ?? '3001')
 console.log(`API running on http://localhost:${port}`)
