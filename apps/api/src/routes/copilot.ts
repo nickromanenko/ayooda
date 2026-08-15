@@ -9,6 +9,7 @@
  * threadId (continue) or an agentId (start) and creates the thread as it writes the first
  * message, so empty threads are structurally impossible.
  *
+ * GET    /copilot/agents         — minimal agent list for the picker (member-readable)
  * GET    /copilot/threads        — the caller's own threads, newest first
  * POST   /copilot/chat           — SSE. threadId to continue, agentId to start.
  * DELETE /copilot/threads/:id    — delete one of the caller's own threads
@@ -74,6 +75,26 @@ function toSubscription(raw: unknown): Subscription | undefined {
       (r.currentPeriodEnd as { toDate?: () => Date })?.toDate?.() ?? (r.currentPeriodEnd as Date | null) ?? null,
   }
 }
+
+// ---------------------------------------------------------------------------
+// GET /copilot/agents
+// ---------------------------------------------------------------------------
+
+/** GET /copilot/agents — minimal agent list for the picker. Members may read this;
+ *  the full /agents routes stay owner-only because they expose prompts and config. */
+copilot.get('/agents', async (c) => {
+  const ws = c.get('workspaceId')
+  const snap = await adminDb.collection(`workspaces/${ws}/agents`).get()
+  const agents = snap.docs
+    .map((d) => ({
+      id: d.id,
+      name: d.data().name as string,
+      photoURL: (d.data().photoURL ?? null) as string | null,
+      isDefault: d.data().isDefault === true,
+    }))
+    .sort((a, b) => (a.isDefault === b.isDefault ? a.name.localeCompare(b.name) : a.isDefault ? -1 : 1))
+  return c.json({ agents })
+})
 
 // ---------------------------------------------------------------------------
 // GET /copilot/threads

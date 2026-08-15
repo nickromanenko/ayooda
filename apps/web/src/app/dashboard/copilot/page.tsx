@@ -10,7 +10,7 @@ import { readSSE } from '@/lib/sse'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { useAuth } from '@/components/providers/AuthProvider'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
-import type { AgentDoc, CopilotThreadDoc } from '@ayooda/shared'
+import type { CopilotThreadDoc } from '@ayooda/shared'
 
 const label: React.CSSProperties = { fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }
 // Named inputStyle (not `input`, per agents/page.tsx) — the composer's own text
@@ -26,6 +26,16 @@ interface ThreadRow extends Omit<CopilotThreadDoc, 'createdAt' | 'updatedAt'> {
   id: string
   createdAt: TsJSON | null
   updatedAt: TsJSON | null
+}
+
+/** GET /copilot/agents — deliberately smaller than AgentDoc: no systemPrompt or
+ *  hasGatewayKey, since members (who can't hit the owner-only /agents routes)
+ *  use this endpoint for the picker. */
+interface AgentPickerItem {
+  id: string
+  name: string
+  photoURL: string | null
+  isDefault: boolean
 }
 
 interface Message {
@@ -61,7 +71,7 @@ function CopilotPageInner() {
   const { user } = useAuth()
   const searchParams = useSearchParams()
 
-  const [agents, setAgents] = useState<AgentDoc[]>([])
+  const [agents, setAgents] = useState<AgentPickerItem[]>([])
   const [threads, setThreads] = useState<ThreadRow[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -86,8 +96,10 @@ function CopilotPageInner() {
     let cancelled = false
     ;(async () => {
       try {
-        const [agentsRes] = await Promise.all([apiRequest('/agents'), loadThreads()])
-        if (agentsRes.ok && !cancelled) { const d = await agentsRes.json() as { agents: AgentDoc[] }; setAgents(d.agents) }
+        // Members can't reach the owner-only /agents routes, so the picker uses
+        // /copilot/agents — a smaller, member-readable view of the same list.
+        const [agentsRes] = await Promise.all([apiRequest('/copilot/agents'), loadThreads()])
+        if (agentsRes.ok && !cancelled) { const d = await agentsRes.json() as { agents: AgentPickerItem[] }; setAgents(d.agents) }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -118,7 +130,15 @@ function CopilotPageInner() {
       orderBy('createdAt', 'asc'),
     )
     const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Message)))
+      const msgs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Message))
+      setMessages(msgs)
+      // Hand the streamed buffer over to the persisted message atomically: clear
+      // `pending` only once Firestore confirms the assistant's reply landed —
+      // not on the SSE `done` event. Clearing on `done` left a gap on a brand
+      // new thread (the listener had only just subscribed, so `messages` was
+      // still empty when `pending` was cleared) and could double-render on a
+      // continuing thread (persisted message arriving a few ms before `done`).
+      if (msgs[msgs.length - 1]?.role === 'assistant') setPending('')
     })
     return unsub
   }, [workspaceId, uid, activeThreadId])
@@ -178,20 +198,24 @@ function CopilotPageInner() {
             setPending(buffer)
           } else if (event === 'done') {
             const d = JSON.parse(data) as { threadId: string }
-            // Setting the id switches the onSnapshot listener onto this thread,
-            // which then supplies the persisted message — so clear the local
-            // buffer to avoid rendering the reply twice.
+            // Setting the id switches the onSnapshot listener onto this thread.
+            // `pending` is cleared there (once the persisted message actually
+            // arrives), not here — see the listener effect for why.
             setActiveThreadId(d.threadId)
-            setPending('')
             void loadThreads()
           } else if (event === 'error') {
             setError((JSON.parse(data) as { error: string }).error)
             setPending('')
+            // A new thread may already have been created (and a cap unit spent)
+            // before the turn failed — refresh so the user can continue it
+            // instead of unknowingly starting (and paying for) another one.
+            void loadThreads()
           }
         },
       })
     } catch {
       setError('Connection lost')
+      void loadThreads()
     } finally {
       setStreaming(false)
     }
@@ -332,7 +356,7 @@ function CopilotPageInner() {
               </div>
             ))}
 
-            {streaming && (
+            {(streaming || pending) && (
               <div style={{ display: 'flex', gap: 8, maxWidth: '75%' }}>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2, background: 'rgba(99,102,241,0.15)' }}>
                   <Bot size={12} style={{ color: '#818cf8' }} />
