@@ -178,6 +178,8 @@ Then, one-time in the console: add `ayooda.live` (+ `www`) as a custom domain on
 
 **Deploy the web at the same time as the API (§4b).**
 
+**Deploy `firestore.rules` (§2) before this release, not after.** The Copilot page (`/dashboard/copilot`) reads a member's own threads straight from Firestore in the browser via `onSnapshot` — there is no API endpoint in the read path — so if the web build reaches production before the per-user `copilotUsers/{uid}/threads` rule does, the thread list is denied until the rules deploy catches up. No new environment variables and no new Firestore indexes come with Copilot: the thread list is a single-collection query (`copilotUsers/{uid}/threads` ordered by `updatedAt`), which Firestore serves from its automatic single-field indexes.
+
 ---
 
 ## 5. Data migrations (run once, after the API image has prod creds)
