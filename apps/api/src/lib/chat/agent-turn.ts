@@ -168,7 +168,12 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     })
     const update: Record<string, unknown> = { 'usage.conversationCount': FieldValue.increment(1) }
     if (reset) {
+      // usage.periodStart is shared between this counter and Copilot's usage.copilotPeriodCount
+      // (see routes/copilot.ts). Every writer that advances periodStart must reset BOTH counters,
+      // or the other one compares its stale count against the fresh period and stays wrongly
+      // gated for the rest of it. No Copilot thread was created by a customer conversation, hence 0.
       update['usage.periodConversationCount'] = 1
+      update['usage.copilotPeriodCount'] = 0
       update['usage.periodStart'] = FieldValue.serverTimestamp()
     } else {
       update['usage.periodConversationCount'] = FieldValue.increment(1)

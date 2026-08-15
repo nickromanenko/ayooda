@@ -173,9 +173,15 @@ copilot.post('/chat', async (c) => {
     // update. Advancing periodStart while leaving periodConversationCount high would
     // block the workspace's real customers — far worse than the bug this fixes. No
     // customer conversation happened here, hence 0.
+    //
+    // usage.periodStart is written by two independent writers on possibly different
+    // Cloud Run instances (this route and agent-turn.ts's customer gate). Use the server
+    // timestamp for the persisted boundary so clock skew between instances can't move it
+    // backwards; `now` (already computed above) still drives the in-process
+    // shouldResetPeriod/checkCopilotEntitlement comparisons.
     await wsRef.update(
       reset
-        ? { 'usage.periodStart': now, 'usage.periodConversationCount': 0, 'usage.copilotPeriodCount': 1 }
+        ? { 'usage.periodStart': FieldValue.serverTimestamp(), 'usage.periodConversationCount': 0, 'usage.copilotPeriodCount': 1 }
         : { 'usage.copilotPeriodCount': FieldValue.increment(1) },
     )
     resolvedThreadId = ref.id
