@@ -7,7 +7,7 @@ import { namespaceFor } from '../pinecone'
 import { type ChatParams } from '../llm/chat'
 import { loadTools, type StoredTool } from './tools'
 import { resolveGatewayKey } from '../llm/resolve'
-import { resolveAgentDoc } from '../agents/agent-helpers'
+import { resolveAgentRec } from './agent-resolution'
 import { evaluateRules } from '../workflow/engine'
 import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
@@ -94,40 +94,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   if (!workspaceSnap.exists) return { kind: 'error', error: 'Workspace not found' }
   const workspaceData = workspaceSnap.data()!
 
-  // Resolve the agent for this turn: the channel's agent, else the workspace default,
-  // else the inline workspace.agent (pre-migration safety net).
-  const agentsCol = adminDb.collection(`workspaces/${workspaceId}/agents`)
-  type AgentRec = { id: string; systemPrompt: string; llmModel: string; gatewayKey?: string; knowledgeNamespace: string }
-  let agentRec: AgentRec | undefined
-  try {
-    const toRec = (id: string, d: FirebaseFirestore.DocumentData): AgentRec => ({
-      id,
-      systemPrompt: d.systemPrompt ?? '',
-      llmModel: d.llmModel ?? 'google/gemini-2.5-flash',
-      gatewayKey: d.gatewayKey,
-      knowledgeNamespace: d.knowledgeNamespace ?? `ws_${workspaceId}`,
-    })
-    const [specificSnap, defaultSnap] = await Promise.all([
-      agentId ? agentsCol.doc(agentId).get() : Promise.resolve(null),
-      agentsCol.where('isDefault', '==', true).limit(1).get(),
-    ])
-    const byId = new Map<string, AgentRec>()
-    if (specificSnap && specificSnap.exists) { const r = toRec(specificSnap.id, specificSnap.data()!); byId.set(r.id, r) }
-    const defaultAgent = defaultSnap.empty ? undefined : toRec(defaultSnap.docs[0]!.id, defaultSnap.docs[0]!.data())
-    agentRec = resolveAgentDoc(agentId, byId, defaultAgent)
-  } catch (err) {
-    console.warn('[agent-turn] agent resolution failed:', err)
-  }
-  if (!agentRec) {
-    const inline = workspaceData.agent ?? {}
-    agentRec = {
-      id: 'inline',
-      systemPrompt: inline.systemPrompt ?? '',
-      llmModel: inline.llmModel ?? 'google/gemini-2.5-flash',
-      gatewayKey: workspaceData.gatewayKey,
-      knowledgeNamespace: `ws_${workspaceId}`,
-    }
-  }
+  const agentRec = await resolveAgentRec(workspaceId, agentId, workspaceData)
   const systemPrompt: string = agentRec.systemPrompt
   const storedModel: string = agentRec.llmModel ?? 'gemini-flash-latest'
   const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
