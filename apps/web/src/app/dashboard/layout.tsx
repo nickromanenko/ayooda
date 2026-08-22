@@ -15,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     const db = getAdminDb()
 
     const userSnap = await db.doc(`users/${decoded.uid}`).get()
-    if (!userSnap.exists) redirect('/login')
+    if (!userSnap.exists) redirect('/api/session')
 
     const { workspaceId } = userSnap.data()!
     const workspaceSnap = await db.doc(`workspaces/${workspaceId}`).get()
@@ -35,6 +35,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   } catch (err) {
     if (isRedirectError(err)) throw err
     console.error('[dashboard/layout] session verification failed:', err)
-    redirect('/login')
+    redirect('/api/session')
   }
 }

@@ -40,3 +40,20 @@ export async function DELETE() {
   cookieStore.delete(SESSION_COOKIE)
   return NextResponse.json({ ok: true })
 }
+
+// Server Components can't clear cookies themselves (Next.js only allows cookie
+// writes from Server Actions and Route Handlers), so pages redirect here to drop
+// an invalid/expired session cookie before landing on /login. Without this, proxy.ts
+// sees the (still-present but unverifiable) cookie and bounces the request straight
+// back to /dashboard, which re-fails verification and redirects back to /login — an
+// infinite loop.
+export async function GET(request: NextRequest) {
+  const cookieStore = await cookies()
+  cookieStore.delete(SESSION_COOKIE)
+
+  const loginUrl = new URL('/login', request.url)
+  const from = request.nextUrl.searchParams.get('from')
+  if (from) loginUrl.searchParams.set('from', from)
+
+  return NextResponse.redirect(loginUrl)
+}
