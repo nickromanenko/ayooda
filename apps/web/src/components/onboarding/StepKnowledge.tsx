@@ -101,7 +101,7 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
           Add your knowledge base
         </h1>
         <p style={{ fontSize: 14, color: 'var(--ink-mute)', marginTop: 6 }}>
-          Enter your website URL or upload documents. We'll index the content so your agent can answer questions about it.
+          Enter your website URL or upload documents. We&apos;ll index the content so your agent can answer questions about it.
         </p>
       </div>
 
@@ -132,7 +132,7 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
           </div>
           {urlError && <p style={{ fontSize: 12, color: '#f87171', marginTop: 6 }}>{urlError}</p>}
           <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 6 }}>
-            We'll crawl the page and its linked pages automatically.
+            We&apos;ll crawl the page and its linked pages automatically.
           </p>
         </div>
 

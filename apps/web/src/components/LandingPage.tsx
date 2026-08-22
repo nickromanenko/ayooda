@@ -336,7 +336,6 @@ function Hero() {
 // ─── Logo Strip ───────────────────────────────────────────────────────────────
 
 function LogoStrip() {
-  const companies = ['Northwind', 'Kestrel', 'Arcadia', 'Fieldnote', 'Quillbox', 'Portola', 'Modulo', 'Sagebrush']
   return (
     <section style={{ padding: '40px 0 80px' }}>
       <div className="container">
@@ -416,7 +415,7 @@ function Why() {
             </Reveal>
             <Reveal delay={160}>
               <p style={{ color: 'var(--ink-dim)', marginTop: 22, fontSize: 16, lineHeight: 1.55, maxWidth: 380 }}>
-                Five principles we won't compromise on — because shipping an AI to your customers is a serious thing.
+                Five principles we won&apos;t compromise on — because shipping an AI to your customers is a serious thing.
               </p>
             </Reveal>
           </div>
@@ -699,7 +698,7 @@ function Features() {
         </Reveal>
         <Reveal delay={80}>
           <h2 className="display" style={{ fontSize: 'clamp(40px, 5vw, 68px)', margin: 0, maxWidth: 820, textWrap: 'balance' as CSSProperties['textWrap'] }}>
-            Everything you need. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Nothing you don't.</em>
+            Everything you need. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Nothing you don&apos;t.</em>
           </h2>
         </Reveal>
         <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 48, marginTop: 56 }}>
@@ -931,12 +930,12 @@ function QuoteCard({ q, name, role, company, photo }: { q: string; name: string;
       display: 'flex', flexDirection: 'column', height: '100%',
       position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ position: 'absolute', top: -10, right: 22, fontFamily: 'var(--font-display)', fontSize: 110, color: 'var(--accent-soft)', lineHeight: 1, pointerEvents: 'none' }}>"</div>
+      <div style={{ position: 'absolute', top: -10, right: 22, fontFamily: 'var(--font-display)', fontSize: 110, color: 'var(--accent-soft)', lineHeight: 1, pointerEvents: 'none' }}>&ldquo;</div>
       <div style={{ width: '100%', height: 200, borderRadius: 12, marginBottom: 22, overflow: 'hidden', flexShrink: 0 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={photo} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }} />
       </div>
-      <p style={{ fontSize: 15.5, lineHeight: 1.6, color: 'var(--ink)', margin: 0, flex: 1, textWrap: 'pretty' as CSSProperties['textWrap'] }}>"{q}"</p>
+      <p style={{ fontSize: 15.5, lineHeight: 1.6, color: 'var(--ink)', margin: 0, flex: 1, textWrap: 'pretty' as CSSProperties['textWrap'] }}>&ldquo;{q}&rdquo;</p>
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 22, paddingTop: 16 }}>
         <div style={{ fontWeight: 500, fontSize: 14 }}>{name}</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-mute)' }}>{role} · {company}</div>
@@ -1185,12 +1184,12 @@ function FAQ() {
             <Reveal delay={80}>
               <h2 className="display" style={{ fontSize: 'clamp(36px, 4.4vw, 56px)', margin: 0, textWrap: 'balance' as CSSProperties['textWrap'] }}>
                 Got questions? <br />
-                <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>We've got answers.</em>
+                <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>We&apos;ve got answers.</em>
               </h2>
             </Reveal>
             <Reveal delay={160}>
               <p style={{ color: 'var(--ink-dim)', marginTop: 22, fontSize: 15, lineHeight: 1.6, maxWidth: 340 }}>
-                Still curious? Ask Ayooda directly — she'll hand you off to a human if she doesn't know.
+                Still curious? Ask Ayooda directly — she&apos;ll hand you off to a human if she doesn&apos;t know.
               </p>
             </Reveal>
             <Reveal delay={220}>

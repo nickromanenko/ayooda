@@ -202,7 +202,7 @@ export default function InboxPage() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ink-mute)', gap: 8, padding: '0 24px', textAlign: 'center' }}>
               <MessageSquare size={28} style={{ opacity: 0.3 }} />
               <p style={{ fontSize: 13, margin: 0 }}>No conversations yet.</p>
-              <p style={{ fontSize: 12, margin: 0, color: 'var(--ink-faint)' }}>They'll appear here when visitors start chatting.</p>
+              <p style={{ fontSize: 12, margin: 0, color: 'var(--ink-faint)' }}>They&apos;ll appear here when visitors start chatting.</p>
             </div>
           ) : (
             visibleConversations.map((conv) => (
