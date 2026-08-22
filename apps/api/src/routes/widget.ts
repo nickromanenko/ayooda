@@ -9,6 +9,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { adminDb } from '../lib/firebase-admin'
+import { canHideBranding } from '../lib/channels/branding'
 import { runAgentTurn } from '../lib/chat/tools'
 import { rateLimit } from '../lib/rate-limit'
 
@@ -79,12 +80,28 @@ widget.get('/config/:channelId', async (c) => {
     }
   }
 
+  // Branding is re-checked here, not just when it is saved: a workspace that
+  // turned the line off on a paid plan and later downgraded or lapsed must get
+  // it back, and this endpoint is the only thing the embedded widget trusts.
+  let showBranding = data.config.showBranding !== false
+  if (!showBranding && workspaceId) {
+    try {
+      const wsSnap = await adminDb.doc(`workspaces/${workspaceId}`).get()
+      if (!canHideBranding(wsSnap.data()?.subscription)) showBranding = true
+    } catch (err) {
+      // Fail closed — a lookup failure must not silently strip attribution.
+      console.warn('[widget] branding tier check failed, showing the line:', err)
+      showBranding = true
+    }
+  }
+
   return c.json({
     agentName,
     agentPhotoURL,
     widgetColor: data.config.widgetColor,
     widgetPosition: data.config.widgetPosition,
     welcomeMessage: data.config.welcomeMessage,
+    showBranding,
   })
 })
 

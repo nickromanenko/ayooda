@@ -7,6 +7,7 @@ import { encryptSecret, decryptSecret } from '../lib/crypto'
 import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
 import { validateWidgetAppearance } from '../lib/channels/validate'
 import { DEFAULT_WIDGET_COLOR, DEFAULT_WIDGET_POSITION } from '@ayooda/shared'
+import { canHideBranding } from '../lib/channels/branding'
 
 /**
  * Channels belong to the agent that answers on them. Each agent gets its own
@@ -34,6 +35,12 @@ async function channelOfType(workspaceId: string, agentId: string, type: 'web_wi
   return snap.empty ? null : snap.docs[0]!
 }
 
+/** Whether this workspace's plan allows hiding the "Powered by Ayooda" line. */
+async function workspaceCanHideBranding(workspaceId: string): Promise<boolean> {
+  const snap = await adminDb.doc(`workspaces/${workspaceId}`).get()
+  return canHideBranding(snap.data()?.subscription)
+}
+
 async function agentIdentity(workspaceId: string, agentId: string) {
   const snap = await adminDb.doc(`workspaces/${workspaceId}/agents/${agentId}`).get()
   const d = snap.data() ?? {}
@@ -53,9 +60,10 @@ agentChannels.get('/', async (c) => {
   const workspaceId = c.get('workspaceId')
   const agentId = c.get('agentId')!
 
-  const [snap, identity] = await Promise.all([
+  const [snap, identity, canHide] = await Promise.all([
     channelsCol(workspaceId).where('agentId', '==', agentId).get(),
     agentIdentity(workspaceId, agentId),
+    workspaceCanHideBranding(workspaceId),
   ])
 
   // Sorted in memory: ordering by createdAt alongside two equality filters would
@@ -69,7 +77,15 @@ agentChannels.get('/', async (c) => {
       return {
         id: d.id,
         ...safe,
-        config: { ...config, agentName: identity.name, agentPhotoURL: identity.photoURL },
+        // Same shape as the skills catalogue: the row carries whether the plan
+        // permits the option, so the UI can show it locked rather than hide it.
+        brandingLocked: !canHide,
+        config: {
+          ...config,
+          showBranding: config.showBranding !== false,
+          agentName: identity.name,
+          agentPhotoURL: identity.photoURL,
+        },
       }
     })
     .sort((a, b) => {
@@ -114,6 +130,7 @@ agentChannels.post('/web-widget', async (c) => {
       widgetColor: DEFAULT_WIDGET_COLOR,
       widgetPosition: DEFAULT_WIDGET_POSITION,
       welcomeMessage: `Hi there! How can ${agentName} help you today?`,
+      showBranding: true,
       agentName,
       agentPhotoURL,
     },
@@ -142,10 +159,18 @@ agentChannels.put('/web-widget', async (c) => {
   const result = validateWidgetAppearance(await c.req.json().catch(() => null))
   if (!result.ok) return c.json({ error: result.error }, 400)
 
+  if (!result.value.showBranding && !(await workspaceCanHideBranding(workspaceId))) {
+    return c.json(
+      { error: 'Hiding the "Powered by Ayooda" line needs the Core plan or above.' },
+      403,
+    )
+  }
+
   await existing.ref.update({
     'config.widgetColor': result.value.widgetColor,
     'config.widgetPosition': result.value.widgetPosition,
     'config.welcomeMessage': result.value.welcomeMessage,
+    'config.showBranding': result.value.showBranding,
   })
   return c.json(result.value)
 })

@@ -16,6 +16,7 @@ interface Channel {
   type: string
   embedCode?: string
   isActive: boolean
+  brandingLocked?: boolean
   config?: Partial<Appearance> & { agentName?: string }
   telegram?: { botUsername: string; botId: number }
 }
@@ -216,10 +217,12 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
               <WidgetAppearance
                 agentId={agentId}
                 agentName={widget.config?.agentName ?? 'Support Agent'}
+                brandingLocked={widget.brandingLocked !== false}
                 initial={{
                   widgetColor: widget.config?.widgetColor ?? DEFAULT_WIDGET_COLOR,
                   widgetPosition: widget.config?.widgetPosition ?? DEFAULT_WIDGET_POSITION,
                   welcomeMessage: widget.config?.welcomeMessage ?? '',
+                  showBranding: widget.config?.showBranding !== false,
                 }}
                 onSaved={applyAppearance}
               />

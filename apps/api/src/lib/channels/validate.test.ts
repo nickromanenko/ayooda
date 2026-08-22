@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import { validateWidgetAppearance } from './validate'
 
-const base = { widgetColor: '#6366F1', widgetPosition: 'bottom-right', welcomeMessage: 'Hi there!' }
+const base = {
+  widgetColor: '#6366F1',
+  widgetPosition: 'bottom-right',
+  welcomeMessage: 'Hi there!',
+  showBranding: true,
+}
 
 describe('validateWidgetAppearance', () => {
   test('accepts a well-formed appearance and lowercases the colour', () => {
@@ -54,5 +59,31 @@ describe('validateWidgetAppearance', () => {
   test('rejects a non-object payload', () => {
     expect(validateWidgetAppearance(null).ok).toBe(false)
     expect(validateWidgetAppearance('nope').ok).toBe(false)
+  })
+
+  describe('showBranding', () => {
+    test('accepts an explicit false', () => {
+      const r = validateWidgetAppearance({ ...base, showBranding: false })
+      expect(r.ok).toBe(true)
+      if (r.ok) expect(r.value.showBranding).toBe(false)
+    })
+
+    // Attribution is the default: only a literal false turns it off, so an old
+    // client that omits the field, or a junk value, still shows the line.
+    test.each([undefined, null, 0, '', 'false', 'no'])(
+      'treats %p as "show the line"',
+      (showBranding) => {
+        const r = validateWidgetAppearance({ ...base, showBranding })
+        expect(r.ok).toBe(true)
+        if (r.ok) expect(r.value.showBranding).toBe(true)
+      },
+    )
+
+    test('defaults to true when the key is absent entirely', () => {
+      const { showBranding: _omit, ...withoutKey } = base
+      const r = validateWidgetAppearance(withoutKey)
+      expect(r.ok).toBe(true)
+      if (r.ok) expect(r.value.showBranding).toBe(true)
+    })
   })
 })

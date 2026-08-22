@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { Check, Loader2, Lock } from 'lucide-react'
 import {
   WIDGET_POSITIONS,
   MAX_WELCOME_MESSAGE_CHARS,
@@ -52,6 +53,11 @@ function Preview({ appearance, agentName }: { appearance: Appearance; agentName:
             Hi — I need help
           </span>
         </div>
+        {appearance.showBranding && (
+          <p style={{ textAlign: 'center', fontSize: 8, color: '#a1a1aa', margin: 0, padding: '0 0 6px' }}>
+            Powered by Ayooda
+          </p>
+        )}
       </div>
       {/* Launcher */}
       <div style={{
@@ -65,11 +71,13 @@ function Preview({ appearance, agentName }: { appearance: Appearance; agentName:
 }
 
 export default function WidgetAppearance({
-  agentId, agentName, initial, onSaved,
+  agentId, agentName, initial, brandingLocked, onSaved,
 }: {
   agentId: string
   agentName: string
   initial: Appearance
+  /** True when the plan does not allow hiding the "Powered by Ayooda" line. */
+  brandingLocked: boolean
   onSaved: (a: Appearance) => void
 }) {
   const [draft, setDraft] = useState<Appearance>(initial)
@@ -80,7 +88,8 @@ export default function WidgetAppearance({
   const dirty =
     draft.widgetColor !== initial.widgetColor ||
     draft.widgetPosition !== initial.widgetPosition ||
-    draft.welcomeMessage !== initial.welcomeMessage
+    draft.welcomeMessage !== initial.welcomeMessage ||
+    draft.showBranding !== initial.showBranding
 
   const tooLong = draft.welcomeMessage.length > MAX_WELCOME_MESSAGE_CHARS
   const canSave = dirty && !tooLong && draft.welcomeMessage.trim().length > 0
@@ -140,6 +149,34 @@ export default function WidgetAppearance({
           <p style={{ fontSize: 11, color: tooLong ? '#f87171' : 'var(--ink-faint)', marginTop: 4 }}>
             {draft.welcomeMessage.length}/{MAX_WELCOME_MESSAGE_CHARS}
           </p>
+
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: brandingLocked ? 'var(--ink-mute)' : 'var(--ink)', cursor: brandingLocked ? 'not-allowed' : 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={draft.showBranding}
+                disabled={brandingLocked}
+                onChange={(e) => setDraft({ ...draft, showBranding: e.target.checked })}
+                style={{ marginTop: 2, flexShrink: 0 }}
+              />
+              <span>
+                Show &ldquo;Powered by Ayooda&rdquo;
+                {brandingLocked && (
+                  <Lock size={11} style={{ marginLeft: 6, verticalAlign: 'baseline', color: 'var(--ink-mute)' }} />
+                )}
+              </span>
+            </label>
+            <p style={{ fontSize: 11.5, color: 'var(--ink-faint)', margin: '6px 0 0 24px' }}>
+              {brandingLocked ? (
+                <>
+                  Removing the line is on Core and above.{' '}
+                  <Link href="/dashboard/billing" style={{ color: 'var(--accent)' }}>Upgrade →</Link>
+                </>
+              ) : (
+                'Turn this off to run the widget unbranded.'
+              )}
+            </p>
+          </div>
         </div>
 
         <div>

@@ -36,6 +36,9 @@ interface WidgetConfig {
   widgetColor: string
   widgetPosition: 'bottom-right' | 'bottom-left'
   welcomeMessage: string
+  /** The API decides this: it is forced true below the plan that can hide it,
+   *  so an expired or downgraded workspace gets the line back automatically. */
+  showBranding: boolean
 }
 
 interface ChatDone {
@@ -410,6 +413,8 @@ class AyoodaWidget {
 
   private build() {
     const { agentName, agentPhotoURL, widgetColor, widgetPosition, welcomeMessage } = this.config
+    // Absent on responses from an older API: show the line rather than hide it.
+    const showBranding = this.config.showBranding !== false
 
     const style = document.createElement('style')
     style.textContent = buildCSS(widgetColor, widgetPosition)
@@ -440,7 +445,7 @@ class AyoodaWidget {
           ></textarea>
           <button id="send-btn" aria-label="Send" disabled>${ICON_SEND}</button>
         </div>
-        <div id="poweredby">Powered by <a href="https://ayooda.com" target="_blank" rel="noopener">Ayooda</a></div>
+        ${showBranding ? '<div id="poweredby">Powered by <a href="https://ayooda.com" target="_blank" rel="noopener">Ayooda</a></div>' : ''}
       </div>
       <button id="toggle" aria-label="Open chat">${ICON_CHAT}</button>
     `

@@ -1,4 +1,4 @@
-import type { Subscription } from './plans'
+import type { Subscription, PlanTier } from './plans'
 import type { SkillId, SkillConfig } from './skills'
 
 // LLM Providers (Claude, OpenAI, Gemini)
@@ -566,9 +566,16 @@ export const DEFAULT_WIDGET_COLOR = '#6366f1'
 export const DEFAULT_WIDGET_POSITION: WidgetPosition = 'bottom-right'
 export const MAX_WELCOME_MESSAGE_CHARS = 200
 
+/** Plan required to hide the "Powered by Ayooda" line. Enforced on read as well
+ *  as on write, so a downgrade puts the badge back rather than leaving a lapsed
+ *  workspace with a benefit it no longer pays for. */
+export const MIN_BRANDING_TIER: PlanTier = 'core'
+
 /** How the embedded chat widget looks on the customer's own site. */
 export interface WidgetAppearance {
   widgetColor: string
   widgetPosition: WidgetPosition
   welcomeMessage: string
+  /** Show the "Powered by Ayooda" line. Always true below MIN_BRANDING_TIER. */
+  showBranding: boolean
 }

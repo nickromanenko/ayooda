@@ -32,8 +32,17 @@ export function validateWidgetAppearance(
     return fail(`Keep the welcome message under ${MAX_WELCOME_MESSAGE_CHARS} characters.`)
   }
 
+  // Defaults to showing the line: an older client that omits the field, or a
+  // malformed value, must never be read as permission to hide attribution.
+  const showBranding = a.showBranding !== false
+
   return {
     ok: true,
-    value: { widgetColor: color.toLowerCase(), widgetPosition: position, welcomeMessage: welcome },
+    value: {
+      widgetColor: color.toLowerCase(),
+      widgetPosition: position,
+      welcomeMessage: welcome,
+      showBranding,
+    },
   }
 }
