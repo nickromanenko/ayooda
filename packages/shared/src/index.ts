@@ -579,3 +579,39 @@ export interface WidgetAppearance {
   /** Show the "Powered by Ayooda" line. Always true below MIN_BRANDING_TIER. */
   showBranding: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Per-agent access
+// ---------------------------------------------------------------------------
+
+/**
+ * Who may configure an agent.
+ *
+ * Workspace owners may configure every agent. A member may configure only the
+ * agents they have been given access to, listed on the agent itself. Creating,
+ * deleting and re-defaulting an agent stays owner-only regardless — those are
+ * workspace-shaped decisions, not agent-shaped ones.
+ */
+export function canEditAgent(
+  role: WorkspaceRole | undefined,
+  editorUids: readonly string[] | undefined,
+  uid: string | undefined,
+): boolean {
+  if (role === 'owner') return true
+  // An unrecognised role means the session could not be established, so refuse
+  // rather than falling through to the list — being listed is only meaningful
+  // for a caller we have actually identified.
+  if (role !== 'member' || !uid) return false
+  return Array.isArray(editorUids) && editorUids.includes(uid)
+}
+
+/** One row of the agent's access list, as shown on its Security tab. */
+export interface AgentAccessEntry {
+  uid: string
+  email: string
+  displayName: string
+  role: WorkspaceRole
+  /** Owners always have access and cannot be removed from it. */
+  hasAccess: boolean
+  locked: boolean
+}

@@ -24,9 +24,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
     const role = (userSnap.data()!.role as 'owner' | 'member') ?? 'owner'
 
+    // A member granted access to at least one agent needs the Agents entry to
+    // reach it; a member with none would only land on an empty list.
+    const hasAgentAccess = role === 'owner' || !(await db
+      .collection(`workspaces/${workspaceId}/agents`)
+      .where('editorUids', 'array-contains', decoded.uid)
+      .limit(1)
+      .get()).empty
+
     return (
       <div style={{ display: 'flex', height: '100%' }}>
-        <Sidebar role={role} />
+        <Sidebar role={role} hasAgentAccess={hasAgentAccess} />
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
           <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-2)', padding: 24 }}>{children}</main>
         </div>

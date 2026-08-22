@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { DocumentData } from 'firebase-admin/firestore'
 import { adminDb } from '../lib/firebase-admin'
-import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
+import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { validateRule } from '../lib/workflow/validate'
 import type { WorkflowRule } from '@ayooda/shared'
@@ -13,7 +13,6 @@ import type { WorkflowRule } from '@ayooda/shared'
  */
 const workflows = new Hono<{ Variables: AuthVariables }>()
 workflows.use('*', requireAuth)
-workflows.use('*', requireOwner)
 workflows.use('*', requireAgent)
 
 export const rulesPath = (workspaceId: string, agentId: string) =>

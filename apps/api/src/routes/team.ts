@@ -1,3 +1,4 @@
+import { FieldValue } from 'firebase-admin/firestore'
 import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
@@ -78,6 +79,16 @@ team.delete('/member/:uid', async (c) => {
   if (wsSnap.data()?.ownerId === targetUid || snap.data()!.role === 'owner') {
     return c.json({ error: 'Cannot remove the workspace owner' }, 400)
   }
+  // Drop their per-agent access too, or a re-invited uid would silently regain
+  // every agent it used to hold.
+  const agentsSnap = await adminDb
+    .collection(`workspaces/${workspaceId}/agents`)
+    .where('editorUids', 'array-contains', targetUid)
+    .get()
+  for (const d of agentsSnap.docs) {
+    await d.ref.update({ editorUids: FieldValue.arrayRemove(targetUid), updatedAt: new Date() })
+  }
+
   await userRef.delete()
   return c.json({ ok: true })
 })

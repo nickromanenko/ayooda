@@ -29,7 +29,7 @@ const bottomItems = [
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
-export function Sidebar({ role }: { role: 'owner' | 'member' }) {
+export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'member'; hasAgentAccess?: boolean }) {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
 
@@ -37,7 +37,12 @@ export function Sidebar({ role }: { role: 'owner' | 'member' }) {
   // team member needs a way to reach it, same as Inbox.
   const visibleNav = role === 'owner'
     ? navItems
-    : navItems.filter((i) => i.href === '/dashboard/inbox' || i.href === '/dashboard/copilot')
+    : navItems.filter((i) =>
+        i.href === '/dashboard/inbox' ||
+        i.href === '/dashboard/copilot' ||
+        // Members see Agents only once they hold at least one; otherwise the
+        // link would lead to an empty list.
+        (i.href === '/dashboard/agents' && hasAgentAccess))
   const visibleBottom = role === 'owner' ? bottomItems : []
 
   function isActive(item: { href: string; exact?: boolean }) {

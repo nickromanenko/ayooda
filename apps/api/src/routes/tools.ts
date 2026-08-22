@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { DocumentData } from 'firebase-admin/firestore'
 import { adminDb } from '../lib/firebase-admin'
-import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
+import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { encryptSecret } from '../lib/crypto'
 import { validateToolInput, type ValidatedTool } from '../lib/tools/validate'
@@ -10,7 +10,6 @@ import type { ToolDef } from '@ayooda/shared'
 
 const tools = new Hono<{ Variables: AuthVariables }>()
 tools.use('*', requireAuth)
-tools.use('*', requireOwner)
 tools.use('*', requireAgent)
 
 function toToolDef(id: string, d: DocumentData): ToolDef {

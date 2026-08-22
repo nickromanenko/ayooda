@@ -22,6 +22,7 @@ const TABS = [
   { slug: 'escalation', label: 'Escalation' },
   { slug: 'deploy', label: 'Deploy' },
   { slug: 'usage', label: 'Usage' },
+  { slug: 'security', label: 'Security' },
 ] as const
 
 export default function AgentTabs({ agentId }: { agentId: string }) {

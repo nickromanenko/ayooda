@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
-import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
+import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import {
   SKILLS,
@@ -14,7 +14,6 @@ import {
 
 const skills = new Hono<{ Variables: AuthVariables }>()
 skills.use('*', requireAuth)
-skills.use('*', requireOwner)
 skills.use('*', requireAgent)
 
 async function workspaceTier(ws: string): Promise<PlanTier | null> {

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
-import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
+import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { shouldResetPeriod, checkEntitlement } from '../lib/billing/entitlement'
 
@@ -15,7 +15,6 @@ import { shouldResetPeriod, checkEntitlement } from '../lib/billing/entitlement'
  */
 const agentUsage = new Hono<{ Variables: AuthVariables }>()
 agentUsage.use('*', requireAuth)
-agentUsage.use('*', requireOwner)
 agentUsage.use('*', requireAgent)
 
 const toDate = (v: unknown): Date | null => {

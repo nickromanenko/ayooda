@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { randomBytes } from 'crypto'
 import { adminDb } from '../lib/firebase-admin'
-import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
+import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { encryptSecret, decryptSecret } from '../lib/crypto'
 import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
@@ -17,7 +17,6 @@ import { canHideBranding } from '../lib/channels/branding'
 const agentChannels = new Hono<{ Variables: AuthVariables }>()
 
 agentChannels.use('*', requireAuth)
-agentChannels.use('*', requireOwner)
 agentChannels.use('*', requireAgent)
 
 // Falls back to the site the widget is actually hosted on (hosting target

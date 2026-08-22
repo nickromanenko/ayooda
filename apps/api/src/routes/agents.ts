@@ -4,11 +4,37 @@ import { adminDb, adminBucket } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { namespaceFor } from '../lib/pinecone'
 import { agentNamespace, agentDeleteGuard } from '../lib/agents/agent-helpers'
-import { LLM_MODELS, agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, type AgentDoc } from '@ayooda/shared'
+import { LLM_MODELS, agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type WorkspaceRole } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
 agents.use('*', requireAuth)
-agents.use('*', requireOwner)
+
+/**
+ * Configuring an agent is open to owners and to members granted access to that
+ * agent. Creating, deleting and re-defaulting one stays owner-only: those are
+ * decisions about the workspace's shape, not about a single agent.
+ *
+ * These routes use :id rather than :agentId, so they cannot reuse the
+ * requireAgent middleware and load the agent themselves.
+ */
+const editableAgent = async (
+  c: { get: (k: 'workspaceId' | 'role' | 'uid') => string | undefined; req: { param: (k: string) => string } },
+): Promise<{ ok: true; ref: FirebaseFirestore.DocumentReference; data: DocumentData } | { ok: false; status: 403 | 404 }> => {
+  const ws = c.get('workspaceId')!
+  const ref = adminDb.doc(`workspaces/${ws}/agents/${c.req.param('id')}`)
+  const snap = await ref.get()
+  if (!snap.exists) return { ok: false, status: 404 }
+  const data = snap.data()!
+  if (!canEditAgent(c.get('role') as WorkspaceRole, data.editorUids as string[] | undefined, c.get('uid'))) {
+    return { ok: false, status: 403 }
+  }
+  return { ok: true, ref, data }
+}
+
+const denied = (status: 403 | 404) =>
+  status === 404
+    ? ({ error: 'Agent not found' } as const)
+    : ({ error: 'You do not have access to this agent' } as const)
 
 const DEFAULT_PROMPT = 'You are a helpful customer support agent. Answer questions based on the provided context.'
 const DEFAULT_MODEL = 'google/gemini-2.5-flash'
@@ -29,14 +55,18 @@ function toAgentDoc(id: string, d: DocumentData): AgentDoc {
 /** GET /agents — list (default first, then newest). */
 agents.get('/', async (c) => {
   const ws = c.get('workspaceId')
+  const uid = c.get('uid')
+  const role = c.get('role')
   const snap = await adminDb.collection(`workspaces/${ws}/agents`).get()
-  const list = snap.docs.map((d) => toAgentDoc(d.id, d.data()))
+  const list = snap.docs
+    .filter((d) => canEditAgent(role, d.data().editorUids as string[] | undefined, uid))
+    .map((d) => toAgentDoc(d.id, d.data()))
   list.sort((a, b) => (a.isDefault === b.isDefault ? a.name.localeCompare(b.name) : a.isDefault ? -1 : 1))
   return c.json({ agents: list })
 })
 
 /** POST /agents — create a non-default agent with a fresh namespace. */
-agents.post('/', async (c) => {
+agents.post('/', requireOwner, async (c) => {
   const ws = c.get('workspaceId')
   const body = await c.req.json<{ name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string }>().catch(() => ({} as { name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string }))
   const name = body.name?.trim()
@@ -74,19 +104,21 @@ agents.post('/', async (c) => {
 
 /** GET /agents/:id */
 agents.get('/:id', async (c) => {
-  const ws = c.get('workspaceId')
-  const snap = await adminDb.doc(`workspaces/${ws}/agents/${c.req.param('id')}`).get()
+  const gate = await editableAgent(c)
+  if (!gate.ok) return c.json(denied(gate.status), gate.status)
+  const snap = await gate.ref.get()
   if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
   return c.json(toAgentDoc(snap.id, snap.data()!))
 })
 
 /** PUT /agents/:id — update identity/prompt/model. */
 agents.put('/:id', async (c) => {
+  const gate = await editableAgent(c)
+  if (!gate.ok) return c.json(denied(gate.status), gate.status)
   const ws = c.get('workspaceId')
   const id = c.req.param('id')
-  const ref = adminDb.doc(`workspaces/${ws}/agents/${id}`)
+  const ref = gate.ref
   const snap = await ref.get()
-  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
   const body = await c.req.json<{ name?: string; photoURL?: string | null; description?: string; systemPrompt?: string; llmModel?: string; role?: string }>().catch(() => ({} as { name?: string; photoURL?: string | null; description?: string; systemPrompt?: string; llmModel?: string; role?: string }))
   if (body.llmModel !== undefined && !LLM_MODELS.some((m) => m.id === body.llmModel)) return c.json({ error: 'Invalid llmModel' }, 400)
   if (body.role !== undefined && !isAgentRoleId(body.role)) return c.json({ error: 'Invalid role' }, 400)
@@ -107,7 +139,7 @@ agents.put('/:id', async (c) => {
 })
 
 /** POST /agents/:id/default — make this the workspace default. */
-agents.post('/:id/default', async (c) => {
+agents.post('/:id/default', requireOwner, async (c) => {
   const ws = c.get('workspaceId')
   const id = c.req.param('id')
   const col = adminDb.collection(`workspaces/${ws}/agents`)
@@ -122,7 +154,7 @@ agents.post('/:id/default', async (c) => {
 })
 
 /** DELETE /agents/:id — guarded; purges namespace, knowledge (+ files), tools. */
-agents.delete('/:id', async (c) => {
+agents.delete('/:id', requireOwner, async (c) => {
   const ws = c.get('workspaceId')
   const id = c.req.param('id')
   const ref = adminDb.doc(`workspaces/${ws}/agents/${id}`)
@@ -175,11 +207,12 @@ agents.delete('/:id', async (c) => {
  * this one object is exposed, not the bucket.
  */
 agents.post('/:id/photo', async (c) => {
+  const gate = await editableAgent(c)
+  if (!gate.ok) return c.json(denied(gate.status), gate.status)
   const ws = c.get('workspaceId')
   const id = c.req.param('id')
-  const ref = adminDb.doc(`workspaces/${ws}/agents/${id}`)
+  const ref = gate.ref
   const snap = await ref.get()
-  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
 
   const form = await c.req.formData().catch(() => null)
   const file = form?.get('file')
@@ -223,15 +256,71 @@ agents.post('/:id/photo', async (c) => {
 
 /** DELETE /agents/:id/photo — clear the logo and remove the stored object. */
 agents.delete('/:id/photo', async (c) => {
+  const gate = await editableAgent(c)
+  if (!gate.ok) return c.json(denied(gate.status), gate.status)
   const ws = c.get('workspaceId')
   const id = c.req.param('id')
-  const ref = adminDb.doc(`workspaces/${ws}/agents/${id}`)
+  const ref = gate.ref
   const snap = await ref.get()
-  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
 
   const path = snap.data()!.photoStoragePath as string | undefined
   if (path) await adminBucket().file(path).delete().catch(() => {})
   await ref.update({ photoURL: null, photoStoragePath: FieldValue.delete(), updatedAt: new Date() })
+  return c.json({ ok: true })
+})
+
+/**
+ * GET /agents/:id/access — the workspace's people and who may configure this
+ * agent. Owner-only: deciding who can configure an agent is an owner's call.
+ * Owners are listed as always-having-access and cannot be toggled off.
+ */
+agents.get('/:id/access', requireOwner, async (c) => {
+  const ws = c.get('workspaceId')
+  const snap = await adminDb.doc(`workspaces/${ws}/agents/${c.req.param('id')}`).get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+  const editors: string[] = (snap.data()!.editorUids as string[] | undefined) ?? []
+
+  const usersSnap = await adminDb.collection('users').where('workspaceId', '==', ws).get()
+  const people: AgentAccessEntry[] = usersSnap.docs.map((d) => {
+    const u = d.data()
+    const role = ((u.role as WorkspaceRole) ?? 'owner')
+    const isOwner = role === 'owner'
+    return {
+      uid: d.id,
+      email: (u.email as string) ?? '',
+      displayName: (u.displayName as string) ?? '',
+      role,
+      hasAccess: isOwner || editors.includes(d.id),
+      locked: isOwner,
+    }
+  })
+  people.sort((a, b) => (a.locked === b.locked ? a.displayName.localeCompare(b.displayName) : a.locked ? -1 : 1))
+  return c.json({ people })
+})
+
+/** PUT /agents/:id/access/:uid — grant a member access to this agent. */
+agents.put('/:id/access/:uid', requireOwner, async (c) => {
+  const ws = c.get('workspaceId')
+  const uid = c.req.param('uid')
+  const ref = adminDb.doc(`workspaces/${ws}/agents/${c.req.param('id')}`)
+  if (!(await ref.get()).exists) return c.json({ error: 'Agent not found' }, 404)
+
+  // Only someone already in this workspace — never an arbitrary uid.
+  const userSnap = await adminDb.doc(`users/${uid}`).get()
+  if (!userSnap.exists || userSnap.data()!.workspaceId !== ws) {
+    return c.json({ error: 'That person is not in this workspace' }, 404)
+  }
+
+  await ref.update({ editorUids: FieldValue.arrayUnion(uid), updatedAt: new Date() })
+  return c.json({ ok: true })
+})
+
+/** DELETE /agents/:id/access/:uid — revoke it. Idempotent. */
+agents.delete('/:id/access/:uid', requireOwner, async (c) => {
+  const ws = c.get('workspaceId')
+  const ref = adminDb.doc(`workspaces/${ws}/agents/${c.req.param('id')}`)
+  if (!(await ref.get()).exists) return c.json({ error: 'Agent not found' }, 404)
+  await ref.update({ editorUids: FieldValue.arrayRemove(c.req.param('uid')), updatedAt: new Date() })
   return c.json({ ok: true })
 })
 
