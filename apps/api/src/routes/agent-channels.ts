@@ -20,7 +20,10 @@ agentChannels.use('*', requireAuth)
 agentChannels.use('*', requireOwner)
 agentChannels.use('*', requireAgent)
 
-const WIDGET_BASE_URL = process.env.WIDGET_BASE_URL ?? 'https://ayooda-1791f.web.app'
+// Falls back to the site the widget is actually hosted on (hosting target
+// "widget"), not the app's own site — a missed env var used to bake a 404 into
+// every embed snippet it generated.
+const WIDGET_BASE_URL = process.env.WIDGET_BASE_URL ?? 'https://cdn.ayooda.live'
 
 const channelsCol = (workspaceId: string) =>
   adminDb.collection(`workspaces/${workspaceId}/channels`)
