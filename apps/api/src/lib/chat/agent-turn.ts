@@ -97,6 +97,16 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const workspaceData = workspaceSnap.data()!
 
   const agentRec = await resolveAgentRec(workspaceId, agentId, workspaceData)
+
+  // Per-agent usage counters. resolveAgentRec falls back to a synthetic 'inline'
+  // record for pre-migration workspaces with no agent doc — there is nothing to
+  // write to then, so this is null and the increments are skipped. It must never
+  // point at the workspace doc: that would double-count the workspace totals,
+  // which are incremented separately just below.
+  const agentUsageRef = agentRec.id === 'inline'
+    ? null
+    : adminDb.doc(`workspaces/${workspaceId}/agents/${agentRec.id}`)
+
   const systemPrompt: string = agentRec.systemPrompt
   const storedModel: string = agentRec.llmModel ?? 'gemini-flash-latest'
   const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
@@ -209,7 +219,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
 
   // Escalation rules (non-fatal): evaluate after RAG so low-confidence is known.
   try {
-    const rulesSnap = await adminDb.collection(`workspaces/${workspaceId}/workflowRules`).where('enabled', '==', true).get()
+    const rulesSnap = await adminDb.collection(`workspaces/${workspaceId}/agents/${agentRec.id}/workflowRules`).where('enabled', '==', true).get()
     const rules: WorkflowRule[] = rulesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<WorkflowRule, 'id'>) }))
     const hit = evaluateRules(rules, {
       messageLower: trimmed.toLowerCase(),
@@ -222,6 +232,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       await messagesRef.add({ role: 'assistant', content: handoff, createdAt: FieldValue.serverTimestamp(), metadata: { escalated: true } })
       await convRef.update({ status: 'waiting', escalationReason: hit.name, operatorId: null, updatedAt: FieldValue.serverTimestamp(), lastMessage: handoff.slice(0, 200) })
       await workspaceRef.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
+      await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
       trace.update({ output: { escalated: hit.name } })
       return { kind: 'escalated', message: handoff }
     }
@@ -251,6 +262,12 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     try {
       await convRef.update({ updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200), botReplyCount: FieldValue.increment(1) })
       await workspaceRef.update({
+        'usage.messageCount': FieldValue.increment(2),
+        'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
+      })
+      // Same counters on the agent, so the Usage tab can attribute spend to the
+      // agent that actually produced it rather than the workspace as a whole.
+      await agentUsageRef?.update({
         'usage.messageCount': FieldValue.increment(2),
         'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
       })

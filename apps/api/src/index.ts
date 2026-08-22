@@ -30,6 +30,8 @@ import telegramRoutes from './routes/telegram'
 import teamRoutes from './routes/team'
 import toolRoutes from './routes/tools'
 import agentRoutes from './routes/agents'
+import agentChannelRoutes from './routes/agent-channels'
+import agentUsageRoutes from './routes/agent-usage'
 import workflowRoutes from './routes/workflows'
 import skillRoutes from './routes/skills'
 import internalRoutes from './routes/internal'
@@ -40,13 +42,19 @@ app.route('/workspace', workspaceRoutes)
 app.route('/team', teamRoutes)
 app.route('/billing', billingRoutes)
 app.route('/user', userRoutes)
-app.route('/agents/:agentId/knowledge', knowledgeRoutes)
-app.route('/channels', channelRoutes)
 app.route('/conversations', conversationRoutes)
+
+// Everything that configures one agent hangs off that agent. `/channels` stays
+// workspace-wide but is read-only — creating and removing a channel happens
+// under the agent that answers on it.
+app.route('/channels', channelRoutes)
 app.route('/agents', agentRoutes)
+app.route('/agents/:agentId/knowledge', knowledgeRoutes)
 app.route('/agents/:agentId/tools', toolRoutes)
 app.route('/agents/:agentId/skills', skillRoutes)
-app.route('/workflows', workflowRoutes)
+app.route('/agents/:agentId/channels', agentChannelRoutes)
+app.route('/agents/:agentId/workflows', workflowRoutes)
+app.route('/agents/:agentId/usage', agentUsageRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)

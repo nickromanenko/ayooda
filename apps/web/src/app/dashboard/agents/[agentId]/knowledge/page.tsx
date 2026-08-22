@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { use, useState, useEffect, useCallback } from 'react'
 import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle, FileText, RotateCw } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
@@ -42,7 +42,9 @@ function hasActiveJobs(docs: KnowledgeDoc[]) {
   return docs.some((d) => d.status === 'pending' || d.status === 'processing')
 }
 
-export default function KnowledgePage() {
+export default function AgentKnowledgePage({ params }: { params: Promise<{ agentId: string }> }) {
+  const { agentId } = use(params)
+
   const [docs, setDocs] = useState<KnowledgeDoc[]>([])
   const [loading, setLoading] = useState(true)
   const [urlInput, setUrlInput] = useState('')
@@ -50,41 +52,21 @@ export default function KnowledgePage() {
   const [urlError, setUrlError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [reindexingId, setReindexingId] = useState<string | null>(null)
-  const [agentList, setAgentList] = useState<{ id: string; name: string; isDefault: boolean }[]>([])
-  const [agentId, setAgentId] = useState<string>('')
-
-  useEffect(() => {
-    void (async () => {
-      const res = await apiRequest('/agents')
-      if (res.ok) {
-        const d = await res.json() as { agents: { id: string; name: string; isDefault: boolean }[] }
-        setAgentList(d.agents)
-        // Pre-select the agent passed via ?agent=<id> (e.g. from the agent
-        // editor's "Manage knowledge" link); else fall back to the default agent.
-        const wanted = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('agent') : null
-        const preselect = wanted && d.agents.some((a) => a.id === wanted) ? wanted : undefined
-        setAgentId((prev) => prev || preselect || d.agents.find((a) => a.isDefault)?.id || d.agents[0]?.id || '')
-      }
-    })()
-  }, [])
 
   const fetchDocs = useCallback(async () => {
-    if (!agentId) return
     try {
       const res = await apiRequest(`/agents/${agentId}/knowledge`)
       if (!res.ok) return
-      const data = (await res.json()) as KnowledgeDoc[]
-      setDocs(data)
+      setDocs((await res.json()) as KnowledgeDoc[])
     } catch {
       // silently ignore polling errors
     }
   }, [agentId])
 
   useEffect(() => {
-    if (!agentId) return
     setLoading(true)
     fetchDocs().finally(() => setLoading(false))
-  }, [fetchDocs, agentId])
+  }, [fetchDocs])
 
   useEffect(() => {
     if (!hasActiveJobs(docs)) return
@@ -140,22 +122,10 @@ export default function KnowledgePage() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Knowledge base</h1>
-        <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>
-          Pages and documents your agent can reference when answering questions.
-        </p>
-      </div>
-
-      {agentList.length > 1 && (
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 8 }}>Agent</label>
-          <select value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ padding: '8px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14 }}>
-            {agentList.map((a) => <option key={a.id} value={a.id}>{a.name}{a.isDefault ? ' (default)' : ''}</option>)}
-          </select>
-        </div>
-      )}
+    <>
+      <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 20 }}>
+        Pages and documents this agent can reference when answering questions.
+      </p>
 
       {/* Add URL */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 20, marginBottom: 20 }}>
@@ -196,7 +166,7 @@ export default function KnowledgePage() {
           </p>
         )}
         <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 8 }}>
-          We'll crawl the page and its linked pages (up to 25 pages).
+          We&apos;ll crawl the page and its linked pages (up to 25 pages).
         </p>
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
           <KnowledgeUpload uploadPath={`/agents/${agentId}/knowledge/upload`} onUploaded={() => void fetchDocs()} />
@@ -212,7 +182,7 @@ export default function KnowledgePage() {
       ) : docs.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 0', color: 'var(--ink-mute)' }}>
           <Globe size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-          <p style={{ fontSize: 13, margin: 0 }}>No URLs added yet.</p>
+          <p style={{ fontSize: 13, margin: 0 }}>No knowledge added yet.</p>
           <p style={{ fontSize: 12, marginTop: 4, color: 'var(--ink-faint)' }}>Add your website above to get started.</p>
         </div>
       ) : (
@@ -267,6 +237,6 @@ export default function KnowledgePage() {
           })}
         </div>
       )}
-    </div>
+    </>
   )
 }

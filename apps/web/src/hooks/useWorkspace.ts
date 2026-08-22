@@ -10,7 +10,6 @@ export interface WorkspaceData {
   onboardingComplete: boolean
   agent: AgentConfig
   usage: { conversationCount: number; tokenCount: number }
-  hasGatewayKey?: boolean
 }
 
 /**

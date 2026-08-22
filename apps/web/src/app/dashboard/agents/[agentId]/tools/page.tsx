@@ -1,13 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Trash2, Plus, Play } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { TOOL_TEMPLATES, applyTemplate, type ToolDef, type ToolMethod, type ToolParamType, type ToolAuthType, type ToolKind, type ToolTemplate } from '@ayooda/shared'
+import { card, label, input, errorText } from '@/components/dashboard/ui'
 
-const card: React.CSSProperties = { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 24, marginBottom: 20 }
-const label: React.CSSProperties = { fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }
-const input: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
 const row: React.CSSProperties = { display: 'flex', gap: 8, marginBottom: 8 }
 
 interface ParamRow { name: string; type: ToolParamType; description: string; required: boolean }
@@ -26,7 +24,9 @@ const emptyForm: FormState = {
   kind: 'read', writeEnabled: false, enabled: true,
 }
 
-export default function ToolsPage() {
+export default function AgentToolsPage({ params }: { params: Promise<{ agentId: string }> }) {
+  const { agentId } = use(params)
+
   const [tools, setTools] = useState<ToolDef[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState<FormState | null>(null)
@@ -36,29 +36,15 @@ export default function ToolsPage() {
   const [testResult, setTestResult] = useState<string>('')
   const [testing, setTesting] = useState(false)
   const [busyId, setBusyId] = useState('')
-  const [agentList, setAgentList] = useState<{ id: string; name: string; isDefault: boolean }[]>([])
-  const [agentId, setAgentId] = useState<string>('')
   const [picker, setPicker] = useState<'gallery' | { template: ToolTemplate; setup: Record<string, string> } | null>(null)
 
-  useEffect(() => {
-    void (async () => {
-      const res = await apiRequest('/agents')
-      if (res.ok) {
-        const d = await res.json() as { agents: { id: string; name: string; isDefault: boolean }[] }
-        setAgentList(d.agents)
-        setAgentId((prev) => prev || d.agents.find((a) => a.isDefault)?.id || d.agents[0]?.id || '')
-      }
-    })()
-  }, [])
-
   const load = useCallback(async () => {
-    if (!agentId) return
     try {
       const res = await apiRequest(`/agents/${agentId}/tools`)
       if (res.ok) { const d = await res.json() as { tools: ToolDef[] }; setTools(d.tools) }
     } finally { setLoading(false) }
   }, [agentId])
-  useEffect(() => { if (agentId) void load() }, [load, agentId])
+  useEffect(() => { void load() }, [load])
 
   function startCreate() { setForm({ ...emptyForm }); setError(''); setTestResult(''); setTestArgs('{}') }
   function chooseTemplate(template: ToolTemplate) {
@@ -127,33 +113,23 @@ export default function ToolsPage() {
   if (loading) return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-mute)' }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</div>
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Tools</h1>
-          <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Let your agent call your APIs — look up orders, check inventory, update records.</p>
-        </div>
+    <>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
+        <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: 0 }}>
+          Let this agent call your APIs — look up orders, check inventory, update records.
+        </p>
         {!form && !picker && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={() => setPicker('gallery')} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 16px' }}>Start from a template</button>
-            <button type="button" onClick={startCreate} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px' }}><Plus size={14} /> New tool</button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button type="button" onClick={() => setPicker('gallery')} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}>Start from a template</button>
+            <button type="button" onClick={startCreate} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}><Plus size={14} /> New tool</button>
           </div>
         )}
       </div>
 
-      {agentList.length > 1 && (
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 8 }}>Agent</label>
-          <select value={agentId} onChange={(e) => setAgentId(e.target.value)} style={{ padding: '8px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14 }}>
-            {agentList.map((a) => <option key={a.id} value={a.id}>{a.name}{a.isDefault ? ' (default)' : ''}</option>)}
-          </select>
-        </div>
-      )}
-
       {!form && !picker && (
         <div style={card}>
-          <p style={label}>Your tools</p>
-          {tools.length === 0 && <p style={{ fontSize: 13, color: 'var(--ink-mute)' }}>No tools yet. Create one to give your agent an action.</p>}
+          <p style={label}>This agent&apos;s tools</p>
+          {tools.length === 0 && <p style={{ fontSize: 13, color: 'var(--ink-mute)' }}>No tools yet. Create one to give this agent an action.</p>}
           {tools.map((t) => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--line)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -303,13 +279,13 @@ export default function ToolsPage() {
             </div>
           )}
 
-          {error && <p style={{ fontSize: 12, color: '#f87171', marginTop: 12 }}>{error}</p>}
+          {error && <p style={{ ...errorText, marginTop: 12 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button type="button" onClick={() => void save()} disabled={saving} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>{saving ? 'Saving…' : 'Save tool'}</button>
             <button type="button" onClick={() => setForm(null)} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>Cancel</button>
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

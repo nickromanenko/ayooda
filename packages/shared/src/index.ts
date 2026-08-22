@@ -310,7 +310,7 @@ export interface ToolDef {
 // Agents (multiple per workspace)
 // ---------------------------------------------------------------------------
 
-/** The agent as returned by /agents — never carries the key or namespace. */
+/** The agent as returned by /agents — never carries the namespace. */
 export interface AgentDoc {
   id: string
   name: string
@@ -320,7 +320,6 @@ export interface AgentDoc {
   description: string
   systemPrompt: string
   llmModel: string
-  hasGatewayKey: boolean
   isDefault: boolean
 }
 

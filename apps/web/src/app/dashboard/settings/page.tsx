@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, Check, Copy, LogOut } from 'lucide-react'
+import { Loader2, Check } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
-import { useAuth } from '@/components/providers/AuthProvider'
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 14px',
@@ -14,6 +13,9 @@ const inputStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontFamily: 'var(--font-mono)',
   letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 8,
+}
+const fieldLabelStyle: React.CSSProperties = {
+  ...labelStyle, textTransform: 'none', fontFamily: 'var(--font-sans)', letterSpacing: 0, fontSize: 13,
 }
 const cardStyle: React.CSSProperties = {
   background: 'var(--panel)', border: '1px solid var(--line)',
@@ -34,50 +36,28 @@ function SaveButton({ saving, saved, disabled }: { saving: boolean; saved: boole
 }
 
 export default function SettingsPage() {
-  const { signOut } = useAuth()
-
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [workspaceName, setWorkspaceName] = useState('')
-  const [embedCode, setEmbedCode] = useState('')
   const [loading, setLoading] = useState(true)
 
   const [savingProfile, setSavingProfile] = useState(false)
   const [savedProfile, setSavedProfile] = useState(false)
   const [savingWs, setSavingWs] = useState(false)
   const [savedWs, setSavedWs] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
-
-  const [hasKey, setHasKey] = useState(false)
-  const [keyInput, setKeyInput] = useState('')
-  const [savingKey, setSavingKey] = useState(false)
 
   const load = useCallback(async () => {
     try {
-      const [userRes, wsRes, chRes] = await Promise.all([
-        apiRequest('/user'),
-        apiRequest('/workspace'),
-        apiRequest('/channels'),
-      ])
+      const [userRes, wsRes] = await Promise.all([apiRequest('/user'), apiRequest('/workspace')])
       if (!userRes.ok || !wsRes.ok) {
         setError('Failed to load settings')
         return
       }
-      if (userRes.ok) {
-        const u = await userRes.json() as { email: string; displayName: string }
-        setEmail(u.email); setDisplayName(u.displayName)
-      }
-      if (wsRes.ok) {
-        const w = await wsRes.json() as { name: string; hasGatewayKey?: boolean }
-        setWorkspaceName(w.name)
-        setHasKey(Boolean(w.hasGatewayKey))
-      }
-      if (chRes.ok) {
-        const channels = await chRes.json() as Array<{ type: string; embedCode?: string }>
-        const widget = channels.find((c) => c.type === 'web_widget')
-        if (widget?.embedCode) setEmbedCode(widget.embedCode)
-      }
+      const u = await userRes.json() as { email: string; displayName: string }
+      setEmail(u.email); setDisplayName(u.displayName)
+      const w = await wsRes.json() as { name: string }
+      setWorkspaceName(w.name)
     } catch {
       setError('Failed to load settings')
     } finally {
@@ -113,41 +93,6 @@ export default function SettingsPage() {
     } finally { setSavingWs(false) }
   }
 
-  async function defaultAgentId(): Promise<string | null> {
-    const res = await apiRequest('/agents')
-    if (!res.ok) return null
-    const { agents } = await res.json() as { agents: { id: string; isDefault: boolean }[] }
-    return agents.find((a) => a.isDefault)?.id ?? agents[0]?.id ?? null
-  }
-
-  async function saveKey() {
-    if (!keyInput.trim()) return
-    setSavingKey(true); setError('')
-    try {
-      const id = await defaultAgentId()
-      if (!id) throw new Error('No agent to configure')
-      const res = await apiRequest(`/agents/${id}/key`, { method: 'PUT', body: JSON.stringify({ apiKey: keyInput.trim() }) })
-      if (!res.ok) throw new Error('Failed to save key')
-      setHasKey(true); setKeyInput('')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
-    } finally { setSavingKey(false) }
-  }
-
-  async function removeKey() {
-    setSavingKey(true); setError('')
-    try {
-      const id = await defaultAgentId()
-      if (id) await apiRequest(`/agents/${id}/key`, { method: 'DELETE' })
-      setHasKey(false)
-    } finally { setSavingKey(false) }
-  }
-
-  function copyEmbed() {
-    void navigator.clipboard.writeText(embedCode)
-    setCopied(true); setTimeout(() => setCopied(false), 2000)
-  }
-
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink-mute)', padding: '48px 0', justifyContent: 'center' }}>
@@ -160,7 +105,9 @@ export default function SettingsPage() {
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Settings</h1>
-        <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Manage your profile, workspace, and widget.</p>
+        <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>
+          Your profile and workspace. Anything that configures an agent lives on that agent.
+        </p>
       </div>
 
       {error && (
@@ -172,11 +119,11 @@ export default function SettingsPage() {
         <p style={labelStyle}>Profile</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
-            <label htmlFor="displayName" style={{ ...labelStyle, textTransform: 'none', fontFamily: 'var(--font-sans)', letterSpacing: 0, fontSize: 13 }}>Display name</label>
+            <label htmlFor="displayName" style={fieldLabelStyle}>Display name</label>
             <input id="displayName" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} style={inputStyle} />
           </div>
           <div>
-            <label htmlFor="email" style={{ ...labelStyle, textTransform: 'none', fontFamily: 'var(--font-sans)', letterSpacing: 0, fontSize: 13 }}>Email</label>
+            <label htmlFor="email" style={fieldLabelStyle}>Email</label>
             <input id="email" type="email" value={email} disabled style={{ ...inputStyle, opacity: 0.6, cursor: 'not-allowed' }} />
           </div>
           <div><SaveButton saving={savingProfile} saved={savedProfile} disabled={!displayName.trim()} /></div>
@@ -188,56 +135,12 @@ export default function SettingsPage() {
         <p style={labelStyle}>Workspace</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
-            <label htmlFor="wsName" style={{ ...labelStyle, textTransform: 'none', fontFamily: 'var(--font-sans)', letterSpacing: 0, fontSize: 13 }}>Workspace name</label>
+            <label htmlFor="wsName" style={fieldLabelStyle}>Workspace name</label>
             <input id="wsName" type="text" value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} style={inputStyle} />
           </div>
           <div><SaveButton saving={savingWs} saved={savedWs} disabled={!workspaceName.trim()} /></div>
         </div>
       </form>
-
-      {/* AI Gateway key */}
-      <div style={cardStyle}>
-        <p style={labelStyle}>AI Gateway key</p>
-        <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 12px' }}>
-          One key routes Claude, GPT, Gemini, and more. Falls back to the platform key if left unset.
-        </p>
-        {hasKey ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--mint)' }}><Check size={14} /> Connected</span>
-            <button type="button" onClick={() => void removeKey()} disabled={savingKey} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13, color: '#f87171' }}>Remove</button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="vck_..." style={{ ...inputStyle, flex: 1 }} />
-            <button type="button" onClick={() => void saveKey()} disabled={savingKey || !keyInput.trim()} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: savingKey || !keyInput.trim() ? 0.5 : 1 }}>
-              {savingKey ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Widget install */}
-      <div style={cardStyle}>
-        <p style={labelStyle}>Widget install</p>
-        {embedCode ? (
-          <>
-            <pre style={{ background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 'var(--r-sm)', padding: 12, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)', overflowX: 'auto', margin: '0 0 12px' }}>{embedCode}</pre>
-            <button type="button" onClick={copyEmbed} className="btn btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px' }}>
-              {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy snippet'}
-            </button>
-          </>
-        ) : (
-          <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: 0 }}>No widget yet. <a href="/dashboard/channels" style={{ color: 'var(--accent)' }}>Set one up →</a></p>
-        )}
-      </div>
-
-      {/* Sign out */}
-      <div style={cardStyle}>
-        <p style={labelStyle}>Session</p>
-        <button type="button" onClick={() => void signOut()} className="btn btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', color: '#f87171' }}>
-          <LogOut size={14} /> Sign out
-        </button>
-      </div>
     </div>
   )
 }

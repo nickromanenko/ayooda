@@ -1,13 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import type { WorkflowRule, WorkflowTrigger, TriggerType } from '@ayooda/shared'
-
-const card: React.CSSProperties = { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 24, marginBottom: 20 }
-const label: React.CSSProperties = { fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }
-const input: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
+import { card, label, input, errorText } from '@/components/dashboard/ui'
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
   ask_for_human: 'Visitor asks for a human',
@@ -73,7 +70,10 @@ function ruleToEditor(r: WorkflowRule): Editor {
   return e
 }
 
-export default function WorkflowsPage() {
+export default function AgentEscalationPage({ params }: { params: Promise<{ agentId: string }> }) {
+  const { agentId } = use(params)
+  const base = `/agents/${agentId}/workflows`
+
   const [rules, setRules] = useState<WorkflowRule[]>([])
   const [loading, setLoading] = useState(true)
   const [editor, setEditor] = useState<Editor | null>(null)
@@ -83,10 +83,10 @@ export default function WorkflowsPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await apiRequest('/workflows')
+      const res = await apiRequest(base)
       if (res.ok) { const d = await res.json() as { rules: WorkflowRule[] }; setRules(d.rules) }
     } finally { setLoading(false) }
-  }, [])
+  }, [base])
   useEffect(() => { void load() }, [load])
 
   async function save() {
@@ -95,8 +95,8 @@ export default function WorkflowsPage() {
     const payload = { name: editor.name.trim(), enabled: editor.enabled, trigger: editorToTrigger(editor), action: { type: 'escalate', ...(editor.handoffMessage.trim() ? { handoffMessage: editor.handoffMessage.trim() } : {}) } }
     try {
       const res = editor.id
-        ? await apiRequest(`/workflows/${editor.id}`, { method: 'PUT', body: JSON.stringify(payload) })
-        : await apiRequest('/workflows', { method: 'POST', body: JSON.stringify(payload) })
+        ? await apiRequest(`${base}/${editor.id}`, { method: 'PUT', body: JSON.stringify(payload) })
+        : await apiRequest(base, { method: 'POST', body: JSON.stringify(payload) })
       const d = await res.json().catch(() => ({})) as { error?: string }
       if (!res.ok) { setError(d.error ?? 'Could not save the rule'); return }
       setEditor(null); await load()
@@ -105,7 +105,7 @@ export default function WorkflowsPage() {
 
   async function remove(id: string) {
     setBusyId(id)
-    try { await apiRequest(`/workflows/${id}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
+    try { await apiRequest(`${base}/${id}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
   }
 
   async function move(index: number, dir: -1 | 1) {
@@ -114,27 +114,26 @@ export default function WorkflowsPage() {
     if (j < 0 || j >= next.length) return
     ;[next[index], next[j]] = [next[j]!, next[index]!]
     setRules(next)
-    await apiRequest('/workflows/reorder', { method: 'PUT', body: JSON.stringify({ orderedIds: next.map((r) => r.id) }) })
+    await apiRequest(`${base}/reorder`, { method: 'PUT', body: JSON.stringify({ orderedIds: next.map((r) => r.id) }) })
     await load()
   }
 
   if (loading) return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-mute)' }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</div>
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Workflows</h1>
-          <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Rules that hand a conversation to a human. Evaluated top-to-bottom each bot reply — the first match wins.</p>
-        </div>
-        {!editor && <button type="button" onClick={() => { setEditor(emptyEditor()); setError('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px' }}><Plus size={14} /> New rule</button>}
+    <>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
+        <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: 0 }}>
+          Rules that hand a conversation to a human. Evaluated top-to-bottom on each reply from this agent — the first match wins.
+        </p>
+        {!editor && <button type="button" onClick={() => { setEditor(emptyEditor()); setError('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, flexShrink: 0, whiteSpace: 'nowrap' }}><Plus size={14} /> New rule</button>}
       </div>
 
-      {error && <p style={{ fontSize: 12, color: '#f87171', marginBottom: 12 }}>{error}</p>}
+      {error && <p style={{ ...errorText, marginBottom: 12 }}>{error}</p>}
 
       {!editor && (
         <div style={card}>
-          <p style={label}>Your rules</p>
+          <p style={label}>This agent&apos;s rules</p>
           {rules.length === 0 && <p style={{ fontSize: 13, color: 'var(--ink-mute)' }}>No rules yet. Add one to auto-escalate conversations.</p>}
           {rules.map((r, i) => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--line)' }}>
@@ -201,6 +200,6 @@ export default function WorkflowsPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

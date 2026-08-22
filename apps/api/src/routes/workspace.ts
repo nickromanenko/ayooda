@@ -30,7 +30,6 @@ workspace.get('/', async (c) => {
       llmModel: LEGACY_MODEL_MAP[agentSource.llmModel] ?? agentSource.llmModel,
     },
     usage: data.usage,
-    hasGatewayKey: Boolean(defAgent ? defAgent.gatewayKey : data.gatewayKey),
     role: c.get('role'),
   })
 })

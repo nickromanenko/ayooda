@@ -6,11 +6,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   MessagesSquare,
-  BookOpen,
   Bot,
-  Radio,
-  Wrench,
-  GitBranch,
   CreditCard,
   Settings,
   Users,
@@ -18,15 +14,13 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 
+// Knowledge, tools, escalation rules and deployment all configure one agent, so
+// they are reached through that agent's tabs rather than as siblings here.
 const navItems = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
   { label: 'Inbox', href: '/dashboard/inbox', icon: MessageSquare },
   { label: 'Copilot', href: '/dashboard/copilot', icon: MessagesSquare },
-  { label: 'Knowledge', href: '/dashboard/knowledge', icon: BookOpen },
   { label: 'Agents', href: '/dashboard/agents', icon: Bot },
-  { label: 'Channels', href: '/dashboard/channels', icon: Radio },
-  { label: 'Tools', href: '/dashboard/tools', icon: Wrench },
-  { label: 'Workflows', href: '/dashboard/workflows', icon: GitBranch },
 ]
 
 const bottomItems = [

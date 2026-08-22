@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { FieldValue, type DocumentData } from 'firebase-admin/firestore'
 import { adminDb, adminBucket } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
-import { encryptSecret } from '../lib/crypto'
 import { namespaceFor } from '../lib/pinecone'
 import { agentNamespace, agentDeleteGuard } from '../lib/agents/agent-helpers'
 import { LLM_MODELS, agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, type AgentDoc } from '@ayooda/shared'
@@ -23,7 +22,6 @@ function toAgentDoc(id: string, d: DocumentData): AgentDoc {
     description: d.description ?? '',
     systemPrompt: d.systemPrompt ?? '',
     llmModel: d.llmModel ?? DEFAULT_MODEL,
-    hasGatewayKey: Boolean(d.gatewayKey),
     isDefault: d.isDefault === true,
   }
 }
@@ -62,6 +60,11 @@ agents.post('/', async (c) => {
     llmModel: body.llmModel ?? DEFAULT_MODEL,
     knowledgeNamespace: agentNamespace(ws, ref.id),
     isDefault: false,
+    // Seeded so the Usage tab can distinguish "nothing yet" from "not tracked":
+    // trackedSince marks when these counters started, since they only accrue
+    // forward. Conversation counts are derived from the conversations
+    // collection instead, so those stay accurate for the agent's whole life.
+    usage: { messageCount: 0, tokenCount: 0, trackedSince: now },
     createdAt: now,
     updatedAt: now,
   }
@@ -101,28 +104,6 @@ agents.put('/:id', async (c) => {
   await ref.update(update)
   const after = await ref.get()
   return c.json(toAgentDoc(after.id, after.data()!))
-})
-
-/** PUT /agents/:id/key — store the agent's OpenRouter key (encrypted). */
-agents.put('/:id/key', async (c) => {
-  const ws = c.get('workspaceId')
-  const ref = adminDb.doc(`workspaces/${ws}/agents/${c.req.param('id')}`)
-  if (!(await ref.get()).exists) return c.json({ error: 'Agent not found' }, 404)
-  const body = await c.req.json<{ apiKey?: string }>().catch(() => ({} as { apiKey?: string }))
-  const apiKey = body.apiKey?.trim()
-  if (!apiKey || apiKey.length > 500) return c.json({ error: 'apiKey is required (max 500 chars)' }, 400)
-  await ref.update({ gatewayKey: encryptSecret(apiKey), updatedAt: new Date() })
-  return c.json({ ok: true })
-})
-
-/** DELETE /agents/:id/key */
-agents.delete('/:id/key', async (c) => {
-  const ws = c.get('workspaceId')
-  const ref = adminDb.doc(`workspaces/${ws}/agents/${c.req.param('id')}`)
-  if (!(await ref.get()).exists) return c.json({ error: 'Agent not found' }, 404)
-  const { FieldValue } = await import('firebase-admin/firestore')
-  await ref.update({ gatewayKey: FieldValue.delete(), updatedAt: new Date() })
-  return c.json({ ok: true })
 })
 
 /** POST /agents/:id/default — make this the workspace default. */
@@ -175,9 +156,12 @@ agents.delete('/:id', async (c) => {
     await d.ref.delete()
   }
 
-  // Delete tools
-  const toolsSnap = await adminDb.collection(`workspaces/${ws}/agents/${id}/tools`).get()
-  for (const d of toolsSnap.docs) await d.ref.delete()
+  // Delete the agent's own subcollections. Channels are not among them: the
+  // guard above refuses to delete an agent that still has one attached.
+  for (const sub of ['tools', 'skills', 'workflowRules']) {
+    const subSnap = await adminDb.collection(`workspaces/${ws}/agents/${id}/${sub}`).get()
+    for (const d of subSnap.docs) await d.ref.delete()
+  }
 
   await ref.delete()
   return c.json({ ok: true })

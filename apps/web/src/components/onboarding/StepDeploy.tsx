@@ -13,7 +13,15 @@ export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDon
   useEffect(() => {
     async function createChannel() {
       try {
-        const res = await apiRequest('/channels/web-widget', { method: 'POST' })
+        // Channels belong to an agent, so resolve the workspace's default agent
+        // (created during sign-up) before asking for its widget.
+        const agentsRes = await apiRequest('/agents')
+        if (!agentsRes.ok) throw new Error('Failed to load your agent')
+        const { agents } = (await agentsRes.json()) as { agents: { id: string; isDefault: boolean }[] }
+        const agentId = agents.find((a) => a.isDefault)?.id ?? agents[0]?.id
+        if (!agentId) throw new Error('No agent to deploy yet')
+
+        const res = await apiRequest(`/agents/${agentId}/channels/web-widget`, { method: 'POST' })
         if (!res.ok) throw new Error('Failed to create widget channel')
         const data = (await res.json()) as { embedCode: string }
         setEmbedCode(data.embedCode)
