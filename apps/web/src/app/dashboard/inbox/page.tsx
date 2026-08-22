@@ -10,6 +10,7 @@ import { useWorkspace } from '@/hooks/useWorkspace'
 interface Conversation {
   id: string
   channelId: string
+  agentId?: string | null
   visitorId: string
   status: 'bot' | 'waiting' | 'human' | 'resolved'
   operatorId: string | null
@@ -57,9 +58,25 @@ export default function InboxPage() {
   const [sending, setSending] = useState(false)
   const [takingOver, setTakingOver] = useState(false)
   const [filter, setFilter] = useState<'all' | 'waiting' | 'human' | 'bot' | 'resolved'>('all')
+  const [agentFilter, setAgentFilter] = useState<string>('all')
+  // Which agent answered. Sourced from /copilot/agents rather than /agents,
+  // because the Inbox is open to members and /agents is owner-only.
+  const [agents, setAgents] = useState<{ id: string; name: string }[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const workspaceId = workspace?.id
+
+  useEffect(() => {
+    let cancelled = false
+    void apiRequest('/copilot/agents')
+      .then(async (res) => {
+        if (!res.ok || cancelled) return
+        const d = await res.json() as { agents: { id: string; name: string }[] }
+        setAgents(d.agents)
+      })
+      .catch(() => { /* names are a nicety; the inbox still works without them */ })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (!workspaceId) return
@@ -120,6 +137,8 @@ export default function InboxPage() {
   }
 
   const selectedConv = conversations.find((c) => c.id === selectedId)
+  const agentName = (id?: string | null) =>
+    (id ? agents.find((a) => a.id === id)?.name : undefined) ?? 'Unassigned'
 
   if (wsLoading) {
     return (
@@ -129,7 +148,9 @@ export default function InboxPage() {
     )
   }
 
-  const visibleConversations = filter === 'all' ? conversations : conversations.filter((c) => c.status === filter)
+  const visibleConversations = conversations
+    .filter((c) => filter === 'all' || c.status === filter)
+    .filter((c) => agentFilter === 'all' || c.agentId === agentFilter)
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 48px)', margin: -24, overflow: 'hidden' }}>
@@ -137,7 +158,11 @@ export default function InboxPage() {
       <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
           <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>Inbox</h1>
-          <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>{conversations.length} conversations</p>
+          <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+            {visibleConversations.length === conversations.length
+              ? `${conversations.length} conversations`
+              : `${visibleConversations.length} of ${conversations.length} conversations`}
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 4, padding: '8px 10px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
           {(['all', 'waiting', 'human', 'bot', 'resolved'] as const).map((f) => (
@@ -156,6 +181,22 @@ export default function InboxPage() {
             </button>
           ))}
         </div>
+        {agents.length > 1 && (
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--line)' }}>
+            <select
+              aria-label="Filter by agent"
+              value={agentFilter}
+              onChange={(e) => setAgentFilter(e.target.value)}
+              style={{
+                width: '100%', fontSize: 11.5, padding: '5px 8px', borderRadius: 'var(--r-sm)',
+                border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)',
+              }}
+            >
+              <option value="all">All agents</option>
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+        )}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {visibleConversations.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ink-mute)', gap: 8, padding: '0 24px', textAlign: 'center' }}>
@@ -190,6 +231,15 @@ export default function InboxPage() {
                   <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, ...STATUS_STYLE[conv.status] }}>
                     {conv.status}
                   </span>
+                  <span
+                    style={{
+                      fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--ink-faint)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+                    }}
+                    title={`Answered by ${agentName(conv.agentId)}`}
+                  >
+                    {agentName(conv.agentId)}
+                  </span>
                   {typeof conv.score === 'number' && (
                     <span
                       style={{
@@ -219,6 +269,7 @@ export default function InboxPage() {
               </p>
               <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
                 Status: <span style={{ textTransform: 'capitalize' }}>{selectedConv.status}</span>
+                {' · '}Agent: {agentName(selectedConv.agentId)}
               </p>
               {selectedConv.status === 'waiting' && selectedConv.escalationReason && (
                 <p style={{ fontSize: 11, color: '#f87171', marginTop: 2 }}>Escalated: {selectedConv.escalationReason}</p>
