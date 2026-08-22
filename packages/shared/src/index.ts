@@ -550,3 +550,25 @@ export interface CopilotThreadDoc {
   updatedAt: Date
   lastMessage: string    // truncated to 200 chars
 }
+
+// ---------------------------------------------------------------------------
+// Web widget appearance
+// ---------------------------------------------------------------------------
+
+export const WIDGET_POSITIONS = [
+  { id: 'bottom-right', label: 'Bottom right' },
+  { id: 'bottom-left', label: 'Bottom left' },
+] as const
+
+export type WidgetPosition = (typeof WIDGET_POSITIONS)[number]['id']
+
+export const DEFAULT_WIDGET_COLOR = '#6366f1'
+export const DEFAULT_WIDGET_POSITION: WidgetPosition = 'bottom-right'
+export const MAX_WELCOME_MESSAGE_CHARS = 200
+
+/** How the embedded chat widget looks on the customer's own site. */
+export interface WidgetAppearance {
+  widgetColor: string
+  widgetPosition: WidgetPosition
+  welcomeMessage: string
+}

@@ -144,18 +144,21 @@ async function sendMessageStream(
 // CSS
 // ---------------------------------------------------------------------------
 
-function buildCSS(color: string): string {
+function buildCSS(color: string, position: WidgetConfig['widgetPosition']): string {
+  // The panel and launcher hug whichever edge the widget is pinned to, so a
+  // left-hand widget opens leftwards instead of off the side of the viewport.
+  const left = position === 'bottom-left'
   return `
     :host { all: initial; font-family: system-ui, -apple-system, sans-serif; }
 
     #container {
       position: fixed;
       bottom: 24px;
-      right: 24px;
+      ${left ? 'left: 24px;' : 'right: 24px;'}
       z-index: 2147483647;
       display: flex;
       flex-direction: column;
-      align-items: flex-end;
+      align-items: ${left ? 'flex-start' : 'flex-end'};
       gap: 12px;
     }
 
@@ -406,10 +409,10 @@ class AyoodaWidget {
   }
 
   private build() {
-    const { agentName, agentPhotoURL, widgetColor, welcomeMessage } = this.config
+    const { agentName, agentPhotoURL, widgetColor, widgetPosition, welcomeMessage } = this.config
 
     const style = document.createElement('style')
-    style.textContent = buildCSS(widgetColor)
+    style.textContent = buildCSS(widgetColor, widgetPosition)
     this.shadow.appendChild(style)
 
     const container = document.createElement('div')

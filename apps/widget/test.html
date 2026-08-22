@@ -19,14 +19,14 @@
 <body>
   <h1>Ayooda Widget — Test Harness</h1>
   <p>Loads the widget so you can test the chat bubble against a running API. The
-     bubble appears in the bottom-right once a valid <strong>channel ID</strong> is set.</p>
+     bubble appears in whichever corner the agent&rsquo;s Deploy tab is set to, once a valid <strong>channel ID</strong> is set.</p>
 
-  <div class="row"><label for="agent">Channel ID</label><input id="agent" placeholder="data-agent-id from Dashboard → Channels" /></div>
+  <div class="row"><label for="agent">Channel ID</label><input id="agent" placeholder="data-agent-id from Dashboard → Agents → Deploy" /></div>
   <div class="row"><label for="api">API URL</label><input id="api" value="http://localhost:3001" /></div>
   <div class="row"><button id="load">Load widget</button></div>
 
   <p id="msg" class="note">
-    Enter a <strong>Channel ID</strong> (Dashboard → Channels → your web channel) and click
+    Enter a <strong>Channel ID</strong> (Dashboard → Agents → your agent → Deploy) and click
     <em>Load widget</em>. You can also pass them in the URL:
     <code>test.html?agent=&lt;channelId&gt;&amp;api=http://localhost:3001</code>.
     Reload the page to swap channels (the widget only loads once per page).
@@ -51,15 +51,17 @@
       }
       const s = document.createElement('script');
       s.id = 'ayooda-widget-script';
-      // Loads the deployed widget bundle; point data-api-url at your local API.
-      // To test LOCAL widget code instead, build it (pnpm --filter widget build)
-      // and change src to your local dist/widget.js.
-      s.src = 'https://cdn.ayooda.live/widget.js';
+      // Defaults to the deployed bundle. Add ?local=1 to load the bundle you just
+      // built (pnpm --filter widget build) instead — needed whenever you are
+      // testing a change to the widget's own code rather than to its config.
+      s.src = params.get('local') === '1' ? '/dist/widget.js' : 'https://cdn.ayooda.live/widget.js';
       s.async = true;
       s.setAttribute('data-agent-id', agent);
       s.setAttribute('data-api-url', api);
       document.body.appendChild(s);
-      msg.innerHTML = 'Widget loading for channel <code>' + agent + '</code> against <code>' + api + '</code>. Look bottom-right ↘';
+      const which = params.get('local') === '1' ? 'local dist/widget.js' : 'deployed bundle';
+      msg.innerHTML = 'Loading the ' + which + ' for channel <code>' + agent + '</code> against <code>' + api
+        + '</code>. Look for the bubble in the corner set on the Deploy tab.';
     }
 
     document.getElementById('load').addEventListener('click', loadWidget);

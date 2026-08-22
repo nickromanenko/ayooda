@@ -5,6 +5,8 @@ import { requireAuth, requireOwner, type AuthVariables } from '../middleware/aut
 import { requireAgent } from '../middleware/agent'
 import { encryptSecret, decryptSecret } from '../lib/crypto'
 import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
+import { validateWidgetAppearance } from '../lib/channels/validate'
+import { DEFAULT_WIDGET_COLOR, DEFAULT_WIDGET_POSITION } from '@ayooda/shared'
 
 /**
  * Channels belong to the agent that answers on them. Each agent gets its own
@@ -51,12 +53,25 @@ agentChannels.get('/', async (c) => {
   const workspaceId = c.get('workspaceId')
   const agentId = c.get('agentId')!
 
-  const snap = await channelsCol(workspaceId).where('agentId', '==', agentId).get()
+  const [snap, identity] = await Promise.all([
+    channelsCol(workspaceId).where('agentId', '==', agentId).get(),
+    agentIdentity(workspaceId, agentId),
+  ])
 
   // Sorted in memory: ordering by createdAt alongside two equality filters would
   // need a composite index, and an agent has at most a handful of channels.
   const rows = snap.docs
-    .map((d) => ({ id: d.id, ...strip(d.data() as Record<string, unknown>) }))
+    .map((d) => {
+      const safe = strip(d.data() as Record<string, unknown>)
+      const config = (safe.config ?? {}) as Record<string, unknown>
+      // Same rule as the workspace-wide list: the agent's identity is read live,
+      // never from the channel's cached copy, so a rename shows up immediately.
+      return {
+        id: d.id,
+        ...safe,
+        config: { ...config, agentName: identity.name, agentPhotoURL: identity.photoURL },
+      }
+    })
     .sort((a, b) => {
       const at = (a as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0
       const bt = (b as { createdAt?: { toMillis?: () => number } }).createdAt?.toMillis?.() ?? 0
@@ -96,8 +111,8 @@ agentChannels.post('/web-widget', async (c) => {
     type: 'web_widget',
     agentId,
     config: {
-      widgetColor: '#6366f1',
-      widgetPosition: 'bottom-right',
+      widgetColor: DEFAULT_WIDGET_COLOR,
+      widgetPosition: DEFAULT_WIDGET_POSITION,
       welcomeMessage: `Hi there! How can ${agentName} help you today?`,
       agentName,
       agentPhotoURL,
@@ -110,6 +125,29 @@ agentChannels.post('/web-widget', async (c) => {
   await batch.commit()
 
   return c.json({ channelId, embedCode }, 201)
+})
+
+/**
+ * PUT /agents/:agentId/channels/web-widget — how the widget looks on the
+ * customer's site. Only appearance is writable here; the embed code and the
+ * agent it answers as are derived, not set.
+ */
+agentChannels.put('/web-widget', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
+
+  const existing = await channelOfType(workspaceId, agentId, 'web_widget')
+  if (!existing) return c.json({ error: 'This agent has no widget yet.' }, 404)
+
+  const result = validateWidgetAppearance(await c.req.json().catch(() => null))
+  if (!result.ok) return c.json({ error: result.error }, 400)
+
+  await existing.ref.update({
+    'config.widgetColor': result.value.widgetColor,
+    'config.widgetPosition': result.value.widgetPosition,
+    'config.welcomeMessage': result.value.welcomeMessage,
+  })
+  return c.json(result.value)
 })
 
 /** DELETE /agents/:agentId/channels/web-widget — take this agent off the web. */

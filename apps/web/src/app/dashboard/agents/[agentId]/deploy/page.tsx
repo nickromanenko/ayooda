@@ -4,12 +4,19 @@ import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Copy, Check, Code, Send, Plus } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { label, errorText } from '@/components/dashboard/ui'
+import WidgetAppearance from '@/components/dashboard/WidgetAppearance'
+import {
+  DEFAULT_WIDGET_COLOR,
+  DEFAULT_WIDGET_POSITION,
+  type WidgetAppearance as Appearance,
+} from '@ayooda/shared'
 
 interface Channel {
   id: string
   type: string
   embedCode?: string
   isActive: boolean
+  config?: Partial<Appearance> & { agentName?: string }
   telegram?: { botUsername: string; botId: number }
 }
 
@@ -69,6 +76,12 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       await apiRequest(`${base}/web-widget`, { method: 'DELETE' })
       await fetchChannels()
     } finally { setWidgetBusy(false) }
+  }
+
+  function applyAppearance(next: Appearance) {
+    setChannels((prev) => prev.map((c) => (
+      c.type === 'web_widget' ? { ...c, config: { ...c.config, ...next } } : c
+    )))
   }
 
   async function copyEmbed(code: string) {
@@ -200,7 +213,18 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
                 ))}
               </div>
 
-              <button type="button" onClick={() => void removeWidget()} disabled={widgetBusy} className="btn btn-ghost" style={{ marginTop: 16, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: '#f87171' }}>
+              <WidgetAppearance
+                agentId={agentId}
+                agentName={widget.config?.agentName ?? 'Support Agent'}
+                initial={{
+                  widgetColor: widget.config?.widgetColor ?? DEFAULT_WIDGET_COLOR,
+                  widgetPosition: widget.config?.widgetPosition ?? DEFAULT_WIDGET_POSITION,
+                  welcomeMessage: widget.config?.welcomeMessage ?? '',
+                }}
+                onSaved={applyAppearance}
+              />
+
+              <button type="button" onClick={() => void removeWidget()} disabled={widgetBusy} className="btn btn-ghost" style={{ marginTop: 20, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: '#f87171' }}>
                 {widgetBusy ? 'Removing…' : 'Remove widget'}
               </button>
             </>
