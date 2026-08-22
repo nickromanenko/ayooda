@@ -1,0 +1,98 @@
+name: Deploy Widget to Firebase Hosting
+
+# The widget is the one deployable that customers load directly from their own
+# sites, and it was the only one without a workflow — so widget changes merged
+# to master and silently never shipped until someone deployed by hand.
+#
+# Unlike the other apps the widget does not depend on packages/shared, so a
+# change there must not trigger a pointless redeploy. test.html is excluded too:
+# it is a local harness and is not part of the published bundle.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/widget/src/**'
+      - 'apps/widget/package.json'
+      - 'apps/widget/vite.config.ts'
+      - 'apps/widget/tsconfig.json'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/deploy-widget.yml'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ayooda-1791f
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # The widget's tests run under bun, matching how they run locally.
+      - uses: oven-sh/setup-bun@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter widget typecheck
+
+      - name: Test
+        working-directory: apps/widget
+        run: bun test
+
+      - name: Build
+        run: pnpm --filter widget build
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # firebase-tools picks up GOOGLE_APPLICATION_CREDENTIALS, which the auth
+      # step above exports. The service account needs the Firebase Hosting Admin
+      # role; without it this step fails with a 403.
+      #
+      # Firebase returns 400 "is the current active version" when the built
+      # bundle is byte-identical to what is already live — that happens on a
+      # manual re-run, or when a change does not alter the output. The desired
+      # state is already reached, so treat it as success rather than a red build.
+      - name: Deploy to Firebase Hosting
+        run: |
+          set -o pipefail
+          if npx --yes firebase-tools@14 deploy \
+               --only hosting:widget \
+               --project "$PROJECT_ID" \
+               --non-interactive 2>&1 | tee deploy.log; then
+            echo "Deployed."
+          elif grep -q "is the current active version" deploy.log; then
+            echo "Bundle already live and unchanged — nothing to release."
+          else
+            echo "::error::Widget deploy failed. If this is a 403, grant the deploy service account the Firebase Hosting Admin role."
+            exit 1
+          fi
+
+      - name: Verify the deployed bundle
+        run: |
+          # Confirm the published file matches what we just built, so a silently
+          # skipped release cannot look like a success.
+          built=$(sha256sum apps/widget/dist/widget.js | cut -d' ' -f1)
+          live=$(curl -fsSL -H 'Cache-Control: no-cache' \
+                   "https://ayooda-widget.web.app/widget.js?cb=${GITHUB_SHA}" \
+                 | sha256sum | cut -d' ' -f1)
+          echo "built=$built"
+          echo "live =$live"
+          if [ "$built" != "$live" ]; then
+            echo "::error::Published bundle does not match the build."
+            exit 1
+          fi
+          echo "Published bundle matches the build."
