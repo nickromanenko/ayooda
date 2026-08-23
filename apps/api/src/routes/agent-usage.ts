@@ -4,6 +4,7 @@ import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { shouldResetPeriod, checkEntitlement } from '../lib/billing/entitlement'
 import { averageTiming } from '../lib/analytics/timing'
+import { CONFIDENCE_TREND_DAYS, confidenceSummary, utcDateKey } from '../lib/analytics/confidence'
 
 /**
  * Per-agent usage.
@@ -100,8 +101,11 @@ agentUsage.get('/', async (c) => {
 
   const conv = adminDb.collection(`workspaces/${ws}/conversations`)
   const mine = conv.where('agentId', '==', agentId)
+  const requestNow = new Date()
+  const confidenceStart = new Date(requestNow.getTime() - (CONFIDENCE_TREND_DAYS - 1) * 86_400_000)
+  const confidenceStartKey = utcDateKey(confidenceStart)
 
-  const [totalAgg, resolvedAgg, takeoverAgg, waitingAgg, periodAgg, agentSnap, knowledgeSnap, channelsSnap, escalatedSnap, allTakeoversSnap, firstReplySnap, resolutionSnap] =
+  const [totalAgg, resolvedAgg, takeoverAgg, waitingAgg, periodAgg, agentSnap, knowledgeSnap, channelsSnap, escalatedSnap, allTakeoversSnap, firstReplySnap, resolutionSnap, confidenceDailySnap] =
     await Promise.all([
       mine.count().get(),
       mine.where('status', '==', 'resolved').count().get(),
@@ -135,6 +139,12 @@ agentUsage.get('/', async (c) => {
         console.warn('[agent-usage] resolution timing unavailable (index building?):', err)
         return null
       }),
+      adminDb.collection(`workspaces/${ws}/agents/${agentId}/confidenceDaily`)
+        .where('date', '>=', confidenceStartKey).orderBy('date', 'asc').limit(CONFIDENCE_TREND_DAYS).get()
+        .catch((err: unknown) => {
+          console.warn('[agent-usage] confidence trend unavailable:', err)
+          return null
+        }),
     ])
 
   const total = totalAgg.data().count
@@ -154,6 +164,10 @@ agentUsage.get('/', async (c) => {
     firstReply: averageTiming((firstReplySnap?.docs ?? []).map((d) => d.data().firstReplyMs)),
     resolution: averageTiming((resolutionSnap?.docs ?? []).map((d) => d.data().resolutionMs)),
   }
+  const confidence = confidenceSummary(
+    (confidenceDailySnap?.docs ?? []).map((d) => d.data()),
+    requestNow,
+  )
 
   // CSAT: the scoring skill writes score (1–5) on resolved conversations.
   // The `where score >= 1` leg needs a composite index (agentId + score); degrade
@@ -185,7 +199,7 @@ agentUsage.get('/', async (c) => {
 
   // Reuse the billing gate so the included cap shown here matches Billing —
   // including trials, whose cap is not on any plan.
-  const now = new Date()
+  const now = requestNow
   const periodUsed = reset ? 0 : ((wsUsage.periodConversationCount as number | undefined) ?? 0)
   const ent = checkEntitlement({
     subscription: sub,
@@ -208,6 +222,7 @@ agentUsage.get('/', async (c) => {
     automationRate: resolved > 0 ? Math.round((automated / resolved) * 100) : null,
     handoffs,
     timing,
+    confidence,
     csat,
     messages: {
       count: (agentUsageDoc.messageCount as number | undefined) ?? null,
@@ -241,6 +256,7 @@ agentUsage.get('/export', async (c) => {
   const header = [
     'conversation_id', 'visitor', 'channel', 'status', 'created_at', 'updated_at',
     'first_reply_at', 'first_reply_ms', 'resolved_at', 'resolution_ms',
+    'knowledge_confidence_average', 'knowledge_confidence_latest', 'knowledge_confidence_samples',
     'score', 'summary', 'had_takeover', 'escalation_reason', 'last_message',
   ]
   const lines = [header.join(',')]
@@ -256,6 +272,11 @@ agentUsage.get('/export', async (c) => {
       typeof r.firstReplyMs === 'number' ? r.firstReplyMs : '',
       toDate(r.resolvedAt)?.toISOString() ?? '',
       typeof r.resolutionMs === 'number' ? r.resolutionMs : '',
+      typeof r.confidenceSum === 'number' && typeof r.confidenceSamples === 'number' && r.confidenceSamples > 0
+        ? Math.round(r.confidenceSum / r.confidenceSamples)
+        : '',
+      typeof r.confidenceLatest === 'number' ? r.confidenceLatest : '',
+      typeof r.confidenceSamples === 'number' ? r.confidenceSamples : '',
       typeof r.score === 'number' ? r.score : '',
       r.summary ?? '',
       r.hadTakeover === true ? 'true' : 'false',

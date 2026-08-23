@@ -17,6 +17,7 @@ import { emitOverageEvent } from '../billing/overage'
 import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
 import { gatherContext } from '../skills/run'
 import { elapsedMs, timestampDate } from '../analytics/timing'
+import { knowledgeConfidence, LOW_KNOWLEDGE_CONFIDENCE, utcDateKey } from '../analytics/confidence'
 import '../skills/all'
 
 export interface PrepareTurnInput {
@@ -212,6 +213,32 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const history = historySnap.docs.map((d) => d.data() as { role: string; content: string })
 
   const { contextBlocks, sources } = await retrieveContext(agentRec.knowledgeNamespace, trimmed, trace)
+  const responseConfidence = knowledgeConfidence(sources)
+  const lowConfidence = responseConfidence < LOW_KNOWLEDGE_CONFIDENCE
+  const confidenceConversationFields = (at: Date) => ({
+    confidenceSum: FieldValue.increment(responseConfidence),
+    confidenceSamples: FieldValue.increment(1),
+    confidenceLowSamples: FieldValue.increment(lowConfidence ? 1 : 0),
+    confidenceLatest: responseConfidence,
+    confidenceUpdatedAt: at,
+    ...(!existingConversation?.confidenceTrackedAt ? { confidenceTrackedAt: at } : {}),
+  })
+  const confidenceAgentFields = {
+    'usage.confidenceSum': FieldValue.increment(responseConfidence),
+    'usage.confidenceSamples': FieldValue.increment(1),
+    'usage.confidenceLowSamples': FieldValue.increment(lowConfidence ? 1 : 0),
+  }
+  const recordConfidenceDay = async (at: Date) => {
+    if (!agentUsageRef) return
+    const date = utcDateKey(at)
+    await agentUsageRef.collection('confidenceDaily').doc(date).set({
+      date,
+      confidenceSum: FieldValue.increment(responseConfidence),
+      confidenceSamples: FieldValue.increment(1),
+      confidenceLowSamples: FieldValue.increment(lowConfidence ? 1 : 0),
+      updatedAt: at,
+    }, { merge: true })
+  }
 
   // Skill context (non-fatal): each skill's contributeContext hook is isolated in gatherContext,
   // but guard the call itself too — belt and braces against gatherContext ever rejecting.
@@ -242,14 +269,19 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       const firstReplyMs = timingTracked && typeof existingConversation?.firstReplyMs !== 'number'
         ? elapsedMs(conversationStartedAt, repliedAt)
         : null
-      await messagesRef.add({ role: 'assistant', content: handoff, createdAt: FieldValue.serverTimestamp(), metadata: { escalated: true } })
+      await messagesRef.add({
+        role: 'assistant', content: handoff, createdAt: FieldValue.serverTimestamp(),
+        metadata: { escalated: true, knowledgeConfidence: responseConfidence },
+      })
       await convRef.update({
         status: 'waiting', escalationReason: hit.name, operatorId: null,
         updatedAt: FieldValue.serverTimestamp(), lastMessage: handoff.slice(0, 200),
         ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
+        ...confidenceConversationFields(repliedAt),
       })
       await workspaceRef.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
-      await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
+      await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2), ...confidenceAgentFields }).catch(() => {})
+      await recordConfidenceDay(repliedAt).catch(() => {})
       trace.update({ output: { escalated: hit.name } })
       return { kind: 'escalated', message: handoff }
     }
@@ -278,12 +310,13 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       role: 'assistant',
       content: reply,
       createdAt: FieldValue.serverTimestamp(),
-      metadata: { sources, llmModel, promptTokens, completionTokens },
+      metadata: { sources, llmModel, promptTokens, completionTokens, knowledgeConfidence: responseConfidence },
     })
     try {
       await convRef.update({
         updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200), botReplyCount: FieldValue.increment(1),
         ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
+        ...confidenceConversationFields(repliedAt),
       })
       await workspaceRef.update({
         'usage.messageCount': FieldValue.increment(2),
@@ -294,7 +327,9 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       await agentUsageRef?.update({
         'usage.messageCount': FieldValue.increment(2),
         'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
+        ...confidenceAgentFields,
       })
+      await recordConfidenceDay(repliedAt)
     } catch (err) {
       console.warn('[agent-turn] post-reply bookkeeping failed:', err)
     }

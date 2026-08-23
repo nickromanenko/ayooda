@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, MessageSquare, Zap, Coins, BookOpen, Star, Download, Clock3, Timer } from 'lucide-react'
+import { Loader2, MessageSquare, Zap, Coins, BookOpen, Star, Download, Clock3, Timer, Gauge } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, muted } from '@/components/dashboard/ui'
@@ -14,6 +14,13 @@ interface Usage {
   timing: {
     firstReply: { averageMs: number | null; count: number }
     resolution: { averageMs: number | null; count: number }
+  }
+  confidence: {
+    average: number | null
+    lowRate: number | null
+    count: number
+    threshold: number
+    trend: Array<{ date: string; average: number | null; count: number }>
   }
   csat: { average: number | null; count: number; distribution: [number, number, number, number, number] }
   messages: { count: number | null; tokens: number | null; trackedSince: string | null }
@@ -70,6 +77,33 @@ function Bar({ segments, total }: { segments: { label: string; value: number; co
             <strong style={{ color: 'var(--ink)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{nf.format(s.value)}</strong>
           </span>
         ))}
+      </div>
+    </>
+  )
+}
+
+function ConfidenceTrend({ points, threshold }: { points: Usage['confidence']['trend']; threshold: number }) {
+  return (
+    <>
+      <div style={{ height: 96, display: 'grid', gridTemplateColumns: `repeat(${points.length}, minmax(2px, 1fr))`, alignItems: 'end', gap: 3, marginTop: 16 }}>
+        {points.map((point) => (
+          <div
+            key={point.date}
+            title={`${point.date}: ${point.average === null ? 'No samples' : `${point.average}% (${point.count})`}`}
+            aria-label={`${point.date}: ${point.average === null ? 'no samples' : `${point.average}% confidence from ${point.count} responses`}`}
+            style={{ height: '100%', display: 'flex', alignItems: 'flex-end' }}
+          >
+            <div style={{
+              width: '100%', minHeight: point.average === null ? 2 : 4,
+              height: point.average === null ? 2 : `${point.average}%`, borderRadius: '3px 3px 1px 1px',
+              background: point.average === null ? 'var(--line)' : point.average < threshold ? 'var(--accent)' : 'var(--mint)',
+            }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--ink-faint)', marginTop: 6 }}>
+        <span>{points[0]?.date.slice(5)}</span>
+        <span>{points.at(-1)?.date.slice(5)}</span>
       </div>
     </>
   )
@@ -186,6 +220,11 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
           value={fmtDuration(u.timing.resolution.averageMs)} name="Avg resolution"
           sub={u.timing.resolution.count > 0 ? `${nf.format(u.timing.resolution.count)} tracked` : 'tracking new resolutions'}
         />
+        <Tile
+          icon={Gauge} accent="var(--mint)"
+          value={u.confidence.average !== null ? `${u.confidence.average}%` : '—'} name="Knowledge confidence"
+          sub={u.confidence.count > 0 ? `${nf.format(u.confidence.count)} responses` : 'tracking new responses'}
+        />
       </div>
 
       {/* CSAT distribution */}
@@ -202,6 +241,31 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
           />
         </div>
       )}
+
+      {/* Retrieval evidence behind agent responses */}
+      <div style={card}>
+        <p style={label}>Knowledge confidence · last 30 days</p>
+        {u.confidence.count === 0 ? (
+          <p style={{ ...muted, margin: 0 }}>No confidence samples yet. New agent responses will appear here.</p>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ fontFamily: 'var(--font-display)', fontSize: 23, color: 'var(--ink)', margin: 0 }}>{u.confidence.average}%</p>
+                <p style={{ fontSize: 11.5, color: 'var(--ink-mute)', margin: '2px 0 0' }}>average support</p>
+              </div>
+              <div>
+                <p style={{ fontFamily: 'var(--font-display)', fontSize: 23, color: 'var(--ink)', margin: 0 }}>{u.confidence.lowRate}%</p>
+                <p style={{ fontSize: 11.5, color: 'var(--ink-mute)', margin: '2px 0 0' }}>below {u.confidence.threshold}%</p>
+              </div>
+            </div>
+            <ConfidenceTrend points={u.confidence.trend} threshold={u.confidence.threshold} />
+            <p style={{ fontSize: 11.5, color: 'var(--ink-faint)', margin: '10px 0 0' }}>
+              Measures retrieval evidence supporting responses, not guaranteed answer correctness. Based on {nf.format(u.confidence.count)} response{u.confidence.count === 1 ? '' : 's'}.
+            </p>
+          </>
+        )}
+      </div>
 
       {/* How conversations ended */}
       <div style={card}>

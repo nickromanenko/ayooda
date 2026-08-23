@@ -206,6 +206,12 @@ describe('prepareTurn prompt assembly', () => {
       content: 'are you still there?',
     })
     expect(result.sources.map((s) => s.docId)).toEqual(['d1'])
+
+    await result.persist('Refunds take 5 business days.', 10, 6)
+    const confidenceUpdate = state.updates.find((u) => u.path === CONV && u.data.confidenceLatest === 90)
+    expect(confidenceUpdate?.data.confidenceTrackedAt).toBeInstanceOf(Date)
+    const assistantMessage = state.added.filter((row) => row.path === `${CONV}/messages` && row.data.role === 'assistant').at(-1)
+    expect(assistantMessage?.data.metadata.knowledgeConfidence).toBe(90)
   })
 
   test('with nothing retrieved the system prompt is exactly the agent prompt', async () => {
