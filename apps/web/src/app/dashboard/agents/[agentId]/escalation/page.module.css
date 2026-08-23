@@ -1,3 +1,42 @@
+.viewSwitch {
+  display: inline-flex;
+  gap: 3px;
+  margin-top: 11px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+
+.viewSwitch button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-mute);
+  font-size: 11px;
+  cursor: pointer;
+  transition-property: background-color, color, box-shadow, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.viewSwitch button:active {
+  scale: 0.96;
+}
+
+.viewSwitch button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.38);
+}
+
+.viewSwitch .viewSwitchActive {
+  background: var(--panel-2);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
 .actionSummary {
   margin: 3px 0 0;
   color: var(--accent);
@@ -136,6 +175,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .viewSwitch button,
   .actionCard {
     transition-duration: 0.01ms;
   }

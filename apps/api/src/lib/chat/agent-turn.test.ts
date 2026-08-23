@@ -227,6 +227,34 @@ describe('prepareTurn prompt assembly', () => {
 
 describe('prepareTurn workflow actions', () => {
   const workflowPath = 'workspaces/w/agents/inline/workflowRules'
+  const graphPath = 'workspaces/w/agents/inline/workflowGraph/main'
+
+  test('an active graph takes precedence over the ordered-rules fallback', async () => {
+    seed({ visitorId: 'v', status: 'bot', timingTrackedAt: new Date(), createdAt: new Date() })
+    state.queries.set(workflowPath, [{
+      name: 'Legacy escalation', enabled: true, order: 0,
+      trigger: { type: 'low_confidence' }, action: { type: 'escalate' },
+    }])
+    state.docs.set(graphPath, {
+      version: 1,
+      enabled: true,
+      nodes: [
+        { id: 'start', kind: 'start', name: 'Start', position: { x: 0, y: 0 } },
+        { id: 'check', kind: 'condition', name: 'Low confidence?', trigger: { type: 'low_confidence' }, position: { x: 250, y: 0 } },
+        { id: 'done', kind: 'action', name: 'Graph resolution', action: { type: 'resolve', message: 'Resolved by graph.' }, position: { x: 500, y: 0 } },
+      ],
+      edges: [
+        { id: 'start_check', from: 'start', to: 'check', branch: 'always' },
+        { id: 'check_done', from: 'check', to: 'done', branch: 'yes' },
+      ],
+    })
+
+    const result = await turn()
+    expect(result).toMatchObject({ kind: 'workflow', action: 'resolve', status: 'resolved', message: 'Resolved by graph.' })
+    expect(state.updates.find((row) => row.path === CONV)?.data.workflowRuleId).toBe('done')
+    const assistant = state.added.find((row) => row.path === `${CONV}/messages` && row.data.role === 'assistant')
+    expect(assistant?.data.metadata.workflowGraphPath).toEqual(['start', 'check', 'done'])
+  })
 
   test('a continuing response prefixes the normal AI turn', async () => {
     seed({ visitorId: 'v', status: 'bot' })

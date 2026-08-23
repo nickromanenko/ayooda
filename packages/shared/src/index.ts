@@ -449,6 +449,33 @@ export interface WorkflowTargets {
   agents: Array<{ id: string; name: string }>
 }
 
+export type WorkflowGraphNode =
+  | { id: string; kind: 'start'; name: string; position: { x: number; y: number } }
+  | { id: string; kind: 'condition'; name: string; trigger: WorkflowTrigger; position: { x: number; y: number } }
+  | { id: string; kind: 'action'; name: string; action: WorkflowAction; position: { x: number; y: number } }
+
+export type WorkflowGraphBranch = 'always' | 'yes' | 'no'
+
+export interface WorkflowGraphEdge {
+  id: string
+  from: string
+  to: string
+  branch: WorkflowGraphBranch
+}
+
+export interface WorkflowGraph {
+  version: 1
+  enabled: boolean
+  nodes: WorkflowGraphNode[]
+  edges: WorkflowGraphEdge[]
+}
+
+export interface WorkflowGraphResponse {
+  graph: WorkflowGraph | null
+  persisted: boolean
+  legacyRuleCount: number
+}
+
 /** API↔web contract for a rule (no timestamps). */
 export interface WorkflowRule {
   id: string

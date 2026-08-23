@@ -4,7 +4,8 @@ import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { validateRule } from '../lib/workflow/validate'
-import type { WorkflowAction, WorkflowRule, WorkflowTargets } from '@ayooda/shared'
+import { graphFromRules, validateWorkflowGraph } from '../lib/workflow/graph'
+import type { WorkflowAction, WorkflowGraph, WorkflowGraphResponse, WorkflowRule, WorkflowTargets } from '@ayooda/shared'
 
 /**
  * Escalation rules describe how one agent behaves — a support agent and a sales
@@ -17,6 +18,8 @@ workflows.use('*', requireAgent)
 
 export const rulesPath = (workspaceId: string, agentId: string) =>
   `workspaces/${workspaceId}/agents/${agentId}/workflowRules`
+export const graphPath = (workspaceId: string, agentId: string) =>
+  `workspaces/${workspaceId}/agents/${agentId}/workflowGraph/main`
 
 function rulesCol(c: { get: (k: 'workspaceId' | 'agentId') => string | undefined }) {
   return adminDb.collection(rulesPath(c.get('workspaceId')!, c.get('agentId')!))
@@ -40,6 +43,20 @@ async function invalidTarget(workspaceId: string, currentAgentId: string, action
       : 'Selected agent is not in this workspace.'
   }
   return null
+}
+
+async function invalidGraphTarget(workspaceId: string, currentAgentId: string, graph: WorkflowGraph): Promise<string | null> {
+  for (const node of graph.nodes) {
+    if (node.kind !== 'action') continue
+    const error = await invalidTarget(workspaceId, currentAgentId, node.action)
+    if (error) return `${node.name}: ${error}`
+  }
+  return null
+}
+
+async function legacyRules(c: { get: (k: 'workspaceId' | 'agentId') => string | undefined }): Promise<WorkflowRule[]> {
+  const snap = await rulesCol(c).orderBy('order', 'asc').get()
+  return snap.docs.map((doc) => toRule(doc.id, doc.data()))
 }
 
 /** GET /agents/:agentId/workflows — list rules ordered by `order`. */
@@ -68,6 +85,56 @@ workflows.get('/targets', async (c) => {
       .sort((a, b) => a.name.localeCompare(b.name)),
   }
   return c.json(targets)
+})
+
+/** GET /graph — persisted graph, or a non-active preview converted from legacy rules. */
+workflows.get('/graph', async (c) => {
+  const workspaceId = c.get('workspaceId')!
+  const agentId = c.get('agentId')!
+  const [snap, rules] = await Promise.all([
+    adminDb.doc(graphPath(workspaceId, agentId)).get(),
+    legacyRules(c),
+  ])
+  if (!snap.exists) {
+    const response: WorkflowGraphResponse = { graph: graphFromRules(rules), persisted: false, legacyRuleCount: rules.length }
+    return c.json(response)
+  }
+  const parsed = validateWorkflowGraph(snap.data())
+  if (!parsed.ok) return c.json({ error: `Stored workflow graph is invalid: ${parsed.error}` }, 500)
+  const response: WorkflowGraphResponse = { graph: parsed.value, persisted: true, legacyRuleCount: rules.length }
+  return c.json(response)
+})
+
+/** PUT /graph — validate targets and replace the active graph atomically. */
+workflows.put('/graph', async (c) => {
+  const workspaceId = c.get('workspaceId')!
+  const agentId = c.get('agentId')!
+  const parsed = validateWorkflowGraph(await c.req.json().catch(() => null))
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+  const targetError = await invalidGraphTarget(workspaceId, agentId, parsed.value)
+  if (targetError) return c.json({ error: targetError }, 400)
+  await adminDb.doc(graphPath(workspaceId, agentId)).set({ ...parsed.value, updatedAt: new Date() })
+  const response: WorkflowGraphResponse = { graph: parsed.value, persisted: true, legacyRuleCount: (await legacyRules(c)).length }
+  return c.json(response)
+})
+
+/** POST /graph/migrate — activate the current ordered rules as an equivalent graph. */
+workflows.post('/graph/migrate', async (c) => {
+  const workspaceId = c.get('workspaceId')!
+  const agentId = c.get('agentId')!
+  const rules = await legacyRules(c)
+  const graph = graphFromRules(rules)
+  const targetError = await invalidGraphTarget(workspaceId, agentId, graph)
+  if (targetError) return c.json({ error: targetError }, 400)
+  await adminDb.doc(graphPath(workspaceId, agentId)).set({ ...graph, updatedAt: new Date(), migratedAt: new Date() })
+  const response: WorkflowGraphResponse = { graph, persisted: true, legacyRuleCount: rules.length }
+  return c.json(response)
+})
+
+/** DELETE /graph — deactivate graph mode and resume executing legacy rules. */
+workflows.delete('/graph', async (c) => {
+  await adminDb.doc(graphPath(c.get('workspaceId')!, c.get('agentId')!)).delete()
+  return c.json({ ok: true })
 })
 
 /** POST /agents/:agentId/workflows — create a rule at the end of the list. */

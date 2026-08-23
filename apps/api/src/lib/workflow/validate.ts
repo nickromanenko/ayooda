@@ -23,7 +23,7 @@ function cleanStrings(v: unknown): string[] {
   return v.filter((s): s is string => typeof s === 'string' && s.trim().length > 0).map((s) => s.trim())
 }
 
-function validateTrigger(raw: unknown): { ok: true; value: WorkflowTrigger } | Fail {
+export function validateWorkflowTrigger(raw: unknown): { ok: true; value: WorkflowTrigger } | Fail {
   if (!raw || typeof raw !== 'object') return fail('Trigger is required.')
   const t = raw as Record<string, unknown>
   const type = t.type as TriggerType
@@ -73,7 +73,7 @@ function targetId(raw: unknown, label: string): { ok: true; value: string } | Fa
   return { ok: true, value: raw }
 }
 
-function validateAction(raw: unknown): { ok: true; value: WorkflowAction } | Fail {
+export function validateWorkflowAction(raw: unknown): { ok: true; value: WorkflowAction } | Fail {
   if (!raw || typeof raw !== 'object') return fail('Action is required.')
   const action = raw as Record<string, unknown>
 
@@ -122,10 +122,10 @@ export function validateRule(raw: unknown): { ok: true; value: ValidatedRule } |
 
   const enabled = o.enabled === undefined ? true : o.enabled === true
 
-  const trig = validateTrigger(o.trigger)
+  const trig = validateWorkflowTrigger(o.trigger)
   if (!trig.ok) return trig
 
-  const action = validateAction(o.action)
+  const action = validateWorkflowAction(o.action)
   if (!action.ok) return action
 
   return { ok: true, value: { name, enabled, trigger: trig.value, action: action.value } }

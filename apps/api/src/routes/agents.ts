@@ -216,7 +216,7 @@ agents.delete('/:id', requireOwner, async (c) => {
 
   // Delete the agent's own subcollections. Channels are not among them: the
   // guard above refuses to delete an agent that still has one attached.
-  for (const sub of ['tools', 'skills', 'workflowRules']) {
+  for (const sub of ['tools', 'skills', 'workflowRules', 'workflowGraph']) {
     const subSnap = await adminDb.collection(`workspaces/${ws}/agents/${id}/${sub}`).get()
     for (const d of subSnap.docs) await d.ref.delete()
   }

@@ -11,6 +11,7 @@ import { retrieveContext } from './retrieval'
 import { buildChatParams } from './prompt'
 import { loadTurnTools } from './turn-tools'
 import { evaluateWorkflow } from '../workflow/engine'
+import { evaluateWorkflowGraph, validateWorkflowGraph } from '../workflow/graph'
 import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 import { emitOverageEvent } from '../billing/overage'
@@ -294,14 +295,27 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   // Reply actions can continue into later rules or into the normal AI response;
   // all other actions terminate this turn with a deterministic outcome.
   try {
-    const rulesSnap = await adminDb.collection(`workspaces/${workspaceId}/agents/${agentRec.id}/workflowRules`).where('enabled', '==', true).get()
-    const rules: WorkflowRule[] = rulesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<WorkflowRule, 'id'>) }))
-    const hits = evaluateWorkflow(rules, {
+    const workflowContext = {
       messageLower: trimmed.toLowerCase(),
       botReplyCount: (convSnap.exists ? convSnap.data()!.botReplyCount : 0) ?? 0,
       sourceCount: sources.length,
       now: new Date(),
-    })
+    }
+    const graphSnap = await adminDb.doc(`workspaces/${workspaceId}/agents/${agentRec.id}/workflowGraph/main`).get()
+    let hits: Array<Pick<WorkflowRule, 'id' | 'name' | 'action'>>
+    let graphPath: string[] = []
+    if (graphSnap.exists) {
+      const parsed = validateWorkflowGraph(graphSnap.data())
+      if (!parsed.ok) throw new Error(`Invalid stored workflow graph: ${parsed.error}`)
+      const execution = evaluateWorkflowGraph(parsed.value, workflowContext)
+      if (execution.truncated) throw new Error('Workflow graph execution reached its safety limit.')
+      hits = execution.actions
+      graphPath = execution.path
+    } else {
+      const rulesSnap = await adminDb.collection(`workspaces/${workspaceId}/agents/${agentRec.id}/workflowRules`).where('enabled', '==', true).get()
+      const rules: WorkflowRule[] = rulesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<WorkflowRule, 'id'>) }))
+      hits = evaluateWorkflow(rules, workflowContext)
+    }
     if (hits.length) {
       const replies = hits
         .filter((rule) => rule.action.type === 'reply')
@@ -368,7 +382,8 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
           role: 'assistant', content: message, createdAt: FieldValue.serverTimestamp(),
           metadata: {
             workflowAction: terminal.action.type,
-            workflowRuleIds: hits.map((rule) => rule.id),
+            workflowStepIds: hits.map((rule) => rule.id),
+            ...(graphPath.length ? { workflowGraphPath: graphPath } : {}),
             knowledgeConfidence: responseConfidence,
           },
         })
@@ -385,7 +400,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
           await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2), ...confidenceAgentFields }).catch(() => {})
           await recordConfidenceDay(repliedAt).catch(() => {})
         }
-        trace.update({ output: { workflowAction: terminal.action.type, workflowRules: hits.map((rule) => rule.name) } })
+        trace.update({ output: { workflowAction: terminal.action.type, workflowSteps: hits.map((rule) => rule.name), ...(graphPath.length ? { workflowGraphPath: graphPath } : {}) } })
         return { kind: 'workflow', action: terminal.action.type, status, message, messageId: workflowMessageRef.id, sources }
       }
     }

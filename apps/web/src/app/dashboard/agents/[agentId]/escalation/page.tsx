@@ -6,6 +6,7 @@ import { apiRequest } from '@/lib/api'
 import type { WorkflowActionType, WorkflowRule, WorkflowTargets, WorkflowTrigger, TriggerType } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
+import WorkflowGraphEditor from './WorkflowGraphEditor'
 import styles from './page.module.css'
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
@@ -117,6 +118,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState('')
   const [targets, setTargets] = useState<WorkflowTargets>({ teammates: [], agents: [] })
+  const [view, setView] = useState<'graph' | 'rules'>('graph')
 
   const load = useCallback(async () => {
     try {
@@ -178,15 +180,25 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
-        <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: 0 }}>
-          Automate replies, resolution, assignment, and routing. Rules run top-to-bottom; a response can continue to later matches, while other actions stop the current turn.
-        </p>
-        {!editor && <button type="button" onClick={() => { setEditor(emptyEditor()); setError('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, flexShrink: 0, whiteSpace: 'nowrap' }}><Plus size={14} /> New rule</button>}
+        <div>
+          <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: 0 }}>
+            {view === 'graph'
+              ? 'Build a branching workflow with condition and action nodes. Each condition follows its Yes or No connection.'
+              : 'Ordered rules remain available as a fallback. An active graph takes precedence over this list.'}
+          </p>
+          <div className={styles.viewSwitch} aria-label="Workflow editor mode">
+            <button type="button" className={view === 'graph' ? styles.viewSwitchActive : ''} onClick={() => setView('graph')}>Graph</button>
+            <button type="button" className={view === 'rules' ? styles.viewSwitchActive : ''} onClick={() => setView('rules')}>Rules fallback</button>
+          </div>
+        </div>
+        {view === 'rules' && !editor && <button type="button" onClick={() => { setEditor(emptyEditor()); setError('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, flexShrink: 0, whiteSpace: 'nowrap' }}><Plus size={14} /> New rule</button>}
       </div>
 
-      {error && <p style={{ ...errorText, marginBottom: 12 }}>{error}</p>}
+      {view === 'graph' && <WorkflowGraphEditor agentId={agentId} targets={targets} />}
 
-      {!editor && (
+      {view === 'rules' && error && <p style={{ ...errorText, marginBottom: 12 }}>{error}</p>}
+
+      {view === 'rules' && !editor && (
         <div style={card}>
           <p style={label}>This agent&apos;s rules</p>
           {rules.length === 0 && <p style={{ fontSize: 13, color: 'var(--ink-mute)' }}>No rules yet. Add one to automate a conversation outcome.</p>}
@@ -208,7 +220,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
         </div>
       )}
 
-      {editor && (
+      {view === 'rules' && editor && (
         <div style={card}>
           <p style={label}>{editor.id ? 'Edit rule' : 'New rule'}</p>
           <div style={{ marginBottom: 12 }}><input placeholder="Rule name" value={editor.name} onChange={(e) => setEditor({ ...editor, name: e.target.value })} style={input} /></div>
