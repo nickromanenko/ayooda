@@ -10,6 +10,7 @@ import { card, label, muted } from '@/components/dashboard/ui'
 interface Usage {
   conversations: { total: number; thisPeriod: number | null; resolved: number; automated: number; handedOff: number; waiting: number }
   automationRate: number | null
+  handoffs: { total: number; causes: Array<{ reason: string; count: number; percentage: number }> }
   csat: { average: number | null; count: number; distribution: [number, number, number, number, number] }
   messages: { count: number | null; tokens: number | null; trackedSince: string | null }
   knowledge: { docs: number; indexed: number; chunks: number }
@@ -206,6 +207,33 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
             {c.waiting} waiting on a human right now —{' '}
             <Link href="/dashboard/inbox" style={{ color: 'var(--accent)' }}>open the inbox</Link>
           </p>
+        )}
+      </div>
+
+      {/* Why conversations needed a human */}
+      <div style={card}>
+        <p style={label}>Hand-off causes</p>
+        {u.handoffs.total === 0 ? (
+          <p style={{ ...muted, margin: 0 }}>No hand-offs recorded yet.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {u.handoffs.causes.map((cause) => (
+              <div key={cause.reason}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 5, fontSize: 12.5 }}>
+                  <span style={{ color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cause.reason}</span>
+                  <span style={{ color: 'var(--ink-mute)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                    {nf.format(cause.count)} · {cause.percentage}%
+                  </span>
+                </div>
+                <div style={{ height: 7, borderRadius: 20, overflow: 'hidden', background: 'var(--bg-2)' }}>
+                  <div style={{ width: `${cause.percentage}%`, minWidth: cause.count > 0 ? 4 : 0, height: '100%', borderRadius: 20, background: 'var(--accent)' }} />
+                </div>
+              </div>
+            ))}
+            <p style={{ fontSize: 11.5, color: 'var(--ink-faint)', margin: '2px 0 0' }}>
+              Based on {nf.format(u.handoffs.total)} conversation{u.handoffs.total === 1 ? '' : 's'} escalated or taken over by a human.
+            </p>
+          </div>
         )}
       </div>
 

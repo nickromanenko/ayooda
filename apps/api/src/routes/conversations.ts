@@ -63,6 +63,9 @@ conversations.post('/:id/takeover', async (c) => {
     status: 'human',
     operatorId: uid,
     hadTakeover: true,
+    ...(typeof convSnap.data()?.escalationReason === 'string' && convSnap.data()!.escalationReason.trim()
+      ? {}
+      : { escalationReason: 'Manual takeover' }),
     // `autoClosedAt` means "the sweep closed this and no human has touched it since" —
     // prepareTurn reopens such a conversation on the next visitor message. Clearing it
     // here stops the bot answering over an operator who has just taken over.

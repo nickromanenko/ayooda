@@ -30,6 +30,51 @@ export function csvCell(v: unknown): string {
   return /[",]/.test(cleaned) ? `"${cleaned.replace(/"/g, '""')}"` : cleaned
 }
 
+export interface HandoffCause {
+  reason: string
+  count: number
+  percentage: number
+}
+
+interface HandoffConversation {
+  id: string
+  status?: unknown
+  hadTakeover?: unknown
+  escalationReason?: unknown
+}
+
+/** Build a bounded, deduplicated cause breakdown from escalation and takeover query results. */
+export function aggregateHandoffCauses(rows: HandoffConversation[]): { total: number; causes: HandoffCause[] } {
+  const conversations = new Map<string, HandoffConversation>()
+  for (const row of rows) conversations.set(row.id, { ...conversations.get(row.id), ...row })
+
+  const counts = new Map<string, number>()
+  let total = 0
+  for (const row of conversations.values()) {
+    const rawReason = typeof row.escalationReason === 'string' ? row.escalationReason.trim() : ''
+    const isHandoff = rawReason.length > 0 || row.hadTakeover === true || row.status === 'waiting'
+    if (!isHandoff) continue
+    const reason = (rawReason || (row.hadTakeover === true ? 'Manual takeover' : 'Unspecified')).slice(0, 80)
+    counts.set(reason, (counts.get(reason) ?? 0) + 1)
+    total += 1
+  }
+
+  const ranked = [...counts.entries()].sort(([aReason, aCount], [bReason, bCount]) =>
+    bCount - aCount || aReason.localeCompare(bReason))
+  const visible = ranked.slice(0, 7)
+  const other = ranked.slice(7).reduce((sum, [, count]) => sum + count, 0)
+  if (other > 0) visible.push(['Other', other])
+
+  return {
+    total,
+    causes: visible.map(([reason, count]) => ({
+      reason,
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 100) : 0,
+    })),
+  }
+}
+
 agentUsage.get('/', async (c) => {
   const ws = c.get('workspaceId')
   const agentId = c.get('agentId')!
@@ -55,7 +100,7 @@ agentUsage.get('/', async (c) => {
   const conv = adminDb.collection(`workspaces/${ws}/conversations`)
   const mine = conv.where('agentId', '==', agentId)
 
-  const [totalAgg, resolvedAgg, takeoverAgg, waitingAgg, periodAgg, agentSnap, knowledgeSnap, channelsSnap] =
+  const [totalAgg, resolvedAgg, takeoverAgg, waitingAgg, periodAgg, agentSnap, knowledgeSnap, channelsSnap, escalatedSnap, allTakeoversSnap] =
     await Promise.all([
       mine.count().get(),
       mine.where('status', '==', 'resolved').count().get(),
@@ -73,6 +118,14 @@ agentUsage.get('/', async (c) => {
       adminDb.doc(`workspaces/${ws}/agents/${agentId}`).get(),
       adminDb.collection(`workspaces/${ws}/agents/${agentId}/knowledge`).get(),
       adminDb.collection(`workspaces/${ws}/channels`).where('agentId', '==', agentId).get(),
+      mine.where('escalationReason', '>=', '').select('escalationReason', 'hadTakeover', 'status').get().catch((err: unknown) => {
+        console.warn('[agent-usage] escalation causes unavailable (index building?):', err)
+        return null
+      }),
+      mine.where('hadTakeover', '==', true).select('escalationReason', 'hadTakeover', 'status').get().catch((err: unknown) => {
+        console.warn('[agent-usage] takeover causes unavailable:', err)
+        return null
+      }),
     ])
 
   const total = totalAgg.data().count
@@ -84,6 +137,10 @@ agentUsage.get('/', async (c) => {
   const agentUsageDoc = agentData.usage ?? {}
 
   const indexed = knowledgeSnap.docs.map((d) => d.data()).filter((d) => d.status === 'indexed')
+  const handoffs = aggregateHandoffCauses([
+    ...(escalatedSnap?.docs ?? []),
+    ...(allTakeoversSnap?.docs ?? []),
+  ].map((d) => ({ id: d.id, ...d.data() })))
 
   // CSAT: the scoring skill writes score (1–5) on resolved conversations.
   // The `where score >= 1` leg needs a composite index (agentId + score); degrade
@@ -136,6 +193,7 @@ agentUsage.get('/', async (c) => {
     // Same definition the Overview uses: of the conversations this agent
     // resolved, the share it resolved without a human stepping in.
     automationRate: resolved > 0 ? Math.round((automated / resolved) * 100) : null,
+    handoffs,
     csat,
     messages: {
       count: (agentUsageDoc.messageCount as number | undefined) ?? null,
