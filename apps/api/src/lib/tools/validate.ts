@@ -1,4 +1,4 @@
-import type { ToolMethod, ToolParamType, ToolAuthType, ToolKind, ToolParam } from '@ayooda/shared'
+import type { ToolMethod, ToolParamType, ToolAuthType, ToolKind, ToolParam, ToolBodyEncoding } from '@ayooda/shared'
 
 export interface ValidatedTool {
   name: string
@@ -7,6 +7,8 @@ export interface ValidatedTool {
   urlTemplate: string
   params: ToolParam[]
   headers: Array<{ key: string; value: string }>
+  bodyTemplate?: string
+  bodyEncoding?: ToolBodyEncoding
   auth: { type: ToolAuthType; headerName?: string }
   secret?: string
   kind: ToolKind
@@ -19,7 +21,10 @@ const PARAM_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
 const METHODS: ToolMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 const PARAM_TYPES: ToolParamType[] = ['string', 'number', 'boolean']
 const AUTH_TYPES: ToolAuthType[] = ['none', 'bearer', 'header']
+const BODY_ENCODINGS: ToolBodyEncoding[] = ['json', 'form']
 const FORBIDDEN_HEADERS = new Set(['host', 'content-length'])
+const BODY_METHODS: ToolMethod[] = ['POST', 'PUT', 'PATCH']
+const MAX_BODY_TEMPLATE_CHARS = 16_384
 
 type Fail = { ok: false; error: string }
 const fail = (error: string): Fail => ({ ok: false, error })
@@ -81,6 +86,32 @@ export function validateToolInput(
     headers.push({ key, value })
   }
 
+  const bodyTemplate = typeof o.bodyTemplate === 'string' && o.bodyTemplate.trim()
+    ? o.bodyTemplate.trim()
+    : undefined
+  let bodyEncoding: ToolBodyEncoding | undefined
+  if (bodyTemplate) {
+    if (!BODY_METHODS.includes(method)) return fail('A request body is only supported for POST, PUT, or PATCH tools.')
+    if (bodyTemplate.length > MAX_BODY_TEMPLATE_CHARS) return fail('Body template is too long.')
+    try { JSON.parse(bodyTemplate) } catch { return fail('Body template must be valid JSON.') }
+    bodyEncoding = o.bodyEncoding === undefined ? 'json' : o.bodyEncoding as ToolBodyEncoding
+    if (!BODY_ENCODINGS.includes(bodyEncoding)) return fail('Body encoding must be json or form.')
+
+    const bodyPlaceholders = [...bodyTemplate.matchAll(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g)].map((m) => m[1]!)
+    for (const ph of bodyPlaceholders) {
+      if (!seen.has(ph)) return fail(`Body placeholder {${ph}} has no matching parameter.`)
+    }
+
+    if (bodyEncoding === 'form') {
+      const parsed = JSON.parse(bodyTemplate) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.values(parsed).some((v) => v !== null && typeof v === 'object')) {
+        return fail('Form body template must be a flat JSON object.')
+      }
+    }
+  } else if (o.bodyEncoding !== undefined && !BODY_ENCODINGS.includes(o.bodyEncoding as ToolBodyEncoding)) {
+    return fail('Body encoding must be json or form.')
+  }
+
   const rawAuth = (o.auth ?? { type: 'none' }) as Record<string, unknown>
   const authType = rawAuth.type as ToolAuthType
   if (!AUTH_TYPES.includes(authType)) return fail('Auth type must be none, bearer, or header.')
@@ -97,5 +128,12 @@ export function validateToolInput(
   const writeEnabled = kind === 'write' && o.writeEnabled === true
   const enabled = o.enabled === undefined ? true : o.enabled === true
 
-  return { ok: true, value: { name, description, method, urlTemplate, params, headers, auth, secret, kind, writeEnabled, enabled } }
+  return {
+    ok: true,
+    value: {
+      name, description, method, urlTemplate, params, headers,
+      ...(bodyTemplate ? { bodyTemplate, bodyEncoding } : {}),
+      auth, secret, kind, writeEnabled, enabled,
+    },
+  }
 }

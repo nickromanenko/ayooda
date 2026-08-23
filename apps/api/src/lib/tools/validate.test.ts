@@ -49,4 +49,19 @@ describe('validateToolInput', () => {
   test('rejects a forbidden header key', () => {
     expect(validateToolInput({ ...base, headers: [{ key: 'Host', value: 'x' }] }).ok).toBe(false)
   })
+  test('accepts a JSON body template whose placeholders are declared params', () => {
+    const r = validateToolInput({
+      ...base,
+      method: 'PATCH',
+      params: [...base.params, { name: 'email', type: 'string', description: 'new email', required: true }],
+      bodyTemplate: '{"customer":{"email":"{email}"}}',
+      bodyEncoding: 'json',
+    })
+    expect(r.ok).toBe(true)
+  })
+  test('rejects invalid, undeclared, and nested form body templates', () => {
+    expect(validateToolInput({ ...base, method: 'POST', bodyTemplate: '{bad' }).ok).toBe(false)
+    expect(validateToolInput({ ...base, method: 'POST', bodyTemplate: '{"x":"{missing}"}' }).ok).toBe(false)
+    expect(validateToolInput({ ...base, method: 'POST', bodyTemplate: '{"x":{"y":"z"}}', bodyEncoding: 'form' }).ok).toBe(false)
+  })
 })

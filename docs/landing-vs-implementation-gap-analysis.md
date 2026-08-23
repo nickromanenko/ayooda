@@ -63,10 +63,11 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
   - Dashboard: `apps/web/src/app/dashboard/agents/[agentId]/mcp/page.tsx` + `AgentTabs.tsx`
 - **Status:** ✅ Implemented · **Priority:** P0 (resolved)
 
-### 🔴 GAP-02 — "First-party connectors" and write actions
+### 🟠 GAP-02 — "First-party connectors" and write actions
 - **Claim:** Shopify/Stripe/HubSpot/Notion/Zendesk/Linear/Intercom/Zapier shown as live connectors; demo runs `shopify.orders.refund`, `stripe.customer.update`, *"refunded · customer notified · ticket closed (4.1s)"*.
-- **Reality:** `TOOL_TEMPLATES` has **4 read-only lookups** — Shopify order, Stripe customer, HubSpot contact, Zendesk ticket — plus generic GET. **No Notion, Linear, Intercom, Zapier.** No refund/update/write templates (write tools are technically possible via `writeEnabled` but must be hand-built). *Mitigated in part by GAP-01: the new MCP support lets an agent connect to any external MCP server, which is how many SaaS integrations (incl. Shopify/Stripe/GitHub) are distributed today.*
-- **Status:** 🟠 Partial (custom tools + MCP exist; built-in connectors/write-actions don't) · **Priority:** P0
+- **Now (2026-08-23):** the tool gallery ships provider-aware API-token templates for all eight advertised brands. Shopify includes order/transaction lookup and refund-with-notification; Stripe and HubSpot include customer/contact updates; Zendesk includes public resolution + solve; Notion, Linear, and Intercom include lookups; Zapier includes a Catch Hook action. JSON and form-encoded request bodies are supported end-to-end, write tools remain disabled until explicitly enabled, and manual write tests require confirmation.
+- **Still missing:** OAuth installation, shared connector credentials, and one-click installation of a provider's related actions as a bundle. Setup is first-party in the dashboard, but still API-token based.
+- **Status:** 🟠 Partial (advertised actions ship; OAuth-style connector installs don't) · **Priority:** P0
 
 ### 🔴 GAP-03 — Visual "Workflows" builder
 - **Claim:** *"Design complex automations, visually… drag-and-drop flows to model triage, escalation, and routing logic"* with a branching node graph.
@@ -119,8 +120,8 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 
 ### 🟡 GAP-12 — "Resolve up to 60% end-to-end"
 - **Claim:** Hero *"Resolve up to 60% of your support tickets"* + demo of autonomous multi-step write resolutions (refund, notify, close ticket).
-- **Reality:** The agent answers and can call **read** tools; there is no shipped mechanism for autonomous multi-step **write** resolutions.
-- **Status:** 🟠 Partial · **Priority:** P2
+- **Now (2026-08-23):** enabled write tools can execute provider-specific actions, including the demo's Shopify refund/notification and Zendesk resolution flow. The numeric "60%" outcome remains unsubstantiated and should be treated as marketing evidence still to be supplied.
+- **Status:** 🟡 Risk (capability ships; performance claim remains unverified) · **Priority:** P2
 
 ---
 

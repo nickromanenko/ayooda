@@ -3,7 +3,7 @@
 import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Trash2, Plus, Play } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
-import { TOOL_TEMPLATES, applyTemplate, type ToolDef, type ToolMethod, type ToolParamType, type ToolAuthType, type ToolKind, type ToolTemplate } from '@ayooda/shared'
+import { TOOL_TEMPLATES, applyTemplate, type ToolDef, type ToolMethod, type ToolParamType, type ToolAuthType, type ToolKind, type ToolTemplate, type ToolBodyEncoding } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
 
@@ -15,6 +15,7 @@ interface FormState {
   id: string | null
   name: string; description: string; method: ToolMethod; urlTemplate: string
   params: ParamRow[]; headers: HeaderRow[]
+  bodyTemplate: string; bodyEncoding: ToolBodyEncoding
   authType: ToolAuthType; headerName: string; secret: string; hasSecret: boolean
   kind: ToolKind; writeEnabled: boolean; enabled: boolean
 }
@@ -22,6 +23,7 @@ interface FormState {
 const emptyForm: FormState = {
   id: null, name: '', description: '', method: 'GET', urlTemplate: '',
   params: [], headers: [], authType: 'none', headerName: '', secret: '', hasSecret: false,
+  bodyTemplate: '', bodyEncoding: 'json',
   kind: 'read', writeEnabled: false, enabled: true,
 }
 
@@ -57,6 +59,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
       id: null,
       name: a.name, description: a.description, method: a.method, urlTemplate: a.urlTemplate,
       params: a.params.map((x) => ({ ...x })), headers: a.headers.map((x) => ({ ...x })),
+      bodyTemplate: a.bodyTemplate ?? '', bodyEncoding: a.bodyEncoding ?? 'json',
       authType: a.auth.type, headerName: a.auth.headerName ?? '', secret: '', hasSecret: false,
       kind: a.kind, writeEnabled: false, enabled: true,
     })
@@ -66,6 +69,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
     setForm({
       id: t.id, name: t.name, description: t.description, method: t.method, urlTemplate: t.urlTemplate,
       params: t.params.map((p) => ({ ...p })), headers: t.headers.map((h) => ({ ...h })),
+      bodyTemplate: t.bodyTemplate ?? '', bodyEncoding: t.bodyEncoding ?? 'json',
       authType: t.auth.type, headerName: t.auth.headerName ?? '', secret: '', hasSecret: t.hasSecret,
       kind: t.kind, writeEnabled: t.writeEnabled, enabled: t.enabled,
     })
@@ -76,6 +80,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
     return {
       name: f.name.trim(), description: f.description.trim(), method: f.method, urlTemplate: f.urlTemplate.trim(),
       params: f.params, headers: f.headers.filter((h) => h.key.trim()),
+      ...(f.bodyTemplate.trim() ? { bodyTemplate: f.bodyTemplate.trim(), bodyEncoding: f.bodyEncoding } : {}),
       auth: { type: f.authType, ...(f.authType === 'header' ? { headerName: f.headerName.trim() } : {}), ...(f.secret ? { secret: f.secret } : {}) },
       kind: f.kind, writeEnabled: f.kind === 'write' ? f.writeEnabled : false, enabled: f.enabled,
     }
@@ -96,6 +101,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
 
   async function runTest() {
     if (!form?.id) { setTestResult('Save the tool before testing.'); return }
+    if (form.kind === 'write' && !window.confirm('This sends a real write request to the provider. Continue?')) return
     setTesting(true); setTestResult('')
     let args: unknown = {}
     try { args = JSON.parse(testArgs || '{}') } catch { setTestResult('Sample args must be valid JSON.'); setTesting(false); return }
@@ -242,6 +248,28 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
             </div>
           ))}
           <button type="button" onClick={() => setForm({ ...form, headers: [...form.headers, { key: '', value: '' }] })} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13 }}>+ Header</button>
+
+          {(form.method === 'POST' || form.method === 'PUT' || form.method === 'PATCH') && (
+            <>
+              <p style={{ ...label, marginTop: 16 }}>Request body</p>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 8px' }}>
+                Optional JSON template. Use parameter placeholders such as <code style={{ fontFamily: 'var(--font-mono)' }}>{'{email}'}</code>. Leave blank to send unused parameters automatically.
+              </p>
+              <div style={{ ...row, alignItems: 'flex-start' }}>
+                <select value={form.bodyEncoding} onChange={(e) => setForm({ ...form, bodyEncoding: e.target.value as ToolBodyEncoding })} style={{ ...input, width: 160 }}>
+                  <option value="json">JSON</option>
+                  <option value="form">Form encoded</option>
+                </select>
+                <textarea
+                  aria-label="Request body template"
+                  placeholder={'{\n  "customer": { "email": "{email}" }\n}'}
+                  value={form.bodyTemplate}
+                  onChange={(e) => setForm({ ...form, bodyTemplate: e.target.value })}
+                  style={{ ...input, minHeight: 120, resize: 'vertical', fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                />
+              </div>
+            </>
+          )}
 
           <p style={{ ...label, marginTop: 16 }}>Authentication</p>
           <div style={row}>

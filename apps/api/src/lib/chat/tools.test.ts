@@ -43,6 +43,30 @@ describe('buildToolRequest', () => {
     expect(r.headers['Content-Type']).toBe('application/json')
     expect(JSON.parse(r.body!)).toEqual({ amount: 10 })
   })
+  test('renders nested JSON body templates with typed parameter values', () => {
+    const writeTool: StoredTool = {
+      ...readTool,
+      method: 'POST',
+      urlTemplate: 'https://api.shop.com/orders/{orderId}/refund',
+      bodyTemplate: '{"refund":{"amount":"{amount}","notify":true}}',
+      bodyEncoding: 'json',
+    }
+    const r = buildToolRequest(writeTool, { orderId: 'A1', amount: 10 })
+    expect(r.headers['Content-Type']).toBe('application/json')
+    expect(JSON.parse(r.body!)).toEqual({ refund: { amount: 10, notify: true } })
+  })
+  test('renders Stripe-style form encoded body templates', () => {
+    const writeTool: StoredTool = {
+      ...readTool,
+      method: 'POST',
+      urlTemplate: 'https://api.stripe.com/v1/customers/{orderId}',
+      bodyTemplate: '{"email":"{email}"}',
+      bodyEncoding: 'form',
+    }
+    const r = buildToolRequest(writeTool, { orderId: 'cus_1', email: 'new+tag@example.com' })
+    expect(r.headers['Content-Type']).toBe('application/x-www-form-urlencoded')
+    expect(r.body).toBe('email=new%2Btag%40example.com')
+  })
   test('throws when a required placeholder is missing', () => {
     expect(() => buildToolRequest(readTool, {})).toThrow('missing required param: orderId')
   })

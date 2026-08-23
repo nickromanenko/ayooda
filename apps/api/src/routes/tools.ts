@@ -21,6 +21,7 @@ function toToolDef(id: string, d: DocumentData): ToolDef {
     urlTemplate: d.urlTemplate,
     params: d.params ?? [],
     headers: d.headers ?? [],
+    ...(d.bodyTemplate ? { bodyTemplate: d.bodyTemplate, bodyEncoding: d.bodyEncoding ?? 'json' } : {}),
     auth: { type: d.auth?.type ?? 'none', ...(d.auth?.headerName ? { headerName: d.auth.headerName } : {}) },
     hasSecret: !!d.auth?.secretEnc,
     kind: d.kind,
@@ -41,6 +42,7 @@ function toStoredTool(id: string, d: DocumentData): StoredTool {
   return {
     id, name: d.name, description: d.description, method: d.method, urlTemplate: d.urlTemplate,
     params: d.params ?? [], headers: d.headers ?? [], auth: d.auth ?? { type: 'none' },
+    ...(d.bodyTemplate ? { bodyTemplate: d.bodyTemplate, bodyEncoding: d.bodyEncoding ?? 'json' } : {}),
     kind: d.kind, writeEnabled: !!d.writeEnabled, enabled: d.enabled !== false,
   }
 }
@@ -66,7 +68,9 @@ tools.post('/', async (c) => {
 
   const doc = {
     name: v.name, description: v.description, method: v.method, urlTemplate: v.urlTemplate,
-    params: v.params, headers: v.headers, auth: buildAuth(v),
+    params: v.params, headers: v.headers,
+    ...(v.bodyTemplate ? { bodyTemplate: v.bodyTemplate, bodyEncoding: v.bodyEncoding ?? 'json' } : {}),
+    auth: buildAuth(v),
     kind: v.kind, writeEnabled: v.writeEnabled, enabled: v.enabled,
     createdAt: new Date(), updatedAt: new Date(),
   }
@@ -99,7 +103,10 @@ tools.put('/:id', async (c) => {
 
   const doc = {
     name: v.name, description: v.description, method: v.method, urlTemplate: v.urlTemplate,
-    params: v.params, headers: v.headers, auth,
+    params: v.params, headers: v.headers,
+    bodyTemplate: v.bodyTemplate ?? null,
+    bodyEncoding: v.bodyTemplate ? (v.bodyEncoding ?? 'json') : null,
+    auth,
     kind: v.kind, writeEnabled: v.writeEnabled, enabled: v.enabled, updatedAt: new Date(),
   }
   await ref.update(doc)

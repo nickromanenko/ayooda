@@ -292,6 +292,7 @@ export type ToolMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 export type ToolParamType = 'string' | 'number' | 'boolean'
 export type ToolAuthType = 'none' | 'bearer' | 'header'
 export type ToolKind = 'read' | 'write'
+export type ToolBodyEncoding = 'json' | 'form'
 
 export interface ToolParam {
   name: string
@@ -315,6 +316,8 @@ export interface ToolDef {
   urlTemplate: string
   params: ToolParam[]
   headers: Array<{ key: string; value: string }>
+  bodyTemplate?: string
+  bodyEncoding?: ToolBodyEncoding
   auth: ToolAuth
   hasSecret: boolean
   kind: ToolKind
@@ -407,6 +410,9 @@ export interface ToolTemplate {
   urlTemplate: string  // may contain {{setup}} and {param}
   params: ToolParam[]
   headers: Array<{ key: string; value: string }>  // values may contain {{setup}}
+  /** JSON object/array whose string values may contain {param} placeholders. */
+  bodyTemplate?: string
+  bodyEncoding?: ToolBodyEncoding
   auth: { type: ToolAuthType; headerName?: string } // no secret — owner-entered
   kind: ToolKind
   secretLabel: string
@@ -420,13 +426,71 @@ export const TOOL_TEMPLATES: ToolTemplate[] = [
     description: 'Look up an order by its order number in your Shopify store.',
     setupFields: [
       { key: 'shop', label: 'Store subdomain', placeholder: 'my-store', help: 'The part before .myshopify.com' },
-      { key: 'apiVersion', label: 'API version', placeholder: '2024-01' },
+      { key: 'apiVersion', label: 'API version', placeholder: '2026-07' },
     ],
     toolName: 'shopify_order_lookup',
     toolDescription: 'Look up a Shopify order by its order number (e.g. #1001) to check status, fulfillment, and totals.',
     method: 'GET',
     urlTemplate: 'https://{{shop}}.myshopify.com/admin/api/{{apiVersion}}/orders.json?status=any&name={orderNumber}',
     params: [{ name: 'orderNumber', type: 'string', description: 'The order number, e.g. #1001', required: true }],
+    headers: [],
+    auth: { type: 'header', headerName: 'X-Shopify-Access-Token' },
+    kind: 'read',
+    secretLabel: 'Shopify Admin API access token',
+  },
+  {
+    id: 'shopify_refund',
+    label: 'Shopify — refund an order',
+    category: 'E-commerce',
+    description: 'Refund a captured Shopify transaction and notify the customer.',
+    setupFields: [
+      { key: 'shop', label: 'Store subdomain', placeholder: 'my-store', help: 'The part before .myshopify.com' },
+      { key: 'apiVersion', label: 'API version', placeholder: '2026-07' },
+    ],
+    toolName: 'shopify_refund_order',
+    toolDescription: 'Refund a captured Shopify order transaction. Look up the order and its transactions first, then provide the order id, parent transaction id, gateway, currency, and amount. This action notifies the customer.',
+    method: 'POST',
+    urlTemplate: 'https://{{shop}}.myshopify.com/admin/api/{{apiVersion}}/orders/{orderId}/refunds.json',
+    params: [
+      { name: 'orderId', type: 'string', description: 'Shopify order id', required: true },
+      { name: 'transactionId', type: 'string', description: 'Captured parent transaction id', required: true },
+      { name: 'gateway', type: 'string', description: 'Payment gateway from the captured transaction', required: true },
+      { name: 'currency', type: 'string', description: 'Three-letter currency code, e.g. USD', required: true },
+      { name: 'amount', type: 'string', description: 'Decimal amount to refund, e.g. 24.99', required: true },
+    ],
+    headers: [],
+    bodyTemplate: JSON.stringify({
+      refund: {
+        currency: '{currency}',
+        notify: true,
+        note: 'Refund issued by Ayooda',
+        transactions: [{
+          parent_id: '{transactionId}',
+          amount: '{amount}',
+          kind: 'refund',
+          gateway: '{gateway}',
+        }],
+      },
+    }, null, 2),
+    bodyEncoding: 'json',
+    auth: { type: 'header', headerName: 'X-Shopify-Access-Token' },
+    kind: 'write',
+    secretLabel: 'Shopify Admin API access token',
+  },
+  {
+    id: 'shopify_transactions_lookup',
+    label: 'Shopify — payment transactions',
+    category: 'E-commerce',
+    description: 'Get the captured transaction id and gateway needed to refund an order.',
+    setupFields: [
+      { key: 'shop', label: 'Store subdomain', placeholder: 'my-store', help: 'The part before .myshopify.com' },
+      { key: 'apiVersion', label: 'API version', placeholder: '2026-07' },
+    ],
+    toolName: 'shopify_order_transactions',
+    toolDescription: 'List payment transactions for a Shopify order. Use this before refunding to find the captured parent transaction id and gateway.',
+    method: 'GET',
+    urlTemplate: 'https://{{shop}}.myshopify.com/admin/api/{{apiVersion}}/orders/{orderId}/transactions.json',
+    params: [{ name: 'orderId', type: 'string', description: 'Shopify order id', required: true }],
     headers: [],
     auth: { type: 'header', headerName: 'X-Shopify-Access-Token' },
     kind: 'read',
@@ -449,6 +513,27 @@ export const TOOL_TEMPLATES: ToolTemplate[] = [
     secretLabel: 'Stripe secret key (sk_…)',
   },
   {
+    id: 'stripe_customer_update',
+    label: 'Stripe — update customer email',
+    category: 'CRM',
+    description: 'Update the email address on a Stripe customer.',
+    setupFields: [],
+    toolName: 'stripe_customer_update_email',
+    toolDescription: 'Update a Stripe customer email address after confirming the new address with the customer.',
+    method: 'POST',
+    urlTemplate: 'https://api.stripe.com/v1/customers/{customerId}',
+    params: [
+      { name: 'customerId', type: 'string', description: 'Stripe customer id, e.g. cus_123', required: true },
+      { name: 'email', type: 'string', description: 'New customer email address', required: true },
+    ],
+    headers: [],
+    bodyTemplate: JSON.stringify({ email: '{email}' }, null, 2),
+    bodyEncoding: 'form',
+    auth: { type: 'bearer' },
+    kind: 'write',
+    secretLabel: 'Stripe secret key (sk_…)',
+  },
+  {
     id: 'hubspot_contact_lookup',
     label: 'HubSpot — contact by id',
     category: 'CRM',
@@ -462,6 +547,27 @@ export const TOOL_TEMPLATES: ToolTemplate[] = [
     headers: [],
     auth: { type: 'bearer' },
     kind: 'read',
+    secretLabel: 'HubSpot private-app token',
+  },
+  {
+    id: 'hubspot_contact_update',
+    label: 'HubSpot — update contact email',
+    category: 'CRM',
+    description: 'Update the email property on a HubSpot contact.',
+    setupFields: [],
+    toolName: 'hubspot_contact_update_email',
+    toolDescription: 'Update a HubSpot contact email address after confirming it with the customer.',
+    method: 'PATCH',
+    urlTemplate: 'https://api.hubapi.com/crm/v3/objects/contacts/{contactId}',
+    params: [
+      { name: 'contactId', type: 'string', description: 'HubSpot contact record id', required: true },
+      { name: 'email', type: 'string', description: 'New contact email address', required: true },
+    ],
+    headers: [],
+    bodyTemplate: JSON.stringify({ properties: { email: '{email}' } }, null, 2),
+    bodyEncoding: 'json',
+    auth: { type: 'bearer' },
+    kind: 'write',
     secretLabel: 'HubSpot private-app token',
   },
   {
@@ -479,6 +585,106 @@ export const TOOL_TEMPLATES: ToolTemplate[] = [
     auth: { type: 'header', headerName: 'Authorization' },
     kind: 'read',
     secretLabel: 'Basic auth value — "Basic " + base64("you@co.com/token:APITOKEN")',
+  },
+  {
+    id: 'zendesk_ticket_resolve',
+    label: 'Zendesk — resolve ticket',
+    category: 'Support',
+    description: 'Add a public resolution note and mark a Zendesk ticket solved.',
+    setupFields: [{ key: 'subdomain', label: 'Zendesk subdomain', placeholder: 'mycompany', help: 'The part before .zendesk.com' }],
+    toolName: 'zendesk_resolve_ticket',
+    toolDescription: 'Post a public resolution comment and mark a Zendesk ticket solved after the customer request has been completed.',
+    method: 'PUT',
+    urlTemplate: 'https://{{subdomain}}.zendesk.com/api/v2/tickets/{ticketId}.json',
+    params: [
+      { name: 'ticketId', type: 'string', description: 'Zendesk ticket id', required: true },
+      { name: 'comment', type: 'string', description: 'Public note explaining the resolution', required: true },
+    ],
+    headers: [],
+    bodyTemplate: JSON.stringify({ ticket: { status: 'solved', comment: { body: '{comment}', public: true } } }, null, 2),
+    bodyEncoding: 'json',
+    auth: { type: 'header', headerName: 'Authorization' },
+    kind: 'write',
+    secretLabel: 'Basic auth value — "Basic " + base64("you@co.com/token:APITOKEN")',
+  },
+  {
+    id: 'notion_search',
+    label: 'Notion — search workspace',
+    category: 'Knowledge',
+    description: 'Search pages and databases shared with a Notion integration.',
+    setupFields: [],
+    toolName: 'notion_search',
+    toolDescription: 'Search the connected Notion workspace for pages and databases relevant to the customer request.',
+    method: 'POST',
+    urlTemplate: 'https://api.notion.com/v1/search',
+    params: [{ name: 'query', type: 'string', description: 'Text to search for in page and database titles', required: true }],
+    headers: [{ key: 'Notion-Version', value: '2026-03-11' }],
+    bodyTemplate: JSON.stringify({ query: '{query}', page_size: 20 }, null, 2),
+    bodyEncoding: 'json',
+    auth: { type: 'bearer' },
+    kind: 'read',
+    secretLabel: 'Notion integration secret',
+  },
+  {
+    id: 'linear_issue_lookup',
+    label: 'Linear — issue lookup',
+    category: 'Support',
+    description: 'Fetch a Linear issue by its identifier, such as ENG-123.',
+    setupFields: [],
+    toolName: 'linear_issue_lookup',
+    toolDescription: 'Look up a Linear issue by identifier to read its title, description, status, priority, and URL.',
+    method: 'POST',
+    urlTemplate: 'https://api.linear.app/graphql',
+    params: [{ name: 'issueId', type: 'string', description: 'Linear issue identifier, e.g. ENG-123', required: true }],
+    headers: [],
+    bodyTemplate: JSON.stringify({
+      query: 'query Issue($id: String!) { issue(id: $id) { id identifier title description priority url state { name type } } }',
+      variables: { id: '{issueId}' },
+    }, null, 2),
+    bodyEncoding: 'json',
+    auth: { type: 'header', headerName: 'Authorization' },
+    kind: 'read',
+    secretLabel: 'Linear personal API key',
+  },
+  {
+    id: 'intercom_contact_lookup',
+    label: 'Intercom — contact by email',
+    category: 'CRM',
+    description: 'Find an Intercom contact by email address.',
+    setupFields: [],
+    toolName: 'intercom_contact_lookup',
+    toolDescription: 'Find an Intercom contact by email to read their profile and account context.',
+    method: 'POST',
+    urlTemplate: 'https://api.intercom.io/contacts/search',
+    params: [{ name: 'email', type: 'string', description: 'Customer email address', required: true }],
+    headers: [{ key: 'Intercom-Version', value: '2.14' }],
+    bodyTemplate: JSON.stringify({ query: { field: 'email', operator: '=', value: '{email}' } }, null, 2),
+    bodyEncoding: 'json',
+    auth: { type: 'bearer' },
+    kind: 'read',
+    secretLabel: 'Intercom access token',
+  },
+  {
+    id: 'zapier_webhook_action',
+    label: 'Zapier — trigger webhook',
+    category: 'Automation',
+    description: 'Trigger a Zapier Catch Hook with a customer-support event.',
+    setupFields: [{ key: 'webhookUrl', label: 'Zapier webhook URL', placeholder: 'https://hooks.zapier.com/hooks/catch/...', help: 'Copy this from a Zapier Catch Hook trigger' }],
+    toolName: 'zapier_trigger_workflow',
+    toolDescription: 'Trigger the connected Zapier workflow with an event name, customer email, and message after the requested action has been confirmed.',
+    method: 'POST',
+    urlTemplate: '{{webhookUrl}}',
+    params: [
+      { name: 'event', type: 'string', description: 'Stable event name for the Zap, e.g. support_refund_completed', required: true },
+      { name: 'customerEmail', type: 'string', description: 'Customer email address', required: true },
+      { name: 'message', type: 'string', description: 'Human-readable event details', required: true },
+    ],
+    headers: [],
+    bodyTemplate: JSON.stringify({ event: '{event}', customerEmail: '{customerEmail}', message: '{message}' }, null, 2),
+    bodyEncoding: 'json',
+    auth: { type: 'none' },
+    kind: 'write',
+    secretLabel: 'No additional secret — the hook URL contains its credential',
   },
   {
     id: 'generic_rest_get',
@@ -509,6 +715,8 @@ export function applyTemplate(
   urlTemplate: string
   params: ToolParam[]
   headers: Array<{ key: string; value: string }>
+  bodyTemplate?: string
+  bodyEncoding?: ToolBodyEncoding
   auth: { type: ToolAuthType; headerName?: string }
   kind: ToolKind
 } {
@@ -520,6 +728,8 @@ export function applyTemplate(
     urlTemplate: sub(template.urlTemplate),
     params: template.params.map((p) => ({ ...p })),
     headers: template.headers.map((h) => ({ key: h.key, value: sub(h.value) })),
+    ...(template.bodyTemplate ? { bodyTemplate: sub(template.bodyTemplate) } : {}),
+    ...(template.bodyEncoding ? { bodyEncoding: template.bodyEncoding } : {}),
     auth: { ...template.auth },
     kind: template.kind,
   }

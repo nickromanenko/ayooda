@@ -1,5 +1,5 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
-import type { ToolMethod, ToolParam } from '@ayooda/shared'
+import type { ToolMethod, ToolParam, ToolBodyEncoding } from '@ayooda/shared'
 import { streamText as aiStreamText, createGateway, stepCountIs, tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import type { ChatParams, ChatChunk, ChatResult, ChatMessage } from '../llm/chat'
@@ -16,6 +16,8 @@ export interface StoredTool {
   urlTemplate: string
   params: ToolParam[]
   headers: Array<{ key: string; value: string }>
+  bodyTemplate?: string
+  bodyEncoding?: ToolBodyEncoding
   auth: { type: 'none' | 'bearer' | 'header'; headerName?: string; secretEnc?: string }
   kind: 'read' | 'write'
   writeEnabled: boolean
@@ -56,6 +58,43 @@ export interface BuiltRequest {
   body?: string
 }
 
+function renderBodyTemplate(template: string, args: Record<string, unknown>, used: Set<string>): unknown {
+  const parsed = JSON.parse(template) as unknown
+  const visit = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(visit)
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, visit(child)]))
+    }
+    if (typeof value !== 'string') return value
+
+    const exact = /^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/.exec(value)
+    if (exact) {
+      const name = exact[1]!
+      const replacement = args[name]
+      if (replacement === undefined || replacement === null) throw new Error(`missing required param: ${name}`)
+      used.add(name)
+      return replacement
+    }
+
+    return value.replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (_match, name: string) => {
+      const replacement = args[name]
+      if (replacement === undefined || replacement === null) throw new Error(`missing required param: ${name}`)
+      used.add(name)
+      return String(replacement)
+    })
+  }
+  return visit(parsed)
+}
+
+function formBody(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('form body must be an object')
+  const body = new URLSearchParams()
+  for (const [key, item] of Object.entries(value)) {
+    if (item !== undefined && item !== null) body.append(key, String(item))
+  }
+  return body.toString()
+}
+
 /** Build the HTTP request for a tool call. Throws on an unfilled placeholder. Auth is applied later by executeTool. */
 export function buildToolRequest(tool: StoredTool, args: Record<string, unknown>): BuiltRequest {
   const used = new Set<string>()
@@ -75,8 +114,15 @@ export function buildToolRequest(tool: StoredTool, args: Record<string, unknown>
   }
 
   if (tool.method === 'POST' || tool.method === 'PUT' || tool.method === 'PATCH') {
+    const bodyValue = tool.bodyTemplate
+      ? renderBodyTemplate(tool.bodyTemplate, args, used)
+      : leftover
+    if (tool.bodyEncoding === 'form') {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded'
+      return { url, method: tool.method, headers, body: formBody(bodyValue) }
+    }
     headers['Content-Type'] = 'application/json'
-    return { url, method: tool.method, headers, body: JSON.stringify(leftover) }
+    return { url, method: tool.method, headers, body: JSON.stringify(bodyValue) }
   }
 
   const qs = new URLSearchParams()
