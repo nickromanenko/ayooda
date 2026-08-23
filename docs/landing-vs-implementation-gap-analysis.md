@@ -34,7 +34,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | Workspace, multi-agent, per-agent access, roles | ✅ | `apps/api/src/routes/agents.ts`, `routes/team.ts` |
 | Knowledge: website scrape, file upload (PDF/DOCX/TXT/CSV/MD), re-index, delete | ✅ | `apps/api/src/routes/knowledge.ts`, `apps/scraper/` |
 | RAG chat: streaming SSE, source attribution, session history, system prompt | ✅ | `apps/api/src/lib/chat/*`, `apps/widget/src/sse.ts` |
-| LLM choice: 6 models (Gemini Flash/Pro, Claude Haiku/Sonnet, GPT-5 mini/GPT-5) via one AI-gateway key | ✅ | `packages/shared/src/index.ts` (`LLM_MODELS`), `lib/llm/resolve.ts` |
+| LLM choice: 6 models (Gemini Flash/Pro, Claude Haiku/Sonnet, GPT-5 mini/GPT-5) with platform or per-agent AI Gateway keys | ✅ | `packages/shared/src/index.ts` (`LLM_MODELS`), `lib/llm/{resolve,gateway-key}.ts` |
 | Web widget: script tag, Shadow DOM, color/position/welcome, branding hide (Core+) | ✅ | `apps/widget/src/index.ts`, `routes/agent-channels.ts` |
 | Telegram channel (bot token → webhook) | ✅ | `routes/agent-channels.ts`, `lib/telegram/*` |
 | Email channel (Resend: inbound webhook → conversation → agent auto-reply; operator replies via email) | ✅ | `routes/email.ts`, `lib/email/*`, `routes/agent-channels.ts`, `routes/conversations.ts` |
@@ -104,8 +104,10 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 
 ### 🟠 GAP-08 — Bring-your-own LLM / custom endpoint
 - **Claim:** *"Claude, GPT, Llama, or your own model"* · *"Custom endpoint: your.company.internal"* · *"Llama 3.3 70B · Meta self-hosted"*.
-- **Reality:** 6 fixed models via one platform gateway key (`lib/llm/resolve.ts`). No Llama, no self-hosted/custom endpoint, no per-workspace BYO key — `resolveGatewayKey` can decrypt an agent key but no route sets it, and `openRouterKey` is unused.
-- **Status:** 🔴 Missing (the "pick a model" part is real; BYO/custom is not) · **Priority:** P2
+- **Was:** 6 fixed models used one platform Gateway key. The runtime could decrypt an agent key, but no API or dashboard flow could ever set one.
+- **Now (2026-08-23):** workspace owners can add, replace, or remove a per-agent Vercel AI Gateway key from the agent's Security tab. Keys are verified against the authenticated, non-generative credit endpoint before being encrypted with AES-256-GCM; API responses expose only masked status. Customer chat, Copilot, scoring, and memory automatically prefer the agent key and return to the platform fallback when it is removed.
+- **Still missing:** arbitrary model IDs, Llama in the product model picker, direct provider credentials, and self-hosted/OpenAI-compatible custom endpoints.
+- **Status:** 🟠 Partial (per-agent AI Gateway BYOK ships; custom/self-hosted endpoints don't) · **Priority:** P2
 
 ### 🟠 GAP-09 — Security/trust badges
 - **Claim:** *"Enterprise-grade encryption, scoped API keys, SSO"* · *"GDPR-compliant"* · *"Europe-hosted (EU servers)"*.
@@ -137,7 +139,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | 3 | **Analytics: CSV export + aggregate CSAT** (closes GAP-05) | ✅ Done | P1 |
 | 4 | **Email channel** (closes GAP-04 highest-value piece) | ✅ Done | P1 |
 | 5 | **Visual workflow builder** or honest copy (GAP-03) | 🟠 | P1 |
-| 6 | **BYO LLM / custom endpoint** (GAP-08) | 🔴 | P2 |
+| 6 | **BYO LLM / custom endpoint** (GAP-08) | 🟠 BYO Gateway done | P2 |
 | 7 | **Auto-sync knowledge** (GAP-06) | ✅ Done | P2 |
 | 8 | **Sandbox/test mode** (GAP-07) | ✅ Done | P2 |
 | 9 | **SSO / EU hosting** (GAP-09) | 🔴 | P2 |

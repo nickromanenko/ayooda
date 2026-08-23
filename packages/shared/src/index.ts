@@ -359,6 +359,13 @@ export interface AgentDoc {
   isDefault: boolean
 }
 
+/** Masked AI Gateway credential state. The key itself is write-only and never returned. */
+export interface GatewayKeyStatus {
+  hasAgentKey: boolean
+  platformAvailable: boolean
+  source: 'agent' | 'platform' | 'none'
+}
+
 /** Compact shape for pickers/lists. */
 export interface AgentSummary {
   id: string

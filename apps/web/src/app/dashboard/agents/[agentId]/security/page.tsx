@@ -2,11 +2,12 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Lock } from 'lucide-react'
-import type { AgentAccessEntry } from '@ayooda/shared'
+import { ExternalLink, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldCheck, Trash2 } from 'lucide-react'
+import type { AgentAccessEntry, GatewayKeyStatus } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, muted, errorText } from '@/components/dashboard/ui'
+import styles from './page.module.css'
 
 export default function AgentSecurityPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = use(params)
@@ -14,13 +15,31 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [forbidden, setForbidden] = useState(false)
+  const [gateway, setGateway] = useState<GatewayKeyStatus | null>(null)
+  const [apiKey, setApiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [keyBusy, setKeyBusy] = useState<'save' | 'remove' | ''>('')
+  const [keyError, setKeyError] = useState('')
+  const [keySuccess, setKeySuccess] = useState('')
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   const load = useCallback(async () => {
-    const res = await apiRequest(`/agents/${agentId}/access`)
-    if (res.status === 403) { setForbidden(true); return }
-    if (!res.ok) { setError('Could not load access for this agent.'); return }
-    const d = await res.json() as { people: AgentAccessEntry[] }
-    setPeople(d.people)
+    try {
+      const [accessRes, keyRes] = await Promise.all([
+        apiRequest(`/agents/${agentId}/access`),
+        apiRequest(`/agents/${agentId}/gateway-key`),
+      ])
+      if (accessRes.status === 403 || keyRes.status === 403) { setForbidden(true); return }
+      if (!accessRes.ok || !keyRes.ok) { setError('Could not load security settings for this agent.'); return }
+      const [access, keyStatus] = await Promise.all([
+        accessRes.json() as Promise<{ people: AgentAccessEntry[] }>,
+        keyRes.json() as Promise<GatewayKeyStatus>,
+      ])
+      setPeople(access.people)
+      setGateway(keyStatus)
+    } catch {
+      setError('Could not load security settings for this agent.')
+    }
   }, [agentId])
 
   useEffect(() => { void load() }, [load])
@@ -40,6 +59,42 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
     } finally { setBusy('') }
   }
 
+  async function saveGatewayKey() {
+    const trimmed = apiKey.trim()
+    if (!trimmed) return
+    setKeyBusy('save'); setKeyError(''); setKeySuccess(''); setConfirmRemove(false)
+    try {
+      const res = await apiRequest(`/agents/${agentId}/gateway-key`, {
+        method: 'PUT',
+        body: JSON.stringify({ apiKey: trimmed }),
+      })
+      const data = await res.json().catch(() => ({})) as GatewayKeyStatus & { error?: string }
+      if (!res.ok) { setKeyError(data.error ?? 'Could not verify this key.'); return }
+      setGateway(data)
+      setApiKey('')
+      setShowKey(false)
+      setKeySuccess('Key verified and saved. New agent activity will use it immediately.')
+    } catch {
+      setKeyError('Could not reach the server. Please try again.')
+    } finally { setKeyBusy('') }
+  }
+
+  async function removeGatewayKey() {
+    setKeyBusy('remove'); setKeyError(''); setKeySuccess('')
+    try {
+      const res = await apiRequest(`/agents/${agentId}/gateway-key`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({})) as GatewayKeyStatus & { error?: string }
+      if (!res.ok) { setKeyError(data.error ?? 'Could not remove this key.'); return }
+      setGateway(data)
+      setConfirmRemove(false)
+      setKeySuccess(data.source === 'platform'
+        ? 'Agent key removed. This agent now uses the platform key.'
+        : 'Agent key removed. Add another key before running the agent.')
+    } catch {
+      setKeyError('Could not reach the server. Please try again.')
+    } finally { setKeyBusy('') }
+  }
+
   if (forbidden) {
     return (
       <p style={{ ...muted, margin: 0 }}>
@@ -56,10 +111,105 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
   return (
     <>
       <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 20 }}>
-        Who can configure this agent — its prompt, knowledge, tools, escalation rules and deployment.
+        Control who can configure this agent and which encrypted AI Gateway credential pays for its model usage.
       </p>
 
       {error && <p style={{ ...errorText, marginBottom: 12 }}>{error}</p>}
+
+      {gateway && (
+        <section className={styles.gatewayCard} aria-labelledby="gateway-key-title">
+          <div className={styles.gatewayHeader}>
+            <div className={styles.gatewayTitleRow}>
+              <span className={styles.gatewayIcon}><KeyRound size={15} /></span>
+              <div>
+                <h2 id="gateway-key-title" className={styles.gatewayTitle}>AI Gateway key</h2>
+                <p className={styles.gatewayDescription}>
+                  Used by this agent for customer chat, Copilot, and background skills. The key is encrypted at rest and never shown again.
+                </p>
+              </div>
+            </div>
+            <span className={`${styles.statusBadge} ${gateway.source === 'agent' ? styles.statusAgent : gateway.source === 'platform' ? styles.statusPlatform : styles.statusNone}`}>
+              {gateway.source === 'agent' && <ShieldCheck size={12} />}
+              {gateway.source === 'agent' ? 'Agent key active' : gateway.source === 'platform' ? 'Platform key active' : 'No key available'}
+            </span>
+          </div>
+
+          <form onSubmit={(event) => { event.preventDefault(); void saveGatewayKey() }}>
+            <label htmlFor="gateway-key" className={styles.fieldLabel}>
+              {gateway.hasAgentKey ? 'Replace agent key' : 'Add agent key'}
+            </label>
+            <div className={styles.keyRow}>
+              <div className={styles.keyField}>
+                <input
+                  id="gateway-key"
+                  type={showKey ? 'text' : 'password'}
+                  className={styles.keyInput}
+                  value={apiKey}
+                  onChange={(event) => { setApiKey(event.target.value); setKeyError(''); setKeySuccess('') }}
+                  placeholder={gateway.hasAgentKey ? 'Paste a new key to replace the current one' : 'Paste your Vercel AI Gateway key'}
+                  maxLength={4096}
+                  autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  className={styles.revealButton}
+                  onClick={() => setShowKey((current) => !current)}
+                  aria-label={showKey ? 'Hide API key' : 'Show API key'}
+                >
+                  {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+              <button
+                type="submit"
+                className={`btn btn-primary ${styles.actionButton}`}
+                disabled={!apiKey.trim() || keyBusy !== ''}
+              >
+                {keyBusy === 'save' ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Verifying…</> : 'Verify & save'}
+              </button>
+            </div>
+            <div className={styles.helperRow}>
+              <p className={styles.helperText}>Verification checks the authenticated credit endpoint and does not generate content or spend tokens.</p>
+              <a className={styles.docsLink} href="https://vercel.com/docs/ai-gateway/authentication-and-byok" target="_blank" rel="noreferrer">
+                Create a Gateway key <ExternalLink size={11} />
+              </a>
+            </div>
+          </form>
+
+          <div aria-live="polite">
+            {keyError && <p className={`${styles.feedback} ${styles.error}`}>{keyError}</p>}
+            {keySuccess && <p className={`${styles.feedback} ${styles.success}`}>{keySuccess}</p>}
+          </div>
+
+          {gateway.hasAgentKey && (
+            <>
+              <div className={styles.keyActions}>
+                <p className={styles.configuredCopy}>
+                  The saved key is write-only. Replace it above, or remove it to {gateway.platformAvailable ? 'return to the platform key' : 'disable model access until another key is added'}.
+                </p>
+                <button type="button" className={`btn btn-ghost ${styles.actionButton} ${styles.dangerButton}`} onClick={() => setConfirmRemove(true)} disabled={keyBusy !== ''}>
+                  <Trash2 size={13} /> Remove key
+                </button>
+              </div>
+              {confirmRemove && (
+                <div className={styles.confirmBox}>
+                  <p className={styles.confirmCopy}>
+                    Remove this agent&apos;s stored key? The original secret cannot be recovered.
+                  </p>
+                  <div className={styles.confirmButtons}>
+                    <button type="button" className={`btn btn-ghost ${styles.actionButton}`} onClick={() => setConfirmRemove(false)} disabled={keyBusy !== ''}>Cancel</button>
+                    <button type="button" className={`btn btn-ghost ${styles.actionButton} ${styles.dangerButton}`} onClick={() => void removeGatewayKey()} disabled={keyBusy !== ''}>
+                      {keyBusy === 'remove' ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Removing…</> : 'Confirm removal'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       <div style={card}>
         <p style={label}>Access</p>

@@ -4,6 +4,8 @@ import { adminDb, adminBucket } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { namespaceFor } from '../lib/pinecone'
 import { agentNamespace, agentDeleteGuard } from '../lib/agents/agent-helpers'
+import { encryptSecret } from '../lib/crypto'
+import { gatewayKeyStatus, parseGatewayKeyBody, testGatewayKey } from '../lib/llm/gateway-key'
 import { LLM_MODELS, agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type WorkspaceRole } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
@@ -267,6 +269,42 @@ agents.delete('/:id/photo', async (c) => {
   if (path) await adminBucket().file(path).delete().catch(() => {})
   await ref.update({ photoURL: null, photoStoragePath: FieldValue.delete(), updatedAt: new Date() })
   return c.json({ ok: true })
+})
+
+/** GET /agents/:id/gateway-key — masked credential status; owner-only because it controls spend. */
+agents.get('/:id/gateway-key', requireOwner, async (c) => {
+  const ref = adminDb.doc(`workspaces/${c.get('workspaceId')}/agents/${c.req.param('id')}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+  return c.json(gatewayKeyStatus(snap.data()!.gatewayKey))
+})
+
+/** PUT /agents/:id/gateway-key — verify, encrypt, and store a write-only AI Gateway key. */
+agents.put('/:id/gateway-key', requireOwner, async (c) => {
+  const ref = adminDb.doc(`workspaces/${c.get('workspaceId')}/agents/${c.req.param('id')}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+
+  const parsed = parseGatewayKeyBody(await c.req.json().catch(() => null))
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+
+  const verified = await testGatewayKey(parsed.apiKey)
+  if (!verified.ok) {
+    return c.json({ error: verified.error }, verified.reason === 'invalid' ? 400 : 502)
+  }
+
+  await ref.update({ gatewayKey: encryptSecret(parsed.apiKey), updatedAt: new Date() })
+  return c.json(gatewayKeyStatus('configured'))
+})
+
+/** DELETE /agents/:id/gateway-key — remove the override and return to platform fallback. */
+agents.delete('/:id/gateway-key', requireOwner, async (c) => {
+  const ref = adminDb.doc(`workspaces/${c.get('workspaceId')}/agents/${c.req.param('id')}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+
+  await ref.update({ gatewayKey: FieldValue.delete(), updatedAt: new Date() })
+  return c.json(gatewayKeyStatus(undefined))
 })
 
 /**

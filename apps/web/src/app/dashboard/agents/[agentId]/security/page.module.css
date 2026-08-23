@@ -1,0 +1,292 @@
+.gatewayCard {
+  margin-bottom: 20px;
+  padding: 24px;
+  border-radius: var(--r-md);
+  background:
+    radial-gradient(circle at top right, rgba(124, 92, 255, 0.1), transparent 42%),
+    var(--panel);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 1px 2px rgba(0, 0, 0, 0.12),
+    0 10px 28px rgba(0, 0, 0, 0.08);
+}
+
+.gatewayHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.gatewayTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.gatewayIcon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: var(--accent);
+  background: rgba(124, 92, 255, 0.13);
+}
+
+.gatewayTitle {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 620;
+  text-wrap: balance;
+}
+
+.gatewayDescription {
+  max-width: 620px;
+  margin: 5px 0 0;
+  color: var(--ink-mute);
+  font-size: 12.5px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.statusBadge {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.statusAgent {
+  color: var(--mint);
+  background: rgba(52, 211, 153, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.17);
+}
+
+.statusPlatform {
+  color: #a5b4fc;
+  background: rgba(129, 140, 248, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.17);
+}
+
+.statusNone {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.11);
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.16);
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keyRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+}
+
+.keyField {
+  position: relative;
+}
+
+.keyInput {
+  width: 100%;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 10px 48px 10px 13px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  outline: none;
+  background: var(--bg-2);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  transition-property: border-color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.keyInput:focus {
+  border-color: rgba(124, 92, 255, 0.75);
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.13);
+}
+
+.revealButton {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: calc(var(--r-sm) - 1px);
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition-property: color, background-color, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.revealButton:hover {
+  color: var(--ink);
+  background: var(--panel-2);
+}
+
+.revealButton:active,
+.actionButton:active:not(:disabled) {
+  scale: 0.96;
+}
+
+.actionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  white-space: nowrap;
+  transition-property: scale, opacity, background-color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.helperRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 9px;
+}
+
+.helperText {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.docsLink {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 11.5px;
+  text-decoration: none;
+}
+
+.feedback {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+
+.success {
+  color: var(--mint);
+}
+
+.error {
+  color: #f87171;
+}
+
+.keyActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.configuredCopy {
+  margin: 0;
+  color: var(--ink-mute);
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.dangerButton {
+  min-height: 40px;
+  color: #f87171 !important;
+}
+
+.confirmBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: calc(var(--r-sm) + 4px);
+  background: rgba(248, 113, 113, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.14);
+}
+
+.confirmCopy {
+  margin: 0;
+  color: var(--ink-mute);
+  font-size: 12px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.confirmButtons {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 680px) {
+  .gatewayHeader,
+  .helperRow,
+  .keyActions,
+  .confirmBox {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .statusBadge {
+    align-self: flex-start;
+  }
+
+  .keyRow {
+    grid-template-columns: 1fr;
+  }
+
+  .actionButton {
+    width: 100%;
+  }
+
+  .confirmButtons > * {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keyInput,
+  .revealButton,
+  .actionButton {
+    transition-duration: 0.01ms;
+  }
+}
