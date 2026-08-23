@@ -144,7 +144,7 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
           <button type="button" onClick={() => void save()} disabled={saving || !agent.name.trim()} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: saving || !agent.name.trim() ? 0.6 : 1 }}>
             {saving ? 'Saving…' : 'Save agent'}
           </button>
-          <Link href={`/dashboard/copilot?agent=${agent.id}`} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Link href={`/dashboard/agents/${agent.id}/test`} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <MessagesSquare size={14} /> Test agent
           </Link>
         </div>

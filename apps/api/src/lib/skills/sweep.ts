@@ -53,7 +53,7 @@ export function purgeFacts(
   return { facts: kept, nextExpiryAt: nextExpiry(kept) }
 }
 
-export interface SweepReport { closed: number; scored: number; purged: number; synced: number; failed: number }
+export interface SweepReport { closed: number; scored: number; purged: number; synced: number; sandboxPurged: number; failed: number }
 
 type DateLike = Date | { toDate?: () => Date } | null | undefined
 
@@ -79,7 +79,7 @@ export function isKnowledgeSyncClaimable(data: Record<string, any>, now: Date): 
 }
 
 export async function runSweep(now = new Date()): Promise<SweepReport> {
-  const report: SweepReport = { closed: 0, scored: 0, purged: 0, synced: 0, failed: 0 }
+  const report: SweepReport = { closed: 0, scored: 0, purged: 0, synced: 0, sandboxPurged: 0, failed: 0 }
 
   // 1. Close idle bot conversations. The query itself (not just each document update) is
   // wrapped so a transient failure — e.g. the composite index still building right after
@@ -240,6 +240,28 @@ export async function runSweep(now = new Date()): Promise<SweepReport> {
     }
   } catch (err) {
     console.warn('[sweep] knowledge-sync query failed:', err)
+    report.failed++
+  }
+
+  // 5. Remove abandoned sandbox sessions after their seven-day TTL. recursiveDelete
+  // also removes message subcollections; deleting only the parent would orphan them.
+  try {
+    const expired = await adminDb
+      .collectionGroup('sandboxSessions')
+      .where('expiresAt', '<=', now)
+      .limit(SWEEP_BATCH)
+      .get()
+    for (const doc of expired.docs) {
+      try {
+        await adminDb.recursiveDelete(doc.ref)
+        report.sandboxPurged++
+      } catch (err) {
+        console.warn('[sweep] sandbox purge failed:', doc.ref.path, err)
+        report.failed++
+      }
+    }
+  } catch (err) {
+    console.warn('[sweep] sandbox-purge query failed:', err)
     report.failed++
   }
 

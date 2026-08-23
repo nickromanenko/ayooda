@@ -18,6 +18,7 @@ import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
 import { gatherContext } from '../skills/run'
 import { elapsedMs, timestampDate } from '../analytics/timing'
 import { knowledgeConfidence, LOW_KNOWLEDGE_CONFIDENCE, utcDateKey } from '../analytics/confidence'
+import { sandboxSessionPath } from './sandbox-session'
 import '../skills/all'
 
 export interface PrepareTurnInput {
@@ -26,9 +27,10 @@ export interface PrepareTurnInput {
   conversationId: string
   visitorId: string
   message: string
-  channelType: ChannelType
+  channelType: ChannelType | 'sandbox'
   telegramChatId?: number
   agentId?: string
+  sandbox?: { ownerUid: string; allowTools: boolean }
 }
 
 export interface ReadyTurn {
@@ -47,7 +49,7 @@ export type PreparedTurn =
   | { kind: 'gated'; reason: GateReason }
   | { kind: 'error'; error: string }
   | { kind: 'silent' }
-  | { kind: 'escalated'; message: string }
+  | { kind: 'escalated'; message: string; sources: Array<{ docId: string; source: string; score: number }> }
   | ReadyTurn
 
 const DEFAULT_HANDOFF = 'Let me connect you with someone from our team.'
@@ -94,7 +96,8 @@ export function evaluateSilenceGate(data: FirebaseFirestore.DocumentData | undef
  */
 export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn> {
   const turnStartedAt = new Date()
-  const { workspaceId, channelId, conversationId, visitorId, message, channelType, telegramChatId, agentId } = input
+  const { workspaceId, channelId, conversationId, visitorId, message, channelType, telegramChatId, agentId, sandbox } = input
+  const isSandbox = !!sandbox
   const trimmed = message.trim()
 
   const workspaceRef = adminDb.doc(`workspaces/${workspaceId}`)
@@ -109,7 +112,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   // write to then, so this is null and the increments are skipped. It must never
   // point at the workspace doc: that would double-count the workspace totals,
   // which are incremented separately just below.
-  const agentUsageRef = agentRec.id === 'inline'
+  const agentUsageRef = isSandbox || agentRec.id === 'inline'
     ? null
     : adminDb.doc(`workspaces/${workspaceId}/agents/${agentRec.id}`)
 
@@ -126,14 +129,16 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
 
   const trace = getLangfuse().trace({
-    name: 'agent-chat',
+    name: isSandbox ? 'sandbox-chat' : 'agent-chat',
     sessionId: conversationId,
     userId: visitorId,
     input: { message: trimmed },
-    metadata: { workspaceId, channelId, channelType, llmModel },
+    metadata: { workspaceId, channelId, channelType, llmModel, ...(isSandbox ? { surface: 'sandbox' } : {}) },
   })
 
-  const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
+  const convRef = adminDb.doc(isSandbox
+    ? sandboxSessionPath(workspaceId, sandbox.ownerUid, conversationId)
+    : `workspaces/${workspaceId}/conversations/${conversationId}`)
   const convSnap = await convRef.get()
   if (convSnap.exists && convSnap.data()!.visitorId !== visitorId) {
     return { kind: 'error', error: 'Not found' }
@@ -164,7 +169,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     const usage = workspaceData.usage ?? {}
     const periodStart = usage.periodStart?.toDate?.() ?? null
     const reset = shouldResetPeriod(periodStart, new Date(), sub)
-    const periodUsed = reset ? 0 : (usage.periodConversationCount ?? 0)
+    const periodUsed = isSandbox ? 0 : reset ? 0 : (usage.periodConversationCount ?? 0)
     const ent = checkEntitlement({
       subscription: sub,
       periodConversationCount: periodUsed,
@@ -184,26 +189,39 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       timingTrackedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       lastMessage: trimmed,
+      ...(isSandbox ? {
+        sandbox: true,
+        ownerUid: sandbox.ownerUid,
+        allowTools: sandbox.allowTools,
+        expiresAt: new Date(turnStartedAt.getTime() + 7 * 24 * 60 * 60_000),
+      } : {}),
       ...(telegramChatId !== undefined ? { telegramChatId } : {}),
     })
-    const update: Record<string, unknown> = { 'usage.conversationCount': FieldValue.increment(1) }
-    if (reset) {
-      // usage.periodStart is shared between this counter and Copilot's usage.copilotPeriodCount
-      // (see routes/copilot.ts). Every writer that advances periodStart must reset BOTH counters,
-      // or the other one compares its stale count against the fresh period and stays wrongly
-      // gated for the rest of it. No Copilot thread was created by a customer conversation, hence 0.
-      update['usage.periodConversationCount'] = 1
-      update['usage.copilotPeriodCount'] = 0
-      update['usage.periodStart'] = FieldValue.serverTimestamp()
-    } else {
-      update['usage.periodConversationCount'] = FieldValue.increment(1)
-    }
-    await workspaceRef.update(update)
+    if (!isSandbox) {
+      const update: Record<string, unknown> = { 'usage.conversationCount': FieldValue.increment(1) }
+      if (reset) {
+        // usage.periodStart is shared between this counter and Copilot's usage.copilotPeriodCount
+        // (see routes/copilot.ts). Every writer that advances periodStart must reset BOTH counters,
+        // or the other one compares its stale count against the fresh period and stays wrongly
+        // gated for the rest of it. No Copilot thread was created by a customer conversation, hence 0.
+        update['usage.periodConversationCount'] = 1
+        update['usage.copilotPeriodCount'] = 0
+        update['usage.periodStart'] = FieldValue.serverTimestamp()
+      } else {
+        update['usage.periodConversationCount'] = FieldValue.increment(1)
+      }
+      await workspaceRef.update(update)
 
-    // Overage: this conversation is beyond the plan's included pack — meter it (non-fatal).
-    if (ent.overage && (sub?.status === 'active' || sub?.status === 'past_due')) {
-      void emitOverageEvent(sub?.stripeCustomerId, conversationId)
+      // Overage: this conversation is beyond the plan's included pack — meter it (non-fatal).
+      if (ent.overage && (sub?.status === 'active' || sub?.status === 'past_due')) {
+        void emitOverageEvent(sub?.stripeCustomerId, conversationId)
+      }
     }
+  } else if (isSandbox) {
+    await convRef.update({
+      allowTools: sandbox.allowTools,
+      expiresAt: new Date(turnStartedAt.getTime() + 7 * 24 * 60 * 60_000),
+    })
   }
 
   const messagesRef = convRef.collection('messages')
@@ -279,11 +297,13 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
         ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
         ...confidenceConversationFields(repliedAt),
       })
-      await workspaceRef.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
-      await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2), ...confidenceAgentFields }).catch(() => {})
-      await recordConfidenceDay(repliedAt).catch(() => {})
+      if (!isSandbox) {
+        await workspaceRef.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
+        await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2), ...confidenceAgentFields }).catch(() => {})
+        await recordConfidenceDay(repliedAt).catch(() => {})
+      }
       trace.update({ output: { escalated: hit.name } })
-      return { kind: 'escalated', message: handoff }
+      return { kind: 'escalated', message: handoff, sources }
     }
   } catch (err) {
     console.warn('[agent-turn] escalation check failed:', err)
@@ -299,7 +319,9 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
   if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
 
-  const { tools, skillTools, mcpTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
+  const { tools, skillTools, mcpTools } = isSandbox && !sandbox.allowTools
+    ? { tools: [], skillTools: {}, mcpTools: {} }
+    : await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
     const repliedAt = new Date()
@@ -318,18 +340,20 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
         ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
         ...confidenceConversationFields(repliedAt),
       })
-      await workspaceRef.update({
-        'usage.messageCount': FieldValue.increment(2),
-        'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
-      })
-      // Same counters on the agent, so the Usage tab can attribute spend to the
-      // agent that actually produced it rather than the workspace as a whole.
-      await agentUsageRef?.update({
-        'usage.messageCount': FieldValue.increment(2),
-        'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
-        ...confidenceAgentFields,
-      })
-      await recordConfidenceDay(repliedAt)
+      if (!isSandbox) {
+        await workspaceRef.update({
+          'usage.messageCount': FieldValue.increment(2),
+          'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
+        })
+        // Same counters on the agent, so the Usage tab can attribute spend to the
+        // agent that actually produced it rather than the workspace as a whole.
+        await agentUsageRef?.update({
+          'usage.messageCount': FieldValue.increment(2),
+          'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),
+          ...confidenceAgentFields,
+        })
+        await recordConfidenceDay(repliedAt)
+      }
     } catch (err) {
       console.warn('[agent-turn] post-reply bookkeeping failed:', err)
     }

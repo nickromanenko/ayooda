@@ -96,10 +96,11 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Now (2026-08-23):** webpage sources can be refreshed daily, weekly, or monthly from the Knowledge dashboard. The existing internal sweep claims due sources transactionally, launches re-ingestion, prevents duplicate jobs with a one-hour recovery lease, and retries failures with bounded backoff. The dashboard exposes next/last sync state, errors, and a manual **Sync now** action. Uploaded files remain manual because their stored content is immutable; replacing a file requires a new upload.
 - **Status:** ✅ Implemented for webpage sources · **Priority:** P2 (resolved)
 
-### 🟠 GAP-07 — "Test before you ship" sandbox
+### ✅ GAP-07 — "Test before you ship" sandbox now ships
 - **Claim:** *"Use the sandbox — real chat widget, fake traffic — to stress-test every flow."*
-- **Reality:** "Test agent" deep-links into **Copilot** (`dashboard/agents/[agentId]/page.tsx` → `/dashboard/copilot?agent=…`). No sandbox/fake-traffic/load testing.
-- **Status:** 🟠 Partial · **Priority:** P2
+- **Was:** "Test agent" deep-linked into **Copilot**, which does not exercise customer escalation behavior and stores internal team threads.
+- **Now (2026-08-23):** every agent has a dedicated **Test** tab with a widget-style chat preview, staged knowledge/uncertainty/hand-off scenarios, live retrieval sources and confidence, real escalation-rule evaluation, session reset, and an explicit opt-in for connected tools. Test traffic is stored under per-user `sandboxSessions`, excluded from the inbox, customer analytics, scoring, confidence trends, and conversation quotas, and automatically purged after seven days.
+- **Status:** ✅ Implemented · **Priority:** P2 (resolved)
 
 ### 🟠 GAP-08 — Bring-your-own LLM / custom endpoint
 - **Claim:** *"Claude, GPT, Llama, or your own model"* · *"Custom endpoint: your.company.internal"* · *"Llama 3.3 70B · Meta self-hosted"*.
@@ -138,7 +139,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | 5 | **Visual workflow builder** or honest copy (GAP-03) | 🟠 | P1 |
 | 6 | **BYO LLM / custom endpoint** (GAP-08) | 🔴 | P2 |
 | 7 | **Auto-sync knowledge** (GAP-06) | ✅ Done | P2 |
-| 8 | **Sandbox/test mode** (GAP-07) | 🟠 | P2 |
+| 8 | **Sandbox/test mode** (GAP-07) | ✅ Done | P2 |
 | 9 | **SSO / EU hosting** (GAP-09) | 🔴 | P2 |
 
 ---

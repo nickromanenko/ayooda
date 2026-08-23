@@ -38,6 +38,7 @@ import skillRoutes from './routes/skills'
 import mcpRoutes from './routes/mcp'
 import internalRoutes from './routes/internal'
 import copilotRoutes from './routes/copilot'
+import sandboxRoutes from './routes/sandbox'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -58,6 +59,7 @@ app.route('/agents/:agentId/mcp', mcpRoutes)
 app.route('/agents/:agentId/channels', agentChannelRoutes)
 app.route('/agents/:agentId/workflows', workflowRoutes)
 app.route('/agents/:agentId/usage', agentUsageRoutes)
+app.route('/agents/:agentId/sandbox', sandboxRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)

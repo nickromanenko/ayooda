@@ -74,6 +74,7 @@ mock.module('../llm/resolve', () => ({ resolveGatewayKey: () => ({ ok: true, api
 const { prepareTurn, evaluateSilenceGate } = await import('./agent-turn')
 
 const CONV = 'workspaces/w/conversations/c'
+const SANDBOX = 'workspaces/w/sandboxUsers/u/sandboxSessions/s'
 
 const seed = (conversation: Record<string, any>) => {
   state.docs.clear()
@@ -221,6 +222,26 @@ describe('prepareTurn prompt assembly', () => {
     expect(result.chatParams.systemPrompt).toBe('You are helpful.')
     expect(result.chatParams.messages).toEqual([{ role: 'user', content: 'are you still there?' }])
     expect(result.sources).toEqual([])
+  })
+})
+
+describe('prepareTurn sandbox isolation', () => {
+  test('stores outside conversations and does not increment production usage', async () => {
+    seed({ visitorId: 'v', status: 'bot' })
+    state.docs.delete(CONV)
+    const result = await prepareTurn({
+      workspaceId: 'w', channelId: 'sandbox', conversationId: 's',
+      visitorId: 'sandbox_u_inline', message: 'test the agent', channelType: 'sandbox',
+      sandbox: { ownerUid: 'u', allowTools: false },
+    })
+    expect(result.kind).toBe('ready')
+    expect(state.docs.get(SANDBOX)?.sandbox).toBe(true)
+    expect(state.docs.has(CONV)).toBe(false)
+    expect(state.updates.some((row) => row.path === 'workspaces/w' && Object.keys(row.data).some((key) => key.startsWith('usage.')))).toBe(false)
+
+    if (result.kind !== 'ready') throw new Error('expected ready')
+    await result.persist('sandbox reply', 4, 5)
+    expect(state.updates.some((row) => row.path === 'workspaces/w' && Object.keys(row.data).some((key) => key.startsWith('usage.')))).toBe(false)
   })
 })
 
