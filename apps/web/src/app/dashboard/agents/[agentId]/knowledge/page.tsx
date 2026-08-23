@@ -4,6 +4,7 @@ import { use, useState, useEffect, useCallback } from 'react'
 import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle, FileText, RotateCw } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
+import { Loading, EmptyState } from '@/components/dashboard/Loading'
 import type { KnowledgeDocStatus } from '@ayooda/shared'
 
 interface KnowledgeDoc {
@@ -175,16 +176,9 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
 
       {/* Doc list */}
       {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink-mute)', padding: '32px 0', justifyContent: 'center' }}>
-          <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />
-          Loading…
-        </div>
+        <Loading pad="32px 0" />
       ) : docs.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '64px 0', color: 'var(--ink-mute)' }}>
-          <Globe size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-          <p style={{ fontSize: 13, margin: 0 }}>No knowledge added yet.</p>
-          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--ink-faint)' }}>Add your website above to get started.</p>
-        </div>
+        <EmptyState icon={<Globe size={32} />} title="No knowledge added yet." hint="Add your website above to get started." />
       ) : (
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
           {docs.map((doc, i) => {

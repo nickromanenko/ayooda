@@ -4,6 +4,7 @@ import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Trash2, Plus, Play } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { TOOL_TEMPLATES, applyTemplate, type ToolDef, type ToolMethod, type ToolParamType, type ToolAuthType, type ToolKind, type ToolTemplate } from '@ayooda/shared'
+import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
 
 const row: React.CSSProperties = { display: 'flex', gap: 8, marginBottom: 8 }
@@ -110,7 +111,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
     try { await apiRequest(`/agents/${agentId}/tools/${id}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
   }
 
-  if (loading) return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-mute)' }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</div>
+  if (loading) return <Loading />
 
   return (
     <>

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, type ComponentType, type CSSProperties } from 'react'
-import { Loader2, Check, Sparkles, Zap, Rocket, ArrowRight, CreditCard } from 'lucide-react'
+import { Check, Sparkles, Zap, Rocket, ArrowRight, CreditCard } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { Loading } from '@/components/dashboard/Loading'
 
 interface PlanDef { tier: string; name: string; priceUsd: number; conversationCap: number }
 interface BillingData {
@@ -104,12 +105,7 @@ export default function BillingPage() {
   }
 
   if (loading) {
-    return (
-      <div style={{ padding: '80px 0', textAlign: 'center', color: 'var(--ink-mute)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
-        <span style={{ fontSize: 13 }}>Loading your billing…</span>
-      </div>
-    )
+    return <Loading label="Loading your billing…" pad="80px 0" size={22} />
   }
   if (loadError || !data) {
     return (

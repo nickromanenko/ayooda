@@ -165,6 +165,21 @@ describe('runAgentTurn', () => {
     expect(seenTools).toEqual(skillTools as unknown as Record<string, unknown>)
   })
 
+  test('merges MCP tools alongside skill tools', async () => {
+    let seenTools: Record<string, unknown> | undefined
+    const skillTools = { web_search: { description: 'search' } } as unknown as import('ai').ToolSet
+    const mcpTools = { mcp_shopify_refund: { description: 'mcp' } } as unknown as import('ai').ToolSet
+    const gen = runAgentTurn(
+      { model: 'm', systemPrompt: 's', messages: [], apiKey: 'k' }, [], fakeTrace,
+      { streamText: (o) => { seenTools = o.tools as Record<string, unknown>; return fakeStream(['x'], {}) } },
+      skillTools,
+      mcpTools,
+    )
+    while (!(await gen.next()).done) { /* drain */ }
+    expect(seenTools).toBeDefined()
+    expect(Object.keys(seenTools!).sort()).toEqual(['mcp_shopify_refund', 'web_search'])
+  })
+
   test('passes undefined when both customer and skill tool sets are empty', async () => {
     let seenTools: unknown = 'unset'
     const gen = runAgentTurn(

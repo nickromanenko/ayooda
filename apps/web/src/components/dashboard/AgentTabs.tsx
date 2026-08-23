@@ -19,6 +19,7 @@ const TABS = [
   { slug: 'knowledge', label: 'Knowledge' },
   { slug: 'skills', label: 'Skills' },
   { slug: 'tools', label: 'Tools' },
+  { slug: 'mcp', label: 'MCP' },
   { slug: 'escalation', label: 'Escalation' },
   { slug: 'deploy', label: 'Deploy' },
   { slug: 'usage', label: 'Usage' },

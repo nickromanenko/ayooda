@@ -31,6 +31,7 @@ export interface ReadyCopilotTurn {
   sources: Array<{ docId: string; source: string; score: number }>
   tools: StoredTool[]
   skillTools: ToolSet
+  mcpTools: ToolSet
   /** The live Langfuse trace. The route passes it to runAgentTurn so tool-call
    *  spans attach to this turn instead of a throwaway trace. */
   trace: LangfuseTrace
@@ -145,7 +146,7 @@ export async function prepareCopilotTurn(
   }
   if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
 
-  const { tools, skillTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
+  const { tools, skillTools, mcpTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
 
   const persist = async (
     reply: string,
@@ -181,6 +182,6 @@ export async function prepareCopilotTurn(
       contextBlocks, skillBlocks, history,
       message: trimmed, apiKey: keyResult.apiKey, model: llmModel,
     }),
-    sources, tools, skillTools, trace, persist,
+    sources, tools, skillTools, mcpTools, trace, persist,
   }
 }

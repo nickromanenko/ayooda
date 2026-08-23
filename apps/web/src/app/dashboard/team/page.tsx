@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2, Copy, Check, Trash2, UserPlus } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { Loading } from '@/components/dashboard/Loading'
+import { card, label, input as baseInput } from '@/components/dashboard/ui'
 
 interface Member { uid: string; email: string; displayName: string; role: string }
 interface Invite { email: string; createdAt: string | null }
 
-const card: React.CSSProperties = { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 24, marginBottom: 20 }
-const label: React.CSSProperties = { fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }
-const input: React.CSSProperties = { flex: 1, padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
+// ui.ts's `input` is width:100%; inside the invite rows we want it to flex instead.
+const input: React.CSSProperties = { ...baseInput, flex: 1, width: 'auto' }
 
 export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([])
@@ -49,7 +50,7 @@ export default function TeamPage() {
     try { await apiRequest(`/team/member/${uid}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
   }
 
-  if (loading) return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-mute)' }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</div>
+  if (loading) return <Loading />
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>

@@ -173,14 +173,14 @@ widget.post('/chat', async (c) => {
     })
   }
 
-  const { chatParams, sources, trace, llmModel, tools, skillTools, persist } = prepared
+  const { chatParams, sources, trace, llmModel, tools, skillTools, mcpTools, persist } = prepared
   const generation = trace.generation({ name: 'llm-chat', model: llmModel, input: { system: chatParams.systemPrompt, messages: chatParams.messages } })
 
   return streamSSE(c, async (stream) => {
     let reply = ''
     let generationEnded = false
     try {
-      const gen = runAgentTurn(chatParams, tools, trace, {}, skillTools)
+      const gen = runAgentTurn(chatParams, tools, trace, {}, skillTools, mcpTools)
       let promptTokens = 0
       let completionTokens = 0
       while (true) {

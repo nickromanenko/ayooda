@@ -23,6 +23,13 @@ const toDate = (v: unknown): Date | null => {
   return typeof d.toDate === 'function' ? d.toDate() : (v instanceof Date ? v : null)
 }
 
+/** Escape one CSV cell (RFC 4180). Newlines collapse to spaces to keep rows simple. */
+export function csvCell(v: unknown): string {
+  const s = v === null || v === undefined ? '' : String(v)
+  const cleaned = s.replace(/[\r\n]+/g, ' ')
+  return /[",]/.test(cleaned) ? `"${cleaned.replace(/"/g, '""')}"` : cleaned
+}
+
 agentUsage.get('/', async (c) => {
   const ws = c.get('workspaceId')
   const agentId = c.get('agentId')!
@@ -78,6 +85,34 @@ agentUsage.get('/', async (c) => {
 
   const indexed = knowledgeSnap.docs.map((d) => d.data()).filter((d) => d.status === 'indexed')
 
+  // CSAT: the scoring skill writes score (1–5) on resolved conversations.
+  // The `where score >= 1` leg needs a composite index (agentId + score); degrade
+  // to null while it builds rather than failing the page.
+  let csat: { average: number | null; count: number; distribution: [number, number, number, number, number] } = {
+    average: null, count: 0, distribution: [0, 0, 0, 0, 0],
+  }
+  try {
+    const scoredSnap = await mine.where('score', '>=', 1).get()
+    const scores = scoredSnap.docs
+      .map((d) => d.data().score as number)
+      .filter((s) => Number.isFinite(s))
+    if (scores.length > 0) {
+      const sum = scores.reduce((a, b) => a + b, 0)
+      const distribution: [number, number, number, number, number] = [0, 0, 0, 0, 0]
+      for (const s of scores) {
+        const i = Math.min(4, Math.max(0, Math.round(s) - 1))
+        distribution[i]! += 1
+      }
+      csat = {
+        average: Math.round((sum / scores.length) * 10) / 10,
+        count: scores.length,
+        distribution,
+      }
+    }
+  } catch (err) {
+    console.warn('[agent-usage] csat unavailable (index building?):', err)
+  }
+
   // Reuse the billing gate so the included cap shown here matches Billing —
   // including trials, whose cap is not on any plan.
   const now = new Date()
@@ -101,6 +136,7 @@ agentUsage.get('/', async (c) => {
     // Same definition the Overview uses: of the conversations this agent
     // resolved, the share it resolved without a human stepping in.
     automationRate: resolved > 0 ? Math.round((automated / resolved) * 100) : null,
+    csat,
     messages: {
       count: (agentUsageDoc.messageCount as number | undefined) ?? null,
       tokens: (agentUsageDoc.tokenCount as number | undefined) ?? null,
@@ -119,6 +155,41 @@ agentUsage.get('/', async (c) => {
       tier: ent.tier,
     },
   })
+})
+
+/** GET /agents/:agentId/usage/export — this agent's conversations as CSV. */
+agentUsage.get('/export', async (c) => {
+  const ws = c.get('workspaceId')
+  const agentId = c.get('agentId')!
+
+  const snap = await adminDb.collection(`workspaces/${ws}/conversations`).where('agentId', '==', agentId).get()
+  const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) })) as Array<{ id: string } & Record<string, unknown>>
+  rows.sort((a, b) => (toDate(b.createdAt)?.getTime() ?? 0) - (toDate(a.createdAt)?.getTime() ?? 0))
+
+  const header = [
+    'conversation_id', 'visitor', 'channel', 'status', 'created_at', 'updated_at',
+    'score', 'summary', 'had_takeover', 'escalation_reason', 'last_message',
+  ]
+  const lines = [header.join(',')]
+  for (const r of rows) {
+    lines.push([
+      r.id,
+      r.visitorId ?? '',
+      r.channelType ?? '',
+      r.status ?? '',
+      toDate(r.createdAt)?.toISOString() ?? '',
+      toDate(r.updatedAt)?.toISOString() ?? '',
+      typeof r.score === 'number' ? r.score : '',
+      r.summary ?? '',
+      r.hadTakeover === true ? 'true' : 'false',
+      r.escalationReason ?? '',
+      r.lastMessage ?? '',
+    ].map(csvCell).join(','))
+  }
+
+  c.header('Content-Type', 'text/csv; charset=utf-8')
+  c.header('Content-Disposition', `attachment; filename="agent-${agentId}-conversations.csv"`)
+  return c.body(lines.join('\n'))
 })
 
 export default agentUsage

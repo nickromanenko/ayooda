@@ -27,6 +27,7 @@ import conversationRoutes from './routes/conversations'
 import widgetRoutes from './routes/widget'
 import billingRoutes from './routes/billing'
 import telegramRoutes from './routes/telegram'
+import emailRoutes from './routes/email'
 import teamRoutes from './routes/team'
 import toolRoutes from './routes/tools'
 import agentRoutes from './routes/agents'
@@ -34,6 +35,7 @@ import agentChannelRoutes from './routes/agent-channels'
 import agentUsageRoutes from './routes/agent-usage'
 import workflowRoutes from './routes/workflows'
 import skillRoutes from './routes/skills'
+import mcpRoutes from './routes/mcp'
 import internalRoutes from './routes/internal'
 import copilotRoutes from './routes/copilot'
 
@@ -52,12 +54,14 @@ app.route('/agents', agentRoutes)
 app.route('/agents/:agentId/knowledge', knowledgeRoutes)
 app.route('/agents/:agentId/tools', toolRoutes)
 app.route('/agents/:agentId/skills', skillRoutes)
+app.route('/agents/:agentId/mcp', mcpRoutes)
 app.route('/agents/:agentId/channels', agentChannelRoutes)
 app.route('/agents/:agentId/workflows', workflowRoutes)
 app.route('/agents/:agentId/usage', agentUsageRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)
+app.route('/email', emailRoutes)
 app.route('/internal', internalRoutes)
 app.route('/copilot', copilotRoutes)
 

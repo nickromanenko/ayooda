@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2, Check } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { Loading } from '@/components/dashboard/Loading'
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 14px',
@@ -94,11 +95,7 @@ export default function SettingsPage() {
   }
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink-mute)', padding: '48px 0', justifyContent: 'center' }}>
-        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} /> Loading…
-      </div>
-    )
+    return <Loading />
   }
 
   return (

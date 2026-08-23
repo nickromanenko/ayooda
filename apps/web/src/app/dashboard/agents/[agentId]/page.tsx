@@ -7,6 +7,7 @@ import { Loader2, Star, Trash2, MessagesSquare } from 'lucide-react'
 import { LLM_MODELS, validateAgentImage, type AgentDoc } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
+import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, muted, errorText } from '@/components/dashboard/ui'
 
 export default function AgentInfoPage({ params }: { params: Promise<{ agentId: string }> }) {
@@ -94,7 +95,7 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
   }
 
   if (loading) {
-    return <p style={{ ...muted, padding: '32px 0', textAlign: 'center' }}><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</p>
+    return <Loading />
   }
   if (!agent) return <p style={errorText}>{error || 'Agent not found.'}</p>
 

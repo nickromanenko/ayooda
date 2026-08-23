@@ -7,15 +7,12 @@ import { Loader2, Send, Plus, Trash2, MessagesSquare, FileText, Bot, User } from
 import { db } from '@/lib/firebase'
 import { apiRequest } from '@/lib/api'
 import { readSSE } from '@/lib/sse'
+import { Loading } from '@/components/dashboard/Loading'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { useAuth } from '@/components/providers/AuthProvider'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
+import { label, input as inputStyle } from '@/components/dashboard/ui'
 import type { CopilotThreadDoc } from '@ayooda/shared'
-
-const label: React.CSSProperties = { fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }
-// Named inputStyle (not `input`, per agents/page.tsx) — the composer's own text
-// state is `input`/`setInput`, matching the send() handler's exact shape.
-const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
 
 // GET /copilot/threads sends Firestore Timestamps through a plain JSON response
 // (no client SDK in the loop to reconstruct a real Timestamp), so they arrive as
@@ -226,11 +223,7 @@ function CopilotPageInner() {
   const canCompose = Boolean(activeThreadId || pendingAgentId)
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink-mute)', padding: '48px 0', justifyContent: 'center' }}>
-        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} /> Loading…
-      </div>
-    )
+    return <Loading />
   }
 
   return (

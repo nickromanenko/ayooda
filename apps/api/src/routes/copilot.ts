@@ -257,7 +257,7 @@ copilot.post('/chat', async (c) => {
     let reply = ''
     let generationEnded = false
     try {
-      const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools)
+      const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools, prepared.mcpTools)
       let promptTokens = 0
       let completionTokens = 0
       while (true) {

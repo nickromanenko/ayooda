@@ -145,6 +145,33 @@ conversations.post('/:id/messages', async (c) => {
     }
   }
 
+  // If this is an email conversation, mirror the operator reply via Resend.
+  if (conv.channelType === 'email' && typeof conv.emailReplyTo === 'string') {
+    try {
+      const chSnap = await adminDb
+        .collection(`workspaces/${workspaceId}/channels`)
+        .where('type', '==', 'email')
+        .limit(1)
+        .get()
+      const enc = chSnap.docs[0]?.data().resendApiKeyEnc as string | undefined
+      if (enc) {
+        const { decryptSecret } = await import('../lib/crypto')
+        const { sendEmail } = await import('../lib/email/client')
+        const { replySubject } = await import('../lib/email/parse')
+        await sendEmail({
+          apiKey: decryptSecret(enc),
+          from: (conv.emailReplyFrom as string | undefined) ?? '',
+          to: conv.emailReplyTo,
+          subject: replySubject((conv.emailSubject as string | undefined) ?? ''),
+          text: body.content.trim(),
+          inReplyTo: conv.emailMessageId as string | undefined,
+        })
+      }
+    } catch (err) {
+      console.warn('[conversations] email operator delivery failed:', err)
+    }
+  }
+
   return c.json({ messageId: messageRef.id }, 201)
 })
 

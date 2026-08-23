@@ -54,7 +54,7 @@ async function loadOverview() {
     )
 
     const channelLabel = (type: string) =>
-      type === 'web_widget' ? 'Website' : type === 'telegram' ? 'Telegram' : type
+      type === 'web_widget' ? 'Website' : type === 'telegram' ? 'Telegram' : type === 'email' ? 'Email' : type
 
     const agents: AgentRow[] = agentsSnap.docs.map((a, i) => {
       const docs = knowledgePerAgent[i]!.docs.map((d) => d.data())

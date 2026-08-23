@@ -199,6 +199,7 @@ export async function* runAgentTurn(
   trace: LangfuseTrace,
   deps: RunDeps = {},
   skillTools: ToolSet = {},
+  mcpTools: ToolSet = {},
 ): AsyncGenerator<ChatChunk, ChatResult, void> {
   // The default wrapper swaps the model string for the Gateway model, so an injected
   // streamText (tests) never touches createGateway.
@@ -208,8 +209,9 @@ export async function* runAgentTurn(
   const customerTools = tools.length ? toAiSdkTools(tools, trace, execute) : {}
   for (const name of Object.keys(customerTools)) {
     if (Object.hasOwn(skillTools, name)) console.warn(`[skills] tool name "${name}" shadowed by a customer tool`)
+    if (Object.hasOwn(mcpTools, name)) console.warn(`[mcp] tool name "${name}" shadowed by a customer tool`)
   }
-  const toolSet: ToolSet = { ...skillTools, ...customerTools }
+  const toolSet: ToolSet = { ...skillTools, ...mcpTools, ...customerTools }
   const result = run({
     model: chatParams.model,
     system: chatParams.systemPrompt,

@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AgentSkillView, SkillId } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { Loading } from '@/components/dashboard/Loading'
+import { muted } from '@/components/dashboard/ui'
 
 const card: React.CSSProperties = {
   background: 'var(--panel)', border: '1px solid var(--line)',
   borderRadius: 'var(--r-md)', padding: 16, marginBottom: 12,
 }
-const muted: React.CSSProperties = { color: 'var(--ink-mute)', fontSize: 13 }
 
 export default function AgentSkills({ agentId }: { agentId: string }) {
   const [skills, setSkills] = useState<AgentSkillView[]>([])
@@ -40,7 +41,7 @@ export default function AgentSkills({ agentId }: { agentId: string }) {
     } finally { setBusy('') }
   }
 
-  if (loading) return <p style={muted}>Loading skills…</p>
+  if (loading) return <Loading label="Loading skills…" pad="24px 0" />
 
   return (
     <div>

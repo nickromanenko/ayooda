@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Loader2, Lock } from 'lucide-react'
 import type { AgentAccessEntry } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { Loading } from '@/components/dashboard/Loading'
 import { card, label, muted, errorText } from '@/components/dashboard/ui'
 
 export default function AgentSecurityPage({ params }: { params: Promise<{ agentId: string }> }) {
@@ -47,7 +48,7 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
     )
   }
   if (!people && !error) {
-    return <p style={{ ...muted, padding: '24px 0' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</p>
+    return <Loading />
   }
 
   const members = people?.filter((p) => !p.locked) ?? []

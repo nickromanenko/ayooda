@@ -4,6 +4,7 @@ import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import type { WorkflowRule, WorkflowTrigger, TriggerType } from '@ayooda/shared'
+import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
@@ -118,7 +119,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
     await load()
   }
 
-  if (loading) return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-mute)' }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</div>
+  if (loading) return <Loading />
 
   return (
     <>

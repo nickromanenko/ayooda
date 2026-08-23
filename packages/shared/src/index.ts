@@ -41,7 +41,21 @@ export type ConversationStatus = 'bot' | 'waiting' | 'human' | 'resolved'
 export type MessageRole = 'user' | 'assistant' | 'operator'
 
 // Channels
-export type ChannelType = 'web_widget' | 'telegram'
+export type ChannelType = 'web_widget' | 'telegram' | 'email'
+
+// Email channel (Resend)
+export interface EmailChannelConfig {
+  /** The address the agent sends from (must be a Resend-verified domain). */
+  fromAddress: string
+  /** The address that receives inbound mail. */
+  inboxAddress: string
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export function isEmailAddress(v: string): boolean {
+  return EMAIL_RE.test(v)
+}
 
 // Agent tone used during onboarding to build the system prompt
 export type AgentTone = 'professional' | 'friendly' | 'casual'
@@ -120,11 +134,12 @@ export interface WidgetConfig {
 
 export interface ChannelDoc {
   type: ChannelType
-  config?: WidgetConfig
+  config?: WidgetConfig | EmailChannelConfig
   embedCode?: string
   isActive: boolean
   createdAt: Date
   botTokenEnc?: string
+  resendApiKeyEnc?: string
   webhookSecret?: string
   telegram?: { botUsername: string; botId: number }
 }
@@ -253,6 +268,7 @@ export function validateKnowledgeFile(
 export * from './plans'
 export * from './skills'
 export * from './agent-roles'
+export * from './mcp'
 
 export type ChatStreamEvent =
   | { type: 'chunk'; text: string }

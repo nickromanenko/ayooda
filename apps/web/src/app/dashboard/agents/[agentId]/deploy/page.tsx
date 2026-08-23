@@ -1,9 +1,10 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
-import { Loader2, Copy, Check, Code, Send, Plus } from 'lucide-react'
+import { Loader2, Copy, Check, Code, Send, Plus, Mail } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
-import { label, errorText } from '@/components/dashboard/ui'
+import { Loading } from '@/components/dashboard/Loading'
+import { label, errorText, input } from '@/components/dashboard/ui'
 import WidgetAppearance from '@/components/dashboard/WidgetAppearance'
 import {
   DEFAULT_WIDGET_COLOR,
@@ -17,7 +18,7 @@ interface Channel {
   embedCode?: string
   isActive: boolean
   brandingLocked?: boolean
-  config?: Partial<Appearance> & { agentName?: string }
+  config?: Partial<Appearance> & { agentName?: string; fromAddress?: string; inboxAddress?: string }
   telegram?: { botUsername: string; botId: number }
 }
 
@@ -50,6 +51,10 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const [botToken, setBotToken] = useState('')
   const [telegramError, setTelegramError] = useState('')
   const [telegramBusy, setTelegramBusy] = useState(false)
+  const [emailForm, setEmailForm] = useState({ resendApiKey: '', fromAddress: '', inboxAddress: '', webhookSecret: '' })
+  const [emailError, setEmailError] = useState('')
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailWebhookUrl, setEmailWebhookUrl] = useState('')
 
   const fetchChannels = useCallback(async () => {
     const res = await apiRequest(base)
@@ -62,6 +67,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
 
   const widget = channels.find((c) => c.type === 'web_widget')
   const telegram = channels.find((c) => c.type === 'telegram')
+  const email = channels.find((c) => c.type === 'email')
 
   async function createWidget() {
     setWidgetBusy(true)
@@ -119,12 +125,37 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
     } finally { setTelegramBusy(false) }
   }
 
+  async function connectEmail() {
+    setEmailError(''); setEmailBusy(true); setEmailWebhookUrl('')
+    try {
+      const res = await apiRequest(`${base}/email`, { method: 'POST', body: JSON.stringify(emailForm) })
+      const data = await res.json().catch(() => ({})) as { error?: string; webhookUrl?: string }
+      if (!res.ok) { setEmailError(data.error ?? 'Failed to connect email.'); return }
+      setEmailWebhookUrl(data.webhookUrl ?? '')
+      setEmailForm({ resendApiKey: '', fromAddress: '', inboxAddress: '', webhookSecret: '' })
+      await fetchChannels()
+    } catch {
+      setEmailError('Failed to connect email.')
+    } finally { setEmailBusy(false) }
+  }
+
+  async function disconnectEmail() {
+    setEmailError(''); setEmailBusy(true); setEmailWebhookUrl('')
+    try {
+      const res = await apiRequest(`${base}/email`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        setEmailError(data.error ?? 'Failed to disconnect email.')
+        return
+      }
+      await fetchChannels()
+    } catch {
+      setEmailError('Failed to disconnect email.')
+    } finally { setEmailBusy(false) }
+  }
+
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--ink-mute)', padding: '48px 0', justifyContent: 'center' }}>
-        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} /> Loading…
-      </div>
-    )
+    return <Loading />
   }
 
   return (
@@ -303,9 +334,72 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
         </div>
       </div>
 
+      {/* Email */}
+      <div style={panel}>
+        <div style={head}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <div style={icon}><Mail size={16} style={{ color: 'var(--accent)' }} /></div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>Email</p>
+              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+                {email ? `Answers as ${email.config?.fromAddress}` : 'Not connected'}
+              </p>
+            </div>
+          </div>
+          <span style={pill(Boolean(email))}>{email ? 'Live' : 'Off'}</span>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          {email ? (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 16 }}>
+                Inbound mail to <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent)' }}>{email.config?.inboxAddress}</code> is answered by this agent.
+              </p>
+              <button type="button" onClick={() => void disconnectEmail()} disabled={emailBusy} className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 16px', fontSize: 12.5 }}>
+                {emailBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                Disconnect
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 12 }}>
+                Connect a Resend mailbox — this agent will answer customer emails end-to-end.
+              </p>
+              <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+                <input type="password" placeholder="Resend API key (re_…)" value={emailForm.resendApiKey} autoComplete="off" onChange={(e) => setEmailForm({ ...emailForm, resendApiKey: e.target.value })} style={input} />
+                <input placeholder="From address (e.g. support@yourdomain.com)" value={emailForm.fromAddress} onChange={(e) => setEmailForm({ ...emailForm, fromAddress: e.target.value })} style={input} />
+                <input placeholder="Inbox address (where customers write)" value={emailForm.inboxAddress} onChange={(e) => setEmailForm({ ...emailForm, inboxAddress: e.target.value })} style={input} />
+                <input type="password" placeholder="Resend webhook signing secret" value={emailForm.webhookSecret} autoComplete="off" onChange={(e) => setEmailForm({ ...emailForm, webhookSecret: e.target.value })} style={input} />
+              </div>
+              <button
+                type="button"
+                onClick={() => void connectEmail()}
+                disabled={emailBusy || !emailForm.resendApiKey || !emailForm.fromAddress || !emailForm.inboxAddress || !emailForm.webhookSecret}
+                className="btn btn-primary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 16px', fontSize: 12.5, opacity: emailBusy || !emailForm.resendApiKey || !emailForm.fromAddress || !emailForm.inboxAddress || !emailForm.webhookSecret ? 0.6 : 1 }}
+              >
+                {emailBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                Connect
+              </button>
+              {emailWebhookUrl && (
+                <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)' }}>
+                  <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 6px' }}>Paste this webhook URL into Resend&apos;s inbound email settings:</p>
+                  <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{emailWebhookUrl}</pre>
+                </div>
+              )}
+            </>
+          )}
+          {emailError && (
+            <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', ...errorText, marginTop: 10 }}>
+              {emailError}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div style={{ background: 'var(--panel)', border: '1px dashed var(--line-2)', borderRadius: 'var(--r-md)', padding: 20 }}>
         <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-mute)', margin: '0 0 4px' }}>More channels coming soon</p>
-        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: 0 }}>Email and Slack are on the roadmap.</p>
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: 0 }}>Slack and WhatsApp are on the roadmap.</p>
       </div>
     </>
   )

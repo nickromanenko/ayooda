@@ -5,8 +5,9 @@ import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { encryptSecret, decryptSecret } from '../lib/crypto'
 import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
+import { assertValidApiKey } from '../lib/email/client'
 import { validateWidgetAppearance } from '../lib/channels/validate'
-import { DEFAULT_WIDGET_COLOR, DEFAULT_WIDGET_POSITION } from '@ayooda/shared'
+import { DEFAULT_WIDGET_COLOR, DEFAULT_WIDGET_POSITION, isEmailAddress } from '@ayooda/shared'
 import { canHideBranding } from '../lib/channels/branding'
 
 /**
@@ -28,7 +29,7 @@ const channelsCol = (workspaceId: string) =>
   adminDb.collection(`workspaces/${workspaceId}/channels`)
 
 /** This agent's channel of a given type, or null. */
-async function channelOfType(workspaceId: string, agentId: string, type: 'web_widget' | 'telegram') {
+async function channelOfType(workspaceId: string, agentId: string, type: 'web_widget' | 'telegram' | 'email') {
   const snap = await channelsCol(workspaceId)
     .where('agentId', '==', agentId)
     .where('type', '==', type)
@@ -53,7 +54,7 @@ async function agentIdentity(workspaceId: string, agentId: string) {
 }
 
 function strip(d: Record<string, unknown>) {
-  const { botTokenEnc, webhookSecret, ...safe } = d
+  const { botTokenEnc, resendApiKeyEnc, webhookSecret, ...safe } = d
   return safe
 }
 
@@ -272,6 +273,61 @@ agentChannels.delete('/telegram', async (c) => {
     }
   }
   await mine.ref.delete()
+  return c.json({ ok: true })
+})
+
+/** POST /agents/:agentId/channels/email — connect an inbound-email mailbox to this agent. */
+agentChannels.post('/email', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
+
+  const body = await c.req.json<{ resendApiKey?: string; fromAddress?: string; inboxAddress?: string; webhookSecret?: string }>().catch(() => ({} as { resendApiKey?: string; fromAddress?: string; inboxAddress?: string; webhookSecret?: string }))
+  const resendApiKey = body.resendApiKey?.trim()
+  const fromAddress = body.fromAddress?.trim().toLowerCase()
+  const inboxAddress = body.inboxAddress?.trim().toLowerCase()
+  const webhookSecret = body.webhookSecret?.trim()
+
+  if (!resendApiKey) return c.json({ error: 'resendApiKey is required' }, 400)
+  if (!fromAddress || !isEmailAddress(fromAddress)) return c.json({ error: 'A valid from address is required.' }, 400)
+  if (!inboxAddress || !isEmailAddress(inboxAddress)) return c.json({ error: 'A valid inbox address is required.' }, 400)
+  if (!webhookSecret) return c.json({ error: 'webhookSecret is required (copy the Resend webhook signing secret).' }, 400)
+
+  try {
+    await assertValidApiKey(resendApiKey)
+  } catch {
+    return c.json({ error: 'That Resend API key could not be verified.' }, 400)
+  }
+
+  const apiBase = process.env.API_PUBLIC_URL
+  if (!apiBase) return c.json({ error: 'Server not configured for webhooks (API_PUBLIC_URL)' }, 500)
+
+  // One mailbox per agent: reuse this agent's existing email doc if it has one.
+  const mine = await channelOfType(workspaceId, agentId, 'email')
+  const channelRef = mine ? mine.ref : channelsCol(workspaceId).doc()
+  const channelId = channelRef.id
+
+  await channelRef.set({
+    workspaceId,
+    id: channelId,
+    type: 'email',
+    agentId,
+    resendApiKeyEnc: encryptSecret(resendApiKey),
+    webhookSecret,
+    config: { fromAddress, inboxAddress },
+    isActive: true,
+    createdAt: mine?.data().createdAt ?? new Date(),
+  })
+
+  return c.json({ channelId, webhookUrl: `${apiBase}/email/webhook/${channelId}`, fromAddress })
+})
+
+/** DELETE /agents/:agentId/channels/email — disconnect this agent's mailbox. */
+agentChannels.delete('/email', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
+
+  const mine = await channelOfType(workspaceId, agentId, 'email')
+  if (mine) await mine.ref.delete()
   return c.json({ ok: true })
 })
 

@@ -2,13 +2,15 @@
 
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, MessageSquare, Zap, Coins, BookOpen } from 'lucide-react'
+import { Loader2, MessageSquare, Zap, Coins, BookOpen, Star, Download } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { Loading } from '@/components/dashboard/Loading'
 import { card, label, muted } from '@/components/dashboard/ui'
 
 interface Usage {
   conversations: { total: number; thisPeriod: number | null; resolved: number; automated: number; handedOff: number; waiting: number }
   automationRate: number | null
+  csat: { average: number | null; count: number; distribution: [number, number, number, number, number] }
   messages: { count: number | null; tokens: number | null; trackedSince: string | null }
   knowledge: { docs: number; indexed: number; chunks: number }
   channels: string[]
@@ -67,6 +69,7 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
   const [u, setU] = useState<Usage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -81,8 +84,27 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
     return () => { cancelled = true }
   }, [agentId])
 
+  async function exportCsv() {
+    setExporting(true)
+    try {
+      const res = await apiRequest(`/agents/${agentId}/usage/export`)
+      if (!res.ok) throw new Error('export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `agent-${agentId}-conversations.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError('Could not export conversations.')
+    } finally { setExporting(false) }
+  }
+
   if (loading) {
-    return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-mute)' }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</div>
+    return <Loading />
   }
   if (!u) return <p style={{ ...muted, color: '#f87171' }}>{error}</p>
 
@@ -98,9 +120,21 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
 
   return (
     <>
-      <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 20 }}>
-        What this agent has handled, and what it&apos;s costing you.
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
+        <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: 0 }}>
+          What this agent has handled, and what it&apos;s costing you.
+        </p>
+        <button
+          type="button"
+          onClick={() => void exportCsv()}
+          disabled={exporting}
+          className="btn btn-ghost"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, flexShrink: 0 }}
+        >
+          {exporting ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={13} />}
+          Export CSV
+        </button>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 20 }}>
         <Tile
@@ -115,6 +149,12 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
           sub={u.automationRate !== null ? 'resolved without a human' : 'nothing resolved yet'}
         />
         <Tile
+          icon={Star} accent="var(--accent)"
+          value={u.csat.average !== null ? `${u.csat.average.toFixed(1)}` : '—'}
+          name="Avg CSAT"
+          sub={u.csat.count > 0 ? `${nf.format(u.csat.count)} scored` : 'nothing scored yet'}
+        />
+        <Tile
           icon={Coins} accent="var(--accent)"
           value={tokensTracked ? nf.format(u.messages.tokens!) : '—'}
           name="Tokens used"
@@ -126,6 +166,21 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
           sub={`${nf.format(u.knowledge.chunks)} chunks`}
         />
       </div>
+
+      {/* CSAT distribution */}
+      {u.csat.count > 0 && (
+        <div style={card}>
+          <p style={label}>CSAT distribution</p>
+          <Bar
+            total={u.csat.count}
+            segments={[5, 4, 3, 2, 1].map((score, i) => ({
+              label: `${score}★`,
+              value: u.csat.distribution[4 - i]!,
+              color: score >= 4 ? 'var(--mint)' : score === 3 ? 'var(--accent)' : 'var(--line-2)',
+            }))}
+          />
+        </div>
+      )}
 
       {/* How conversations ended */}
       <div style={card}>

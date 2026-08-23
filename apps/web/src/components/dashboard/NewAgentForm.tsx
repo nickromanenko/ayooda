@@ -11,33 +11,7 @@ import {
   type AgentDoc,
 } from '@ayooda/shared'
 import AgentAvatar from './AgentAvatar'
-
-const card: React.CSSProperties = {
-  background: 'var(--panel)',
-  border: '1px solid var(--line)',
-  borderRadius: 'var(--r-md)',
-  padding: 24,
-  marginBottom: 20,
-}
-const label: React.CSSProperties = {
-  fontSize: 12,
-  fontFamily: 'var(--font-mono)',
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: 'var(--ink-mute)',
-  marginBottom: 12,
-}
-const input: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 14px',
-  borderRadius: 'var(--r-sm)',
-  border: '1px solid var(--line-2)',
-  background: 'var(--bg-2)',
-  color: 'var(--ink)',
-  fontSize: 14,
-  outline: 'none',
-  boxSizing: 'border-box',
-}
+import { card, label, input } from './ui'
 
 /**
  * Creates an agent only on submit. The chosen logo is held in memory and
@@ -211,7 +185,7 @@ export default function NewAgentForm({
 
       <div style={{ display: 'flex', gap: 10 }}>
         <button type="submit" className="btn btn-primary" disabled={busy} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {busy && <Loader2 size={14} className="spin" />}
+          {busy && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
           {busy ? 'Creating…' : 'Create agent'}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>

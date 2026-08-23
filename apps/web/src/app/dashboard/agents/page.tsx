@@ -3,11 +3,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Plus, ChevronRight } from 'lucide-react'
+import { Plus, ChevronRight } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import type { AgentDoc } from '@ayooda/shared'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import NewAgentForm from '@/components/dashboard/NewAgentForm'
+import { Loading } from '@/components/dashboard/Loading'
 import { card, label, muted } from '@/components/dashboard/ui'
 
 export default function AgentsPage() {
@@ -32,7 +33,7 @@ export default function AgentsPage() {
   }
 
   if (loading) {
-    return <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-mute)' }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</div>
+    return <Loading />
   }
 
   return (

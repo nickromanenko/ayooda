@@ -37,6 +37,7 @@ export interface ReadyTurn {
   llmModel: string
   tools: StoredTool[]
   skillTools: ToolSet
+  mcpTools: ToolSet
   persist: (reply: string, promptTokens: number, completionTokens: number) => Promise<string>
 }
 
@@ -250,7 +251,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   }
   if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
 
-  const { tools, skillTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
+  const { tools, skillTools, mcpTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
     const messageRef = await messagesRef.add({
@@ -294,6 +295,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     llmModel,
     tools,
     skillTools,
+    mcpTools,
     persist,
   }
 }
