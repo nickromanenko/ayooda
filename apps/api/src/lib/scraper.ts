@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-interface IngestionJobParams {
+export interface IngestionJobParams {
   workspaceId: string
   docId: string
   docType: 'webpage' | 'file'
@@ -22,16 +22,13 @@ interface IngestionJobParams {
  * Local dev (SCRAPER_JOB_URL is empty):
  *   Spawns the scraper TypeScript entry point directly with Bun (fire-and-forget).
  */
-export function triggerIngestion(params: IngestionJobParams): void {
+export function triggerIngestion(params: IngestionJobParams): Promise<void> {
   const jobUrl = process.env.SCRAPER_JOB_URL
 
   if (jobUrl) {
-    triggerCloudRunJob(jobUrl, params).catch((err) =>
-      console.error('[scraper-trigger] Cloud Run trigger failed:', err),
-    )
-  } else {
-    triggerLocal(params)
+    return triggerCloudRunJob(jobUrl, params)
   }
+  return triggerLocal(params)
 }
 
 /**
@@ -98,7 +95,7 @@ export async function triggerCloudRunJob(
   }
 }
 
-function triggerLocal(params: IngestionJobParams): void {
+function triggerLocal(params: IngestionJobParams): Promise<void> {
   // Resolve path to the scraper entry relative to this file's location:
   //   apps/api/src/lib/scraper.ts  →  ../../../ (up 3)  →  apps/
   //   then scraper/src/index.ts
@@ -121,11 +118,16 @@ function triggerLocal(params: IngestionJobParams): void {
   // Local dev only (triggerLocal runs when SCRAPER_JOB_URL is empty), so surface
   // the scraper's stderr in the API console and log spawn failures — otherwise a
   // broken spawn leaves the doc stuck at "pending" with no clue why.
-  const child = spawn('bun', ['run', scraperEntry], {
-    env,
-    detached: true,
-    stdio: ['ignore', 'ignore', 'inherit'],
+  return new Promise((resolve, reject) => {
+    const child = spawn('bun', ['run', scraperEntry], {
+      env,
+      detached: true,
+      stdio: ['ignore', 'ignore', 'inherit'],
+    })
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
+    child.once('error', reject)
   })
-  child.on('error', (err) => console.error('[scraper-trigger] failed to spawn local scraper:', err))
-  child.unref()
 }

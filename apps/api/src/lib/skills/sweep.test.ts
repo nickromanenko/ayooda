@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { idleCutoff, idleFloor, secretMatches, purgeFacts, IDLE_CLOSE_MINUTES, IDLE_LOOKBACK_HOURS, SWEEP_BATCH } from './sweep'
+import { idleCutoff, idleFloor, isKnowledgeSyncClaimable, secretMatches, purgeFacts, IDLE_CLOSE_MINUTES, IDLE_LOOKBACK_HOURS, SWEEP_BATCH } from './sweep'
 import type { VisitorMemoryFact } from '@ayooda/shared'
 
 const now = new Date('2026-08-14T12:00:00Z')
@@ -64,5 +64,33 @@ describe('purgeFacts', () => {
 describe('batch size', () => {
   test('is bounded so a run has predictable cost', () => {
     expect(SWEEP_BATCH).toBe(100)
+  })
+})
+
+describe('automatic knowledge sync claims', () => {
+  const due = new Date('2026-08-14T11:00:00Z')
+  const base = {
+    type: 'webpage', autoSyncEnabled: true, syncIntervalHours: 24,
+    nextSyncAt: due, status: 'indexed',
+  }
+
+  test('claims an enabled webpage when it is due', () => {
+    expect(isKnowledgeSyncClaimable(base, now)).toBe(true)
+  })
+
+  test('does not claim disabled, file, future, or unsupported schedules', () => {
+    expect(isKnowledgeSyncClaimable({ ...base, autoSyncEnabled: false }, now)).toBe(false)
+    expect(isKnowledgeSyncClaimable({ ...base, type: 'file' }, now)).toBe(false)
+    expect(isKnowledgeSyncClaimable({ ...base, nextSyncAt: new Date('2026-08-15T00:00:00Z') }, now)).toBe(false)
+    expect(isKnowledgeSyncClaimable({ ...base, syncIntervalHours: 12 }, now)).toBe(false)
+  })
+
+  test('respects an active lease but recovers a stale one', () => {
+    expect(isKnowledgeSyncClaimable({
+      ...base, status: 'processing', syncStartedAt: new Date('2026-08-14T11:30:01Z'),
+    }, now)).toBe(false)
+    expect(isKnowledgeSyncClaimable({
+      ...base, status: 'processing', syncStartedAt: new Date('2026-08-14T11:00:00Z'),
+    }, now)).toBe(true)
   })
 })

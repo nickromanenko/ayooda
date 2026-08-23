@@ -794,6 +794,27 @@ pnpm dev:web
 The API should be running at `http://localhost:3001/health` → `{ "ok": true }`
 The web app should be running at `http://localhost:3000`
 
+### Development login helper
+
+To open the local dashboard as an existing Firebase Authentication user without
+entering credentials, run from the repo root:
+
+```bash
+pnpm dev:login -- developer@example.com
+```
+
+The helper creates a short-lived Firebase custom token, places it in the URL
+fragment (so it is not sent to the Next.js server), and opens the local app. The
+login page removes the fragment immediately and creates the same Firebase and
+session-cookie state as a normal sign-in. It refuses production and non-local
+URLs. Set `DEV_AUTH_USER` in `apps/web/.env.local` to omit the email argument,
+or add `--from=/dashboard/agents` to choose the destination. Use `--print` only
+when you need to open the sensitive one-time URL manually.
+
+This requires `FIREBASE_SERVICE_ACCOUNT_KEY` in `apps/web/.env.local` or working
+Google Application Default Credentials, and the target Firebase user must
+already exist.
+
 ---
 
 ## Step 11 — Firebase project wiring

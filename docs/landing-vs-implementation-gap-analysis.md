@@ -90,10 +90,11 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Now (2026-08-23):** every response records a normalized **knowledge confidence** from its strongest retrieval match. Per-agent atomic counters and daily buckets power a 30-day trend, average, and low-confidence rate; conversation-level values are included in CSV exports. The dashboard explicitly distinguishes retrieval support from guaranteed answer correctness.
 - **Status:** ✅ Implemented. The hero's exact "1.8s / 00:04.1" values remain illustrative rather than live workspace data. · **Priority:** P1 (resolved)
 
-### 🟠 GAP-06 — Auto-syncing knowledge
+### ✅ GAP-06 — Auto-syncing knowledge now ships for webpages
 - **Claim:** *"Ayooda auto-syncs with helpdesk articles, docs, and product changes — no more stale answers."*
-- **Reality:** Ingestion is manual (paste URL / upload), re-index is manual (`POST /:id/reindex`). No scheduled/push sync.
-- **Status:** 🟠 Partial · **Priority:** P2
+- **Was:** Ingestion was manual (paste URL / upload) and re-index required `POST /:id/reindex`.
+- **Now (2026-08-23):** webpage sources can be refreshed daily, weekly, or monthly from the Knowledge dashboard. The existing internal sweep claims due sources transactionally, launches re-ingestion, prevents duplicate jobs with a one-hour recovery lease, and retries failures with bounded backoff. The dashboard exposes next/last sync state, errors, and a manual **Sync now** action. Uploaded files remain manual because their stored content is immutable; replacing a file requires a new upload.
+- **Status:** ✅ Implemented for webpage sources · **Priority:** P2 (resolved)
 
 ### 🟠 GAP-07 — "Test before you ship" sandbox
 - **Claim:** *"Use the sandbox — real chat widget, fake traffic — to stress-test every flow."*
@@ -136,7 +137,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | 4 | **Email channel** (closes GAP-04 highest-value piece) | ✅ Done | P1 |
 | 5 | **Visual workflow builder** or honest copy (GAP-03) | 🟠 | P1 |
 | 6 | **BYO LLM / custom endpoint** (GAP-08) | 🔴 | P2 |
-| 7 | **Auto-sync knowledge** (GAP-06) | 🟠 | P2 |
+| 7 | **Auto-sync knowledge** (GAP-06) | ✅ Done | P2 |
 | 8 | **Sandbox/test mode** (GAP-07) | 🟠 | P2 |
 | 9 | **SSO / EU hosting** (GAP-09) | 🔴 | P2 |
 

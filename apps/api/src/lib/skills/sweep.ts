@@ -1,6 +1,14 @@
 import { timingSafeEqual } from 'node:crypto'
-import type { PlanTier, VisitorMemoryFact } from '@ayooda/shared'
+import {
+  KNOWLEDGE_SYNC_LEASE_MINUTES,
+  isKnowledgeSyncInterval,
+  knowledgeSyncLeaseUntil,
+  knowledgeSyncRetryAt,
+  type PlanTier,
+  type VisitorMemoryFact,
+} from '@ayooda/shared'
 import { adminDb } from '../firebase-admin'
+import { triggerIngestion } from '../scraper'
 import { resolveGatewayKey } from '../llm/resolve'
 import { liveFacts, nextExpiry } from './memory'
 import { loadEnabledSkills } from './registry'
@@ -45,10 +53,33 @@ export function purgeFacts(
   return { facts: kept, nextExpiryAt: nextExpiry(kept) }
 }
 
-export interface SweepReport { closed: number; scored: number; purged: number; failed: number }
+export interface SweepReport { closed: number; scored: number; purged: number; synced: number; failed: number }
+
+type DateLike = Date | { toDate?: () => Date } | null | undefined
+
+function asDate(value: DateLike): Date | null {
+  if (value instanceof Date) return value
+  return value?.toDate?.() ?? null
+}
+
+export function isKnowledgeSyncClaimable(data: Record<string, any>, now: Date): boolean {
+  if (data.type !== 'webpage' || data.autoSyncEnabled !== true || !isKnowledgeSyncInterval(data.syncIntervalHours)) {
+    return false
+  }
+  const dueAt = asDate(data.nextSyncAt)
+  if (!dueAt || dueAt.getTime() > now.getTime()) return false
+
+  if (data.status === 'pending' || data.status === 'processing') {
+    const startedAt = asDate(data.syncStartedAt)
+    if (!startedAt) return false
+    const leaseMs = KNOWLEDGE_SYNC_LEASE_MINUTES * 60_000
+    return startedAt.getTime() + leaseMs <= now.getTime()
+  }
+  return true
+}
 
 export async function runSweep(now = new Date()): Promise<SweepReport> {
-  const report: SweepReport = { closed: 0, scored: 0, purged: 0, failed: 0 }
+  const report: SweepReport = { closed: 0, scored: 0, purged: 0, synced: 0, failed: 0 }
 
   // 1. Close idle bot conversations. The query itself (not just each document update) is
   // wrapped so a transient failure — e.g. the composite index still building right after
@@ -135,6 +166,80 @@ export async function runSweep(now = new Date()): Promise<SweepReport> {
     }
   } catch (err) {
     console.warn('[sweep] purge query failed:', err)
+    report.failed++
+  }
+
+  // 4. Refresh due webpage knowledge. A transaction claims each source and writes a
+  // one-hour lease before the external job is launched, preventing overlapping sweeps
+  // from starting duplicate crawls while allowing abandoned jobs to be recovered.
+  try {
+    const due = await adminDb
+      .collectionGroup('knowledge')
+      .where('autoSyncEnabled', '==', true)
+      .where('nextSyncAt', '<=', now)
+      .limit(SWEEP_BATCH)
+      .get()
+
+    for (const doc of due.docs) {
+      try {
+        const source = await adminDb.runTransaction(async (tx) => {
+          const fresh = await tx.get(doc.ref)
+          if (!fresh.exists || !isKnowledgeSyncClaimable(fresh.data()!, now)) return null
+          const url = fresh.data()!.source
+          if (typeof url !== 'string' || !url) return null
+          tx.update(doc.ref, {
+            status: 'pending',
+            chunkCount: 0,
+            errorMessage: null,
+            syncError: null,
+            syncStartedAt: now,
+            nextSyncAt: knowledgeSyncLeaseUntil(now),
+          })
+          return url
+        })
+        if (!source) continue
+
+        // workspaces/{workspaceId}/agents/{agentId}/knowledge/{docId}
+        const agentRef = doc.ref.parent.parent
+        const workspaceRef = agentRef?.parent.parent
+        if (!agentRef || !workspaceRef) throw new Error(`Unexpected knowledge path: ${doc.ref.path}`)
+        const agentSnap = await agentRef.get()
+        if (!agentSnap.exists) throw new Error(`Agent not found for ${doc.ref.path}`)
+        const namespace = String(agentSnap.data()?.knowledgeNamespace ?? `ws_${workspaceRef.id}`)
+
+        await triggerIngestion({
+          workspaceId: workspaceRef.id,
+          agentId: agentRef.id,
+          docId: doc.id,
+          docType: 'webpage',
+          url: source,
+          namespace,
+        })
+        report.synced++
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        console.warn('[sweep] knowledge sync failed:', doc.ref.path, err)
+        await adminDb.runTransaction(async (tx) => {
+          const fresh = await tx.get(doc.ref)
+          if (!fresh.exists) return
+          const data = fresh.data()!
+          const failures = Math.max(0, Number(data.syncFailures) || 0) + 1
+          tx.update(doc.ref, {
+            status: 'error',
+            errorMessage: message,
+            syncError: message,
+            syncFailures: failures,
+            syncStartedAt: null,
+            nextSyncAt: data.autoSyncEnabled === true && isKnowledgeSyncInterval(data.syncIntervalHours)
+              ? knowledgeSyncRetryAt(now, failures)
+              : null,
+          })
+        }).catch(() => {})
+        report.failed++
+      }
+    }
+  } catch (err) {
+    console.warn('[sweep] knowledge-sync query failed:', err)
     report.failed++
   }
 

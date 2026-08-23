@@ -1,6 +1,16 @@
 import type { Subscription, PlanTier } from './plans'
 import type { SkillId, SkillConfig } from './skills'
 
+export {
+  KNOWLEDGE_SYNC_INTERVAL_HOURS,
+  KNOWLEDGE_SYNC_LEASE_MINUTES,
+  isKnowledgeSyncInterval,
+  knowledgeSyncLeaseUntil,
+  knowledgeSyncRetryAt,
+  nextKnowledgeSyncAt,
+} from './knowledge-sync'
+export type { KnowledgeSyncIntervalHours } from './knowledge-sync'
+
 // LLM Providers (Claude, OpenAI, Gemini)
 export type LLMProvider = 'gemini' | 'claude' | 'openai'
 
@@ -122,6 +132,13 @@ export interface KnowledgeDoc {
   errorMessage: string | null
   createdAt: Date
   indexedAt: Date | null
+  autoSyncEnabled?: boolean
+  syncIntervalHours?: import('./knowledge-sync').KnowledgeSyncIntervalHours | null
+  lastSyncedAt?: Date | null
+  nextSyncAt?: Date | null
+  syncStartedAt?: Date | null
+  syncFailures?: number
+  syncError?: string | null
 }
 
 export interface WidgetConfig {

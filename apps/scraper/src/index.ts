@@ -17,6 +17,11 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { Pinecone } from '@pinecone-database/pinecone'
 import { GoogleGenerativeAI, type EmbedContentRequest } from '@google/generative-ai'
+import {
+  isKnowledgeSyncInterval,
+  knowledgeSyncRetryAt,
+  nextKnowledgeSyncAt,
+} from '@ayooda/shared'
 import { extractText } from './extract'
 
 // ---------------------------------------------------------------------------
@@ -302,24 +307,52 @@ async function main() {
     console.log(`[scraper] Embedding ${allChunks.length} chunks…`)
     const embeddings = await embedBatch(allChunks, process.env.GEMINI_API_KEY!)
 
-    // Upsert to Pinecone
-    console.log(`[scraper] Upserting to Pinecone…`)
+    // Replace vectors only after crawling and embedding succeed, so an automatic refresh
+    // keeps serving the previous index for almost the entire job instead of going dark.
+    console.log(`[scraper] Replacing Pinecone vectors…`)
     const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! })
+    await pinecone.index(process.env.PINECONE_INDEX!).namespace(namespace).deleteMany({ docId })
     await upsertVectors(pinecone, namespace, workspaceId, agentId, docId, source, allChunks, embeddings)
 
-    // Mark as indexed
+    // Mark as indexed and schedule the next refresh from completion time. Reading the
+    // current document here means interval changes made while a crawl was running win.
+    const completedAt = new Date()
+    const current = (await docRef.get()).data()
+    const interval = current?.syncIntervalHours
+    const autoSyncEnabled = docType === 'webpage' && current?.autoSyncEnabled === true && isKnowledgeSyncInterval(interval)
     await docRef.update({
       status: 'indexed',
       chunkCount: allChunks.length,
       indexedAt: FieldValue.serverTimestamp(),
       errorMessage: null,
+      ...(docType === 'webpage' ? {
+        lastSyncedAt: completedAt,
+        nextSyncAt: autoSyncEnabled ? nextKnowledgeSyncAt(completedAt, interval) : null,
+        syncStartedAt: null,
+        syncFailures: 0,
+        syncError: null,
+      } : {}),
     })
 
     console.log(`[scraper] Done — ${allChunks.length} chunks indexed`)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[scraper] Failed:', message)
-    await docRef.update({ status: 'error', errorMessage: message }).catch(() => {})
+    const failedAt = new Date()
+    const current = await docRef.get().then((snap) => snap.data()).catch(() => undefined)
+    const interval = current?.syncIntervalHours
+    const autoSyncEnabled = docType === 'webpage' && current?.autoSyncEnabled === true && isKnowledgeSyncInterval(interval)
+    const failureCount = Math.max(0, Number(current?.syncFailures) || 0) + 1
+    await docRef.update({
+      status: 'error',
+      errorMessage: message,
+      ...(docType === 'webpage' ? {
+        syncStartedAt: null,
+        syncFailures: failureCount,
+        syncError: message,
+        nextSyncAt: autoSyncEnabled ? knowledgeSyncRetryAt(failedAt, failureCount) : null,
+      } : {}),
+    }).catch(() => {})
     process.exit(1)
   }
 }

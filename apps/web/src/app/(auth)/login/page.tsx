@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   type AuthCredential,
 } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
@@ -81,9 +82,38 @@ function LoginForm() {
     null | { email: string; pendingCred: AuthCredential }
   >(null)
   const [linkPassword, setLinkPassword] = useState('')
+  const devLoginStarted = useRef(false)
 
   const redirectTo = searchParams.get('from') ?? '/dashboard'
   const resetSuccess = searchParams.get('reset') === 'success'
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || devLoginStarted.current) return
+
+    const fragment = new URLSearchParams(window.location.hash.slice(1))
+    const token = fragment.get('devToken')
+    if (!token) return
+
+    devLoginStarted.current = true
+    const devDestination = fragment.get('from')
+    // Remove the credential before making any network requests so it is not left in
+    // browser history, screenshots, or copied URLs.
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    setLoading(true)
+    setError('')
+
+    void signInWithCustomToken(auth, token)
+      .then(async (result) => {
+        await createSession(result.user)
+        router.replace(devDestination?.startsWith('/') && !devDestination.startsWith('//')
+          ? devDestination
+          : redirectTo)
+      })
+      .catch((err: unknown) => {
+        setError(`Development sign-in failed: ${friendlyError(err)}`)
+        setLoading(false)
+      })
+  }, [createSession, redirectTo, router])
 
   async function handleGoogleSignIn() {
     setLoading(true)

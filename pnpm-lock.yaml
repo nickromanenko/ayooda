@@ -125,6 +125,9 @@ importers:
         specifier: ^2.6.0
         version: 2.6.1
     devDependencies:
+      '@next/env':
+        specifier: 16.2.3
+        version: 16.2.3
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.2.2

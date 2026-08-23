@@ -14,6 +14,28 @@ interface KnowledgeDoc {
   status: KnowledgeDocStatus
   chunkCount: number
   errorMessage: string | null
+  autoSyncEnabled?: boolean
+  syncIntervalHours?: 24 | 168 | 720 | null
+  lastSyncedAt?: TimestampValue
+  nextSyncAt?: TimestampValue
+  syncError?: string | null
+}
+
+type TimestampValue = string | { _seconds?: number; seconds?: number } | null
+
+const SYNC_INTERVAL_LABELS: Record<24 | 168 | 720, string> = {
+  24: 'Daily',
+  168: 'Weekly',
+  720: 'Monthly',
+}
+
+function formatTimestamp(value: TimestampValue | undefined): string | null {
+  if (!value) return null
+  const date = typeof value === 'string'
+    ? new Date(value)
+    : new Date((value._seconds ?? value.seconds ?? 0) * 1000)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
 const STATUS_CONFIG: Record<KnowledgeDocStatus, { icon: React.ReactNode; label: string; style: React.CSSProperties }> = {
@@ -53,6 +75,8 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
   const [urlError, setUrlError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [reindexingId, setReindexingId] = useState<string | null>(null)
+  const [savingSyncId, setSavingSyncId] = useState<string | null>(null)
+  const [syncConfigError, setSyncConfigError] = useState('')
 
   const fetchDocs = useCallback(async () => {
     try {
@@ -122,11 +146,38 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
     }
   }
 
+  async function handleSyncInterval(id: string, value: string) {
+    setSavingSyncId(id)
+    setSyncConfigError('')
+    try {
+      const intervalHours = value ? Number(value) : null
+      const res = await apiRequest(`/agents/${agentId}/knowledge/${id}/sync`, {
+        method: 'PATCH',
+        body: JSON.stringify({ intervalHours }),
+      })
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string }
+        throw new Error(data.error ?? 'Failed to update automatic syncing')
+      }
+      await fetchDocs()
+    } catch (err) {
+      setSyncConfigError(err instanceof Error ? err.message : 'Failed to update automatic syncing')
+    } finally {
+      setSavingSyncId(null)
+    }
+  }
+
   return (
     <>
       <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 20 }}>
-        Pages and documents this agent can reference when answering questions.
+        Pages and documents this agent can reference when answering questions. Website sources can refresh automatically.
       </p>
+
+      {syncConfigError && (
+        <p role="alert" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#f87171', margin: '-8px 0 14px' }}>
+          <AlertCircle size={12} /> {syncConfigError}
+        </p>
+      )}
 
       {/* Add URL */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 20, marginBottom: 20 }}>
@@ -194,7 +245,41 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                   {doc.status === 'error' && doc.errorMessage && (
                     <p style={{ fontSize: 11, color: '#f87171', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.errorMessage}</p>
                   )}
+                  {doc.type === 'webpage' && doc.autoSyncEnabled && doc.syncIntervalHours && (
+                    <p style={{ fontSize: 11, color: doc.syncError ? '#f87171' : 'var(--ink-mute)', marginTop: 2 }}>
+                      Auto-sync {SYNC_INTERVAL_LABELS[doc.syncIntervalHours].toLowerCase()}
+                      {formatTimestamp(doc.nextSyncAt) ? ` · Next ${formatTimestamp(doc.nextSyncAt)}` : ''}
+                      {doc.syncError ? ` · Last attempt failed` : ''}
+                    </p>
+                  )}
+                  {doc.type === 'webpage' && !doc.autoSyncEnabled && formatTimestamp(doc.lastSyncedAt) && (
+                    <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+                      Last synced {formatTimestamp(doc.lastSyncedAt)}
+                    </p>
+                  )}
                 </div>
+                {doc.type === 'webpage' && (
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <select
+                      aria-label={`Automatic sync interval for ${doc.source}`}
+                      title="Automatic sync interval"
+                      value={doc.autoSyncEnabled && doc.syncIntervalHours ? String(doc.syncIntervalHours) : ''}
+                      disabled={savingSyncId === doc.id}
+                      onChange={(e) => void handleSyncInterval(doc.id, e.target.value)}
+                      style={{
+                        minWidth: 92, padding: '5px 24px 5px 8px', borderRadius: 8,
+                        border: '1px solid var(--line-2)', background: 'var(--bg-2)',
+                        color: 'var(--ink-dim)', fontSize: 11, fontFamily: 'var(--font-mono)',
+                        opacity: savingSyncId === doc.id ? 0.55 : 1,
+                      }}
+                    >
+                      <option value="">Auto-sync off</option>
+                      <option value="24">Daily</option>
+                      <option value="168">Weekly</option>
+                      <option value="720">Monthly</option>
+                    </select>
+                  </div>
+                )}
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, flexShrink: 0, ...cfg.style }}>
                   {cfg.icon} {cfg.label}
                 </span>
@@ -206,7 +291,8 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                     style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', opacity: reindexingId === doc.id ? 0.4 : 1, transition: 'color .15s' }}
                     onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
                     onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-mute)')}
-                    aria-label="Re-index"
+                    aria-label={doc.type === 'webpage' ? 'Sync now' : 'Re-index'}
+                    title={doc.type === 'webpage' ? 'Sync now' : 'Re-index'}
                   >
                     {reindexingId === doc.id
                       ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
