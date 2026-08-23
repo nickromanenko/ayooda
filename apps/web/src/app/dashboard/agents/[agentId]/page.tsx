@@ -4,10 +4,11 @@ import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Star, Trash2, MessagesSquare } from 'lucide-react'
-import { LLM_MODELS, validateAgentImage, type AgentDoc } from '@ayooda/shared'
+import { validateAgentImage, type AgentDoc } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import { Loading } from '@/components/dashboard/Loading'
+import ModelPicker from '@/components/dashboard/ModelPicker'
 import { card, label, input, muted, errorText } from '@/components/dashboard/ui'
 
 export default function AgentInfoPage({ params }: { params: Promise<{ agentId: string }> }) {
@@ -136,9 +137,7 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
         />
 
         <p style={{ ...label, marginTop: 16 }}>Model</p>
-        <select value={agent.llmModel} onChange={(e) => patch({ llmModel: e.target.value })} style={input}>
-          {LLM_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label} — {m.description}</option>)}
-        </select>
+        <ModelPicker agentId={agentId} value={agent.llmModel} onChange={(llmModel) => patch({ llmModel })} />
 
         <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
           <button type="button" onClick={() => void save()} disabled={saving || !agent.name.trim()} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: saving || !agent.name.trim() ? 0.6 : 1 }}>

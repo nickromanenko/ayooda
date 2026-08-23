@@ -21,6 +21,24 @@ export interface LLMModel {
   description: string
 }
 
+export interface GatewayModelInfo {
+  id: string
+  name: string
+  description: string
+  provider: string
+  pricing: { input: string; output: string } | null
+  contextWindow: number | null
+  maxOutputTokens: number | null
+  recommended: boolean
+}
+
+export interface GatewayModelCatalog {
+  models: GatewayModelInfo[]
+  dynamic: boolean
+  fetchedAt: string | null
+  warning?: string
+}
+
 // OpenRouter slugs confirmed live against https://openrouter.ai/api/v1/models on 2026-07-12.
 export const LLM_MODELS: readonly LLMModel[] = [
   { provider: 'gemini', id: 'google/gemini-2.5-flash', label: 'Gemini Flash', description: 'Fast · Best for most cases' },

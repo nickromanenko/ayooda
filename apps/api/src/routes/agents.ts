@@ -6,7 +6,8 @@ import { namespaceFor } from '../lib/pinecone'
 import { agentNamespace, agentDeleteGuard } from '../lib/agents/agent-helpers'
 import { encryptSecret } from '../lib/crypto'
 import { gatewayKeyStatus, parseGatewayKeyBody, testGatewayKey } from '../lib/llm/gateway-key'
-import { LLM_MODELS, agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type WorkspaceRole } from '@ayooda/shared'
+import { loadGatewayModelCatalog, recommendedGatewayModels, validateGatewayModelSelection } from '../lib/llm/model-catalog'
+import { agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type GatewayModelCatalog, type WorkspaceRole } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
 agents.use('*', requireAuth)
@@ -73,7 +74,10 @@ agents.post('/', requireOwner, async (c) => {
   const body = await c.req.json<{ name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string }>().catch(() => ({} as { name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string }))
   const name = body.name?.trim()
   if (!name || name.length > 80) return c.json({ error: 'name is required (max 80 chars)' }, 400)
-  if (body.llmModel !== undefined && !LLM_MODELS.some((m) => m.id === body.llmModel)) return c.json({ error: 'Invalid llmModel' }, 400)
+  if (body.llmModel !== undefined) {
+    const model = await validateGatewayModelSelection(body.llmModel)
+    if (!model.ok) return c.json({ error: model.error }, model.reason === 'invalid' ? 400 : 503)
+  }
   if (body.role !== undefined && !isAgentRoleId(body.role)) return c.json({ error: 'Invalid role' }, 400)
 
   // The role's only job: seed the starting prompt so a freshly created agent is
@@ -104,6 +108,24 @@ agents.post('/', requireOwner, async (c) => {
   return c.json(toAgentDoc(ref.id, doc))
 })
 
+/** GET /agents/:id/models — live language-model catalog, with stable defaults on outage. */
+agents.get('/:id/models', async (c) => {
+  const gate = await editableAgent(c)
+  if (!gate.ok) return c.json(denied(gate.status), gate.status)
+  try {
+    return c.json(await loadGatewayModelCatalog())
+  } catch (err) {
+    console.warn('[agents] Gateway model catalog unavailable:', err)
+    const fallback: GatewayModelCatalog = {
+      models: recommendedGatewayModels(),
+      dynamic: false,
+      fetchedAt: null,
+      warning: 'Live model catalog is unavailable. Recommended models remain selectable.',
+    }
+    return c.json(fallback)
+  }
+})
+
 /** GET /agents/:id */
 agents.get('/:id', async (c) => {
   const gate = await editableAgent(c)
@@ -120,9 +142,11 @@ agents.put('/:id', async (c) => {
   const ws = c.get('workspaceId')
   const id = c.req.param('id')
   const ref = gate.ref
-  const snap = await ref.get()
   const body = await c.req.json<{ name?: string; photoURL?: string | null; description?: string; systemPrompt?: string; llmModel?: string; role?: string }>().catch(() => ({} as { name?: string; photoURL?: string | null; description?: string; systemPrompt?: string; llmModel?: string; role?: string }))
-  if (body.llmModel !== undefined && !LLM_MODELS.some((m) => m.id === body.llmModel)) return c.json({ error: 'Invalid llmModel' }, 400)
+  if (body.llmModel !== undefined && body.llmModel !== gate.data.llmModel) {
+    const model = await validateGatewayModelSelection(body.llmModel)
+    if (!model.ok) return c.json({ error: model.error }, model.reason === 'invalid' ? 400 : 503)
+  }
   if (body.role !== undefined && !isAgentRoleId(body.role)) return c.json({ error: 'Invalid role' }, 400)
 
   const update: Record<string, unknown> = { updatedAt: new Date() }
