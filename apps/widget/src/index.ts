@@ -45,6 +45,8 @@ interface ChatDone {
   conversationId: string
   messageId: string
   sources: Array<{ docId: string; source: string; score: number }>
+  status?: 'bot' | 'waiting' | 'human' | 'resolved'
+  workflowAction?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -604,6 +606,9 @@ class AyoodaWidget {
         },
         onDone: (done) => {
           this.renderedIds.add(done.messageId)
+          if (done.status === 'waiting') this.appendSystemNote('This conversation is waiting for a human')
+          else if (done.status === 'human') this.appendSystemNote('This conversation was assigned to a teammate')
+          else if (done.status === 'resolved') this.appendSystemNote('This conversation has been resolved')
           this.feedSuspended = false
           this.openFeed()
           if (!bubble) {

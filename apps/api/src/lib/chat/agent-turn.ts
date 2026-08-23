@@ -10,7 +10,7 @@ import { resolveAgentRec } from './agent-resolution'
 import { retrieveContext } from './retrieval'
 import { buildChatParams } from './prompt'
 import { loadTurnTools } from './turn-tools'
-import { evaluateRules } from '../workflow/engine'
+import { evaluateWorkflow } from '../workflow/engine'
 import { type ChannelType, type PlanTier, type WorkflowRule } from '@ayooda/shared'
 import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing/entitlement'
 import { emitOverageEvent } from '../billing/overage'
@@ -42,6 +42,8 @@ export interface ReadyTurn {
   tools: StoredTool[]
   skillTools: ToolSet
   mcpTools: ToolSet
+  /** Exact workflow responses emitted before the generated response. */
+  prefix: string
   persist: (reply: string, promptTokens: number, completionTokens: number) => Promise<string>
 }
 
@@ -49,10 +51,20 @@ export type PreparedTurn =
   | { kind: 'gated'; reason: GateReason }
   | { kind: 'error'; error: string }
   | { kind: 'silent' }
-  | { kind: 'escalated'; message: string; sources: Array<{ docId: string; source: string; score: number }> }
+  | {
+      kind: 'workflow'
+      action: WorkflowRule['action']['type']
+      status: 'bot' | 'waiting' | 'human' | 'resolved'
+      message: string
+      messageId: string
+      sources: Array<{ docId: string; source: string; score: number }>
+    }
   | ReadyTurn
 
 const DEFAULT_HANDOFF = 'Let me connect you with someone from our team.'
+const DEFAULT_ASSIGNED = 'I’m connecting you with the right person on our team.'
+const DEFAULT_ROUTED = 'I’m routing this conversation to the right specialist.'
+const DEFAULT_RESOLVED = 'This conversation has been resolved. Send another message if you still need help.'
 
 export type SilenceGate =
   | { kind: 'proceed' }
@@ -105,7 +117,20 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   if (!workspaceSnap.exists) return { kind: 'error', error: 'Workspace not found' }
   const workspaceData = workspaceSnap.data()!
 
-  const agentRec = await resolveAgentRec(workspaceId, agentId, workspaceData)
+  const convRef = adminDb.doc(isSandbox
+    ? sandboxSessionPath(workspaceId, sandbox.ownerUid, conversationId)
+    : `workspaces/${workspaceId}/conversations/${conversationId}`)
+  const convSnap = await convRef.get()
+  if (convSnap.exists && convSnap.data()!.visitorId !== visitorId) {
+    return { kind: 'error', error: 'Not found' }
+  }
+  // A workflow route persists on the conversation. Channel defaults only choose
+  // the agent for a new thread; later turns stay with the routed specialist.
+  const conversationAgentId = convSnap.data()?.agentId
+  const effectiveAgentId = !isSandbox && typeof conversationAgentId === 'string' && conversationAgentId
+    ? conversationAgentId
+    : agentId
+  const agentRec = await resolveAgentRec(workspaceId, effectiveAgentId, workspaceData)
 
   // Per-agent usage counters. resolveAgentRec falls back to a synthetic 'inline'
   // record for pre-migration workspaces with no agent doc — there is nothing to
@@ -136,13 +161,6 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     metadata: { workspaceId, channelId, channelType, llmModel, ...(isSandbox ? { surface: 'sandbox' } : {}) },
   })
 
-  const convRef = adminDb.doc(isSandbox
-    ? sandboxSessionPath(workspaceId, sandbox.ownerUid, conversationId)
-    : `workspaces/${workspaceId}/conversations/${conversationId}`)
-  const convSnap = await convRef.get()
-  if (convSnap.exists && convSnap.data()!.visitorId !== visitorId) {
-    return { kind: 'error', error: 'Not found' }
-  }
   const existingConversation = convSnap.data()
   const timingTracked = !convSnap.exists || !!existingConversation?.timingTrackedAt
   const conversationStartedAt = convSnap.exists ? timestampDate(existingConversation?.createdAt) : turnStartedAt
@@ -257,6 +275,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       updatedAt: at,
     }, { merge: true })
   }
+  let workflowPrefix = ''
 
   // Skill context (non-fatal): each skill's contributeContext hook is isolated in gatherContext,
   // but guard the call itself too — belt and braces against gatherContext ever rejecting.
@@ -271,42 +290,107 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     console.warn('[skills] gatherContext failed:', err)
   }
 
-  // Escalation rules (non-fatal): evaluate after RAG so low-confidence is known.
+  // Workflow rules (non-fatal): evaluate after RAG so low-confidence is known.
+  // Reply actions can continue into later rules or into the normal AI response;
+  // all other actions terminate this turn with a deterministic outcome.
   try {
     const rulesSnap = await adminDb.collection(`workspaces/${workspaceId}/agents/${agentRec.id}/workflowRules`).where('enabled', '==', true).get()
     const rules: WorkflowRule[] = rulesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<WorkflowRule, 'id'>) }))
-    const hit = evaluateRules(rules, {
+    const hits = evaluateWorkflow(rules, {
       messageLower: trimmed.toLowerCase(),
       botReplyCount: (convSnap.exists ? convSnap.data()!.botReplyCount : 0) ?? 0,
       sourceCount: sources.length,
       now: new Date(),
     })
-    if (hit) {
-      const handoff = hit.action.handoffMessage?.trim() || DEFAULT_HANDOFF
-      const repliedAt = new Date()
-      const firstReplyMs = timingTracked && typeof existingConversation?.firstReplyMs !== 'number'
-        ? elapsedMs(conversationStartedAt, repliedAt)
-        : null
-      await messagesRef.add({
-        role: 'assistant', content: handoff, createdAt: FieldValue.serverTimestamp(),
-        metadata: { escalated: true, knowledgeConfidence: responseConfidence },
-      })
-      await convRef.update({
-        status: 'waiting', escalationReason: hit.name, operatorId: null,
-        updatedAt: FieldValue.serverTimestamp(), lastMessage: handoff.slice(0, 200),
-        ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
-        ...confidenceConversationFields(repliedAt),
-      })
-      if (!isSandbox) {
-        await workspaceRef.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
-        await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2), ...confidenceAgentFields }).catch(() => {})
-        await recordConfidenceDay(repliedAt).catch(() => {})
+    if (hits.length) {
+      const replies = hits
+        .filter((rule) => rule.action.type === 'reply')
+        .map((rule) => rule.action.type === 'reply' ? rule.action.message.trim() : '')
+        .filter(Boolean)
+      const terminal = hits.at(-1)!
+
+      if (terminal.action.type === 'reply' && terminal.action.continue) {
+        workflowPrefix = replies.join('\n\n')
+      } else {
+        let status: 'bot' | 'waiting' | 'human' | 'resolved' = 'bot'
+        let terminalMessage = ''
+        const outcomeUpdate: Record<string, unknown> = {
+          workflowRuleId: terminal.id,
+          workflowRuleName: terminal.name,
+          workflowAction: terminal.action.type,
+        }
+        switch (terminal.action.type) {
+          case 'reply':
+            terminalMessage = terminal.action.message
+            break
+          case 'escalate':
+            status = 'waiting'
+            terminalMessage = terminal.action.handoffMessage?.trim() || DEFAULT_HANDOFF
+            outcomeUpdate.escalationReason = terminal.name
+            outcomeUpdate.operatorId = null
+            break
+          case 'assign_teammate':
+            status = 'human'
+            terminalMessage = terminal.action.message?.trim() || DEFAULT_ASSIGNED
+            outcomeUpdate.escalationReason = terminal.name
+            outcomeUpdate.operatorId = terminal.action.teammateUid
+            break
+          case 'route_agent':
+            terminalMessage = terminal.action.message?.trim() || DEFAULT_ROUTED
+            outcomeUpdate.agentId = terminal.action.agentId
+            outcomeUpdate.routedFromAgentId = agentRec.id
+            outcomeUpdate.routedAt = new Date()
+            break
+          case 'resolve': {
+            status = 'resolved'
+            terminalMessage = terminal.action.message?.trim() || DEFAULT_RESOLVED
+            const resolvedAt = new Date()
+            const resolutionMs = timingTracked ? elapsedMs(conversationStartedAt, resolvedAt) : null
+            outcomeUpdate.operatorId = null
+            outcomeUpdate.pendingPostProcess = true
+            outcomeUpdate.autoClosedAt = FieldValue.delete()
+            if (resolutionMs !== null) {
+              outcomeUpdate.resolvedAt = resolvedAt
+              outcomeUpdate.resolutionMs = resolutionMs
+            }
+            break
+          }
+        }
+
+        const message = [...replies.slice(0, terminal.action.type === 'reply' ? -1 : undefined), terminalMessage]
+          .filter(Boolean)
+          .join('\n\n')
+        const repliedAt = new Date()
+        const firstReplyMs = timingTracked && typeof existingConversation?.firstReplyMs !== 'number'
+          ? elapsedMs(conversationStartedAt, repliedAt)
+          : null
+        const workflowMessageRef = await messagesRef.add({
+          role: 'assistant', content: message, createdAt: FieldValue.serverTimestamp(),
+          metadata: {
+            workflowAction: terminal.action.type,
+            workflowRuleIds: hits.map((rule) => rule.id),
+            knowledgeConfidence: responseConfidence,
+          },
+        })
+        await convRef.update({
+          status,
+          ...outcomeUpdate,
+          updatedAt: FieldValue.serverTimestamp(), lastMessage: message.slice(0, 200),
+          ...(status === 'bot' ? { botReplyCount: FieldValue.increment(1) } : {}),
+          ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
+          ...confidenceConversationFields(repliedAt),
+        })
+        if (!isSandbox) {
+          await workspaceRef.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
+          await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2), ...confidenceAgentFields }).catch(() => {})
+          await recordConfidenceDay(repliedAt).catch(() => {})
+        }
+        trace.update({ output: { workflowAction: terminal.action.type, workflowRules: hits.map((rule) => rule.name) } })
+        return { kind: 'workflow', action: terminal.action.type, status, message, messageId: workflowMessageRef.id, sources }
       }
-      trace.update({ output: { escalated: hit.name } })
-      return { kind: 'escalated', message: handoff, sources }
     }
   } catch (err) {
-    console.warn('[agent-turn] escalation check failed:', err)
+    console.warn('[agent-turn] workflow check failed:', err)
   }
 
   // Key resolution
@@ -378,6 +462,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     tools,
     skillTools,
     mcpTools,
+    prefix: workflowPrefix,
     persist,
   }
 }

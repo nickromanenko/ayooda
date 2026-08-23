@@ -1,11 +1,12 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
-import { Loader2, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
+import { Loader2, Plus, Trash2, ArrowUp, ArrowDown, CheckCircle2, MessageSquareText, Route, UserRoundCheck, UserRoundPlus } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
-import type { WorkflowRule, WorkflowTrigger, TriggerType } from '@ayooda/shared'
+import type { WorkflowActionType, WorkflowRule, WorkflowTargets, WorkflowTrigger, TriggerType } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
+import styles from './page.module.css'
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
   ask_for_human: 'Visitor asks for a human',
@@ -15,6 +16,13 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
   off_hours: 'Outside business hours',
 }
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const ACTIONS: Array<{ type: WorkflowActionType; label: string; description: string; icon: typeof Route }> = [
+  { type: 'escalate', label: 'Human queue', description: 'Pause the agent and place the conversation in the shared queue.', icon: UserRoundPlus },
+  { type: 'assign_teammate', label: 'Assign teammate', description: 'Pause the agent and assign the conversation directly.', icon: UserRoundCheck },
+  { type: 'route_agent', label: 'Route to agent', description: 'Move future replies to another AI agent.', icon: Route },
+  { type: 'resolve', label: 'Resolve', description: 'Close the conversation and run normal post-processing.', icon: CheckCircle2 },
+  { type: 'reply', label: 'Send response', description: 'Send exact text, then stop or continue through the workflow.', icon: MessageSquareText },
+]
 
 interface Editor {
   id: string | null
@@ -28,14 +36,36 @@ interface Editor {
   days: number[]
   start: string
   end: string
-  handoffMessage: string
+  actionType: WorkflowActionType
+  actionMessage: string
+  continueProcessing: boolean
+  teammateUid: string
+  targetAgentId: string
 }
 
 function emptyEditor(): Editor {
   return {
     id: null, name: '', enabled: true, type: 'ask_for_human',
     phrases: 'human, agent, talk to a person', keywords: 'refund, cancel', count: 3,
-    timezone: 'UTC', days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00', handoffMessage: '',
+    timezone: 'UTC', days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00',
+    actionType: 'escalate', actionMessage: '', continueProcessing: false, teammateUid: '', targetAgentId: '',
+  }
+}
+
+function actionSummary(rule: WorkflowRule, targets: WorkflowTargets): string {
+  switch (rule.action.type) {
+    case 'escalate': return 'Send to human queue'
+    case 'resolve': return 'Resolve conversation'
+    case 'reply': return `Send response${rule.action.continue ? ' · then continue' : ' · then stop'}`
+    case 'assign_teammate': {
+      const teammateUid = rule.action.teammateUid
+      const teammate = targets.teammates.find((item) => item.uid === teammateUid)
+      return `Assign to ${teammate?.name || teammate?.email || 'teammate'}`
+    }
+    case 'route_agent': {
+      const agentId = rule.action.agentId
+      return `Route to ${targets.agents.find((item) => item.id === agentId)?.name ?? 'agent'}`
+    }
   }
 }
 
@@ -62,7 +92,12 @@ function editorToTrigger(e: Editor): WorkflowTrigger {
 function ruleToEditor(r: WorkflowRule): Editor {
   const e = emptyEditor()
   e.id = r.id; e.name = r.name; e.enabled = r.enabled; e.type = r.trigger.type
-  e.handoffMessage = r.action.handoffMessage ?? ''
+  e.actionType = r.action.type
+  if (r.action.type === 'escalate') e.actionMessage = r.action.handoffMessage ?? ''
+  if (r.action.type !== 'escalate') e.actionMessage = r.action.message ?? ''
+  if (r.action.type === 'reply') e.continueProcessing = r.action.continue
+  if (r.action.type === 'assign_teammate') e.teammateUid = r.action.teammateUid
+  if (r.action.type === 'route_agent') e.targetAgentId = r.action.agentId
   const t = r.trigger
   if (t.type === 'ask_for_human') e.phrases = t.phrases.join(', ')
   if (t.type === 'keyword') e.keywords = t.keywords.join(', ')
@@ -81,11 +116,13 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState('')
+  const [targets, setTargets] = useState<WorkflowTargets>({ teammates: [], agents: [] })
 
   const load = useCallback(async () => {
     try {
-      const res = await apiRequest(base)
-      if (res.ok) { const d = await res.json() as { rules: WorkflowRule[] }; setRules(d.rules) }
+      const [rulesRes, targetsRes] = await Promise.all([apiRequest(base), apiRequest(`${base}/targets`)])
+      if (rulesRes.ok) { const d = await rulesRes.json() as { rules: WorkflowRule[] }; setRules(d.rules) }
+      if (targetsRes.ok) setTargets(await targetsRes.json() as WorkflowTargets)
     } finally { setLoading(false) }
   }, [base])
   useEffect(() => { void load() }, [load])
@@ -93,7 +130,17 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
   async function save() {
     if (!editor) return
     setSaving(true); setError('')
-    const payload = { name: editor.name.trim(), enabled: editor.enabled, trigger: editorToTrigger(editor), action: { type: 'escalate', ...(editor.handoffMessage.trim() ? { handoffMessage: editor.handoffMessage.trim() } : {}) } }
+    const message = editor.actionMessage.trim()
+    const action = editor.actionType === 'escalate'
+      ? { type: 'escalate' as const, ...(message ? { handoffMessage: message } : {}) }
+      : editor.actionType === 'reply'
+        ? { type: 'reply' as const, message, continue: editor.continueProcessing }
+        : editor.actionType === 'resolve'
+          ? { type: 'resolve' as const, ...(message ? { message } : {}) }
+          : editor.actionType === 'assign_teammate'
+            ? { type: 'assign_teammate' as const, teammateUid: editor.teammateUid, ...(message ? { message } : {}) }
+            : { type: 'route_agent' as const, agentId: editor.targetAgentId, ...(message ? { message } : {}) }
+    const payload = { name: editor.name.trim(), enabled: editor.enabled, trigger: editorToTrigger(editor), action }
     try {
       const res = editor.id
         ? await apiRequest(`${base}/${editor.id}`, { method: 'PUT', body: JSON.stringify(payload) })
@@ -119,13 +166,20 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
     await load()
   }
 
+  const editorIncomplete = !!editor && (
+    !editor.name.trim()
+    || (editor.actionType === 'reply' && !editor.actionMessage.trim())
+    || (editor.actionType === 'assign_teammate' && !editor.teammateUid)
+    || (editor.actionType === 'route_agent' && !editor.targetAgentId)
+  )
+
   if (loading) return <Loading />
 
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
         <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: 0 }}>
-          Rules that hand a conversation to a human. Evaluated top-to-bottom on each reply from this agent — the first match wins.
+          Automate replies, resolution, assignment, and routing. Rules run top-to-bottom; a response can continue to later matches, while other actions stop the current turn.
         </p>
         {!editor && <button type="button" onClick={() => { setEditor(emptyEditor()); setError('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, flexShrink: 0, whiteSpace: 'nowrap' }}><Plus size={14} /> New rule</button>}
       </div>
@@ -135,7 +189,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
       {!editor && (
         <div style={card}>
           <p style={label}>This agent&apos;s rules</p>
-          {rules.length === 0 && <p style={{ fontSize: 13, color: 'var(--ink-mute)' }}>No rules yet. Add one to auto-escalate conversations.</p>}
+          {rules.length === 0 && <p style={{ fontSize: 13, color: 'var(--ink-mute)' }}>No rules yet. Add one to automate a conversation outcome.</p>}
           {rules.map((r, i) => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--line)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -145,6 +199,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>{r.name}{!r.enabled && <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}> · disabled</span>}</p>
                 <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0 }}>{triggerSummary(r.trigger)}</p>
+                <p className={styles.actionSummary}>{actionSummary(r, targets)}</p>
               </div>
               <button type="button" onClick={() => { setEditor(ruleToEditor(r)); setError('') }} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13 }}>Edit</button>
               <button type="button" onClick={() => void remove(r.id)} disabled={busyId === r.id} aria-label="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', padding: 6 }}>{busyId === r.id ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}</button>
@@ -188,15 +243,72 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
             )}
           </div>
 
-          <p style={{ ...label, marginTop: 16 }}>Handoff message (optional)</p>
-          <input placeholder="Let me connect you with someone from our team." value={editor.handoffMessage} onChange={(e) => setEditor({ ...editor, handoffMessage: e.target.value })} style={input} />
+          <p style={{ ...label, marginTop: 20 }}>Then (action)</p>
+          <div className={styles.actionGrid}>
+            {ACTIONS.map((action) => {
+              const Icon = action.icon
+              const selected = editor.actionType === action.type
+              return (
+                <button
+                  key={action.type}
+                  type="button"
+                  aria-pressed={selected}
+                  className={`${styles.actionCard} ${selected ? styles.actionCardSelected : ''}`}
+                  onClick={() => setEditor({ ...editor, actionType: action.type })}
+                >
+                  <span className={styles.actionIcon}><Icon size={15} /></span>
+                  <span><strong>{action.label}</strong><small>{action.description}</small></span>
+                </button>
+              )
+            })}
+          </div>
+
+          {editor.actionType === 'assign_teammate' && (
+            <div className={styles.actionField}>
+              <p style={label}>Teammate</p>
+              <select value={editor.teammateUid} onChange={(e) => setEditor({ ...editor, teammateUid: e.target.value })} style={input}>
+                <option value="">Choose a teammate</option>
+                {targets.teammates.map((item) => <option key={item.uid} value={item.uid}>{item.name || item.email}{item.name && item.email ? ` · ${item.email}` : ''}</option>)}
+              </select>
+            </div>
+          )}
+
+          {editor.actionType === 'route_agent' && (
+            <div className={styles.actionField}>
+              <p style={label}>Destination agent</p>
+              <select value={editor.targetAgentId} onChange={(e) => setEditor({ ...editor, targetAgentId: e.target.value })} style={input}>
+                <option value="">Choose another agent</option>
+                {targets.agents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div className={styles.actionField}>
+            <p style={label}>{editor.actionType === 'reply' ? 'Response message' : 'Customer message (optional)'}</p>
+            <textarea
+              required={editor.actionType === 'reply'}
+              maxLength={500}
+              placeholder={editor.actionType === 'reply' ? 'Write the exact response to send.' : 'Add a short message explaining what happens next.'}
+              value={editor.actionMessage}
+              onChange={(e) => setEditor({ ...editor, actionMessage: e.target.value })}
+              style={{ ...input, minHeight: 72, resize: 'vertical' }}
+            />
+            <span className={styles.characterCount}>{editor.actionMessage.length}/500</span>
+          </div>
+
+          {editor.actionType === 'reply' && (
+            <label className={styles.continueToggle}>
+              <input type="checkbox" checked={editor.continueProcessing} onChange={(e) => setEditor({ ...editor, continueProcessing: e.target.checked })} />
+              <span><strong>Continue processing</strong><small>Evaluate later matching rules; if none match, let the AI answer after this response.</small></span>
+            </label>
+          )}
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink-mute)', marginTop: 16 }}>
             <input type="checkbox" checked={editor.enabled} onChange={(e) => setEditor({ ...editor, enabled: e.target.checked })} /> Enabled
           </label>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <button type="button" onClick={() => void save()} disabled={saving} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>{saving ? 'Saving…' : 'Save rule'}</button>
+            <button type="button" onClick={() => void save()} disabled={saving || editorIncomplete} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: saving || editorIncomplete ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save rule'}</button>
             <button type="button" onClick={() => setEditor(null)} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>Cancel</button>
           </div>
         </div>

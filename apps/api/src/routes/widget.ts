@@ -165,11 +165,11 @@ widget.post('/chat', async (c) => {
       await stream.writeSSE({ event: 'done', data: JSON.stringify({ conversationId, sources: [] }) })
     })
   }
-  if (prepared.kind === 'escalated') {
+  if (prepared.kind === 'workflow') {
     const message = prepared.message
     return streamSSE(c, async (stream) => {
       await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: message }) })
-      await stream.writeSSE({ event: 'done', data: JSON.stringify({ conversationId, sources: [] }) })
+      await stream.writeSSE({ event: 'done', data: JSON.stringify({ conversationId, messageId: prepared.messageId, sources: prepared.sources, status: prepared.status, workflowAction: prepared.action }) })
     })
   }
 
@@ -177,22 +177,26 @@ widget.post('/chat', async (c) => {
   const generation = trace.generation({ name: 'llm-chat', model: llmModel, input: { system: chatParams.systemPrompt, messages: chatParams.messages } })
 
   return streamSSE(c, async (stream) => {
-    let reply = ''
+    let generated = ''
     let generationEnded = false
     try {
+      if (prepared.prefix) {
+        await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: `${prepared.prefix}\n\n` }) })
+      }
       const gen = runAgentTurn(chatParams, tools, trace, {}, skillTools, mcpTools)
       let promptTokens = 0
       let completionTokens = 0
       while (true) {
         const next = await gen.next()
         if (next.done) { promptTokens = next.value.promptTokens; completionTokens = next.value.completionTokens; break }
-        reply += next.value.text
+        generated += next.value.text
         await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: next.value.text }) })
       }
-      reply = reply.trim()
-      generation.end({ output: reply, usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens } })
+      generated = generated.trim()
+      generation.end({ output: generated, usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens } })
       generationEnded = true
 
+      const reply = [prepared.prefix, generated].filter(Boolean).join('\n\n')
       const messageId = await persist(reply, promptTokens, completionTokens)
       await stream.writeSSE({ event: 'done', data: JSON.stringify({ conversationId, messageId, sources }) })
     } catch (err) {

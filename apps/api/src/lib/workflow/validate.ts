@@ -12,6 +12,7 @@ const fail = (error: string): Fail => ({ ok: false, error })
 
 const TRIGGER_TYPES: TriggerType[] = ['ask_for_human', 'low_confidence', 'bot_replies', 'keyword', 'off_hours']
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+const TARGET_ID = /^[A-Za-z0-9_-]{1,160}$/
 
 function validTimezone(tz: string): boolean {
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
@@ -59,6 +60,59 @@ function validateTrigger(raw: unknown): { ok: true; value: WorkflowTrigger } | F
   }
 }
 
+function optionalMessage(raw: unknown, label: string): { ok: true; value?: string } | Fail {
+  if (raw === undefined || raw === null || raw === '') return { ok: true }
+  if (typeof raw !== 'string') return fail(`${label} must be text.`)
+  const value = raw.trim()
+  if (value.length > 500) return fail(`${label} is too long (max 500).`)
+  return value ? { ok: true, value } : { ok: true }
+}
+
+function targetId(raw: unknown, label: string): { ok: true; value: string } | Fail {
+  if (typeof raw !== 'string' || !TARGET_ID.test(raw)) return fail(`${label} is required.`)
+  return { ok: true, value: raw }
+}
+
+function validateAction(raw: unknown): { ok: true; value: WorkflowAction } | Fail {
+  if (!raw || typeof raw !== 'object') return fail('Action is required.')
+  const action = raw as Record<string, unknown>
+
+  switch (action.type) {
+    case 'escalate': {
+      const message = optionalMessage(action.handoffMessage, 'Handoff message')
+      if (!message.ok) return message
+      return { ok: true, value: { type: 'escalate', ...(message.value ? { handoffMessage: message.value } : {}) } }
+    }
+    case 'reply': {
+      const message = optionalMessage(action.message, 'Response message')
+      if (!message.ok) return message
+      if (!message.value) return fail('Response message is required.')
+      return { ok: true, value: { type: 'reply', message: message.value, continue: action.continue === true } }
+    }
+    case 'resolve': {
+      const message = optionalMessage(action.message, 'Resolution message')
+      if (!message.ok) return message
+      return { ok: true, value: { type: 'resolve', ...(message.value ? { message: message.value } : {}) } }
+    }
+    case 'assign_teammate': {
+      const teammate = targetId(action.teammateUid, 'Teammate')
+      if (!teammate.ok) return teammate
+      const message = optionalMessage(action.message, 'Assignment message')
+      if (!message.ok) return message
+      return { ok: true, value: { type: 'assign_teammate', teammateUid: teammate.value, ...(message.value ? { message: message.value } : {}) } }
+    }
+    case 'route_agent': {
+      const agent = targetId(action.agentId, 'Agent')
+      if (!agent.ok) return agent
+      const message = optionalMessage(action.message, 'Routing message')
+      if (!message.ok) return message
+      return { ok: true, value: { type: 'route_agent', agentId: agent.value, ...(message.value ? { message: message.value } : {}) } }
+    }
+    default:
+      return fail('Unknown workflow action.')
+  }
+}
+
 export function validateRule(raw: unknown): { ok: true; value: ValidatedRule } | Fail {
   if (!raw || typeof raw !== 'object') return fail('Invalid request body.')
   const o = raw as Record<string, unknown>
@@ -71,11 +125,8 @@ export function validateRule(raw: unknown): { ok: true; value: ValidatedRule } |
   const trig = validateTrigger(o.trigger)
   if (!trig.ok) return trig
 
-  const rawAction = (o.action ?? {}) as Record<string, unknown>
-  if (rawAction.type !== 'escalate') return fail('Action must be "escalate".')
-  const handoffMessage = typeof rawAction.handoffMessage === 'string' ? rawAction.handoffMessage.trim() : undefined
-  if (handoffMessage !== undefined && handoffMessage.length > 500) return fail('Handoff message is too long (max 500).')
-  const action: WorkflowAction = { type: 'escalate', ...(handoffMessage ? { handoffMessage } : {}) }
+  const action = validateAction(o.action)
+  if (!action.ok) return action
 
-  return { ok: true, value: { name, enabled, trigger: trig.value, action } }
+  return { ok: true, value: { name, enabled, trigger: trig.value, action: action.value } }
 }

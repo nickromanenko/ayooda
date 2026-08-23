@@ -65,12 +65,19 @@ sandbox.post('/chat', async (c) => {
     })
   }
 
-  if (prepared.kind === 'escalated') {
+  if (prepared.kind === 'workflow') {
     return streamSSE(c, async (stream) => {
       await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: prepared.message }) })
       await stream.writeSSE({
         event: 'done',
-        data: JSON.stringify({ sessionId, sources: prepared.sources, status: 'waiting', escalated: true }),
+        data: JSON.stringify({
+          sessionId,
+          messageId: prepared.messageId,
+          sources: prepared.sources,
+          status: prepared.status,
+          escalated: prepared.status === 'waiting' || prepared.status === 'human',
+          workflowAction: prepared.action,
+        }),
       })
     })
   }
@@ -82,9 +89,12 @@ sandbox.post('/chat', async (c) => {
   })
 
   return streamSSE(c, async (stream) => {
-    let reply = ''
+    let generated = ''
     let generationEnded = false
     try {
+      if (prepared.prefix) {
+        await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: `${prepared.prefix}\n\n` }) })
+      }
       const gen = runAgentTurn(
         prepared.chatParams,
         prepared.tools,
@@ -102,15 +112,16 @@ sandbox.post('/chat', async (c) => {
           completionTokens = next.value.completionTokens
           break
         }
-        reply += next.value.text
+        generated += next.value.text
         await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: next.value.text }) })
       }
-      reply = reply.trim()
+      generated = generated.trim()
       generation.end({
-        output: reply,
+        output: generated,
         usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens },
       })
       generationEnded = true
+      const reply = [prepared.prefix, generated].filter(Boolean).join('\n\n')
       const messageId = await prepared.persist(reply, promptTokens, completionTokens)
       await stream.writeSSE({
         event: 'done',

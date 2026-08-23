@@ -4,7 +4,7 @@ import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { validateRule } from '../lib/workflow/validate'
-import type { WorkflowRule } from '@ayooda/shared'
+import type { WorkflowAction, WorkflowRule, WorkflowTargets } from '@ayooda/shared'
 
 /**
  * Escalation rules describe how one agent behaves — a support agent and a sales
@@ -26,16 +26,56 @@ function toRule(id: string, d: DocumentData): WorkflowRule {
   return { id, name: d.name, enabled: d.enabled !== false, order: d.order ?? 0, trigger: d.trigger, action: d.action }
 }
 
+async function invalidTarget(workspaceId: string, currentAgentId: string, action: WorkflowAction): Promise<string | null> {
+  if (action.type === 'assign_teammate') {
+    const teammate = await adminDb.doc(`users/${action.teammateUid}`).get()
+    return teammate.exists && teammate.data()?.workspaceId === workspaceId
+      ? null
+      : 'Selected teammate is not in this workspace.'
+  }
+  if (action.type === 'route_agent') {
+    if (action.agentId === currentAgentId) return 'Choose a different agent to route to.'
+    return (await adminDb.doc(`workspaces/${workspaceId}/agents/${action.agentId}`).get()).exists
+      ? null
+      : 'Selected agent is not in this workspace.'
+  }
+  return null
+}
+
 /** GET /agents/:agentId/workflows — list rules ordered by `order`. */
 workflows.get('/', async (c) => {
   const snap = await rulesCol(c).orderBy('order', 'asc').get()
   return c.json({ rules: snap.docs.map((d) => toRule(d.id, d.data())) })
 })
 
+/** GET /targets — safe workspace-local destinations for richer actions. */
+workflows.get('/targets', async (c) => {
+  const workspaceId = c.get('workspaceId')!
+  const currentAgentId = c.get('agentId')!
+  const [membersSnap, agentsSnap] = await Promise.all([
+    adminDb.collection('users').where('workspaceId', '==', workspaceId).get(),
+    adminDb.collection(`workspaces/${workspaceId}/agents`).get(),
+  ])
+  const targets: WorkflowTargets = {
+    teammates: membersSnap.docs.map((doc) => ({
+      uid: doc.id,
+      name: String(doc.data().displayName ?? '').trim(),
+      email: String(doc.data().email ?? '').trim(),
+    })).sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email)),
+    agents: agentsSnap.docs
+      .filter((doc) => doc.id !== currentAgentId)
+      .map((doc) => ({ id: doc.id, name: String(doc.data().name ?? 'Untitled agent') }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  }
+  return c.json(targets)
+})
+
 /** POST /agents/:agentId/workflows — create a rule at the end of the list. */
 workflows.post('/', async (c) => {
   const result = validateRule(await c.req.json().catch(() => null))
   if (!result.ok) return c.json({ error: result.error }, 400)
+  const targetError = await invalidTarget(c.get('workspaceId')!, c.get('agentId')!, result.value.action)
+  if (targetError) return c.json({ error: targetError }, 400)
   const col = rulesCol(c)
   const existing = await col.orderBy('order', 'desc').limit(1).get()
   const nextOrder = existing.empty ? 0 : (existing.docs[0]!.data().order ?? 0) + 1
@@ -65,6 +105,8 @@ workflows.put('/:id', async (c) => {
   if (!snap.exists) return c.json({ error: 'Rule not found' }, 404)
   const result = validateRule(await c.req.json().catch(() => null))
   if (!result.ok) return c.json({ error: result.error }, 400)
+  const targetError = await invalidTarget(c.get('workspaceId')!, c.get('agentId')!, result.value.action)
+  if (targetError) return c.json({ error: targetError }, 400)
   await ref.update({ ...result.value, updatedAt: new Date() })
   return c.json(toRule(ref.id, { ...snap.data(), ...result.value }))
 })

@@ -43,9 +43,21 @@ export function matchesTrigger(trigger: WorkflowTrigger, ctx: EscalationContext)
 }
 
 export function evaluateRules(rules: WorkflowRule[], ctx: EscalationContext): WorkflowRule | null {
+  return evaluateWorkflow(rules, ctx)[0] ?? null
+}
+
+/**
+ * Return matching rules in execution order. A reply action may opt into the
+ * next matching rule; every other action is terminal for the current turn.
+ * Legacy escalation rules therefore keep their original first-match behavior.
+ */
+export function evaluateWorkflow(rules: WorkflowRule[], ctx: EscalationContext): WorkflowRule[] {
   const ordered = rules.filter((r) => r.enabled).sort((a, b) => a.order - b.order)
+  const matches: WorkflowRule[] = []
   for (const rule of ordered) {
-    if (matchesTrigger(rule.trigger, ctx)) return rule
+    if (!matchesTrigger(rule.trigger, ctx)) continue
+    matches.push(rule)
+    if (rule.action.type !== 'reply' || !rule.action.continue) break
   }
-  return null
+  return matches
 }

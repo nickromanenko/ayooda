@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { matchesTrigger, evaluateRules } from './engine'
+import { matchesTrigger, evaluateRules, evaluateWorkflow } from './engine'
 import type { WorkflowRule, EscalationContext } from '@ayooda/shared'
 
 const ctx = (over: Partial<EscalationContext> = {}): EscalationContext => ({
@@ -60,5 +60,21 @@ describe('evaluateRules', () => {
   })
   test('returns null when nothing matches', () => {
     expect(evaluateRules([rule({ trigger: { type: 'low_confidence' } })], ctx({ sourceCount: 2 }))).toBeNull()
+  })
+  test('continues through reply actions and stops at the next terminal action', () => {
+    const rules = [
+      rule({ id: 'reply', order: 0, action: { type: 'reply', message: 'Checking now.', continue: true } }),
+      rule({ id: 'disabled', order: 1, enabled: false, action: { type: 'reply', message: 'Skip', continue: true } }),
+      rule({ id: 'resolve', order: 2, action: { type: 'resolve', message: 'Done' } }),
+      rule({ id: 'later', order: 3, action: { type: 'escalate' } }),
+    ]
+    expect(evaluateWorkflow(rules, ctx({ sourceCount: 0 })).map((item) => item.id)).toEqual(['reply', 'resolve'])
+  })
+  test('a non-continuing reply remains terminal', () => {
+    const rules = [
+      rule({ id: 'reply', order: 0, action: { type: 'reply', message: 'Exact answer', continue: false } }),
+      rule({ id: 'later', order: 1, action: { type: 'resolve' } }),
+    ]
+    expect(evaluateWorkflow(rules, ctx({ sourceCount: 0 })).map((item) => item.id)).toEqual(['reply'])
   })
 })

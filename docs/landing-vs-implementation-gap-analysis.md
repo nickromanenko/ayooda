@@ -39,7 +39,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | Telegram channel (bot token → webhook) | ✅ | `routes/agent-channels.ts`, `lib/telegram/*` |
 | Email channel (Resend: inbound webhook → conversation → agent auto-reply; operator replies via email) | ✅ | `routes/email.ts`, `lib/email/*`, `routes/agent-channels.ts`, `routes/conversations.ts` |
 | Live inbox: realtime, status filters, takeover, operator reply, resolve | ✅ | `apps/web/src/app/dashboard/inbox/page.tsx`, `routes/conversations.ts` |
-| Escalation rules (5 triggers → "escalate") | ✅ | `routes/workflows.ts`, `lib/workflow/*` |
+| Workflow rules (5 triggers → response, resolve, human queue, teammate assignment, or agent routing) | ✅ | `routes/workflows.ts`, `lib/workflow/*` |
 | Skills: memory, scoring (1–5 + summary), web search | ✅ | `routes/skills.ts`, `lib/skills/*` |
 | Custom HTTP tools (REST) + 4 read templates + SSRF guard | ✅ | `lib/chat/tools.ts`, `TOOL_TEMPLATES` in `packages/shared/src/index.ts` |
 | MCP (Model Context Protocol) — connect to external MCP servers (streamable HTTP + SSE), discover and call their tools during conversations | ✅ | `lib/mcp/*`, `routes/mcp.ts`, `dashboard/agents/[agentId]/mcp/page.tsx` |
@@ -71,8 +71,10 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 
 ### 🔴 GAP-03 — Visual "Workflows" builder
 - **Claim:** *"Design complex automations, visually… drag-and-drop flows to model triage, escalation, and routing logic"* with a branching node graph.
-- **Reality:** `lib/workflow/*` is a flat ordered list of **escalation rules** — 5 triggers (`ask_for_human`, `low_confidence`, `bot_replies`, `keyword`, `off_hours`) → single action **`escalate`**. No branching, no auto-resolve, no routing, no visual editor.
-- **Status:** 🟠 Partial (escalation rules exist) · **Priority:** P1
+- **Was:** `lib/workflow/*` was a flat ordered list of **escalation rules** — 5 triggers (`ask_for_human`, `low_confidence`, `bot_replies`, `keyword`, `off_hours`) → single action **`escalate`**.
+- **Now, phase 1 (2026-08-23):** those triggers can send an exact response, resolve the conversation, place it in the human queue, assign a specific teammate, or route future turns to another AI agent. Response actions can stop immediately or continue through later matching rules and into the normal AI response. Targets are workspace-verified before storage, routed conversations stay with their destination, and legacy escalation rules remain compatible.
+- **Still missing:** branching conditions, multi-node drag-and-drop composition, and a visual graph editor.
+- **Status:** 🟠 Partial (richer action engine ships; branching visual builder doesn't) · **Priority:** P1
 
 ### 🟠 GAP-04 — Channels: "ten channels" — email now ships, 5 channels remain
 - **Claim:** FAQ *"Live chat, email, WhatsApp, Messenger, Instagram, SMS, Slack, in-app widgets"* · pricing *"Collaborative inbox for all customer emails"* · *"One agent. Ten channels."*
@@ -139,7 +141,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | 2 | **Landing-page honesty/reframe pass** — mark "coming soon" the still-unshipped claims (GAP-04 channels, GAP-03 visual workflows, GAP-05 analytics/CSAT/export, GAP-08 BYO Llama/custom, GAP-09 SSO/EU, GAP-10 social proof); fix dead CTAs (GAP-11). | 🔴/🟡 → 🟠/✅ | P0 |
 | 3 | **Analytics: CSV export + aggregate CSAT** (closes GAP-05) | ✅ Done | P1 |
 | 4 | **Email channel** (closes GAP-04 highest-value piece) | ✅ Done | P1 |
-| 5 | **Visual workflow builder** or honest copy (GAP-03) | 🟠 | P1 |
+| 5 | **Visual workflow builder** or honest copy (GAP-03) | 🟠 Richer actions done | P1 |
 | 6 | **BYO LLM / custom endpoint** (GAP-08) | 🟠 BYO Gateway + dynamic catalog done | P2 |
 | 7 | **Auto-sync knowledge** (GAP-06) | ✅ Done | P2 |
 | 8 | **Sandbox/test mode** (GAP-07) | ✅ Done | P2 |

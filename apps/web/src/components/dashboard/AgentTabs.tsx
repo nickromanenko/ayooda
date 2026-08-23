@@ -20,7 +20,7 @@ const TABS = [
   { slug: 'skills', label: 'Skills' },
   { slug: 'tools', label: 'Tools' },
   { slug: 'mcp', label: 'MCP' },
-  { slug: 'escalation', label: 'Escalation' },
+  { slug: 'escalation', label: 'Workflows' },
   { slug: 'test', label: 'Test' },
   { slug: 'deploy', label: 'Deploy' },
   { slug: 'usage', label: 'Usage' },

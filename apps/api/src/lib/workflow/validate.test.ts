@@ -35,4 +35,25 @@ describe('validateRule', () => {
   test('rejects an over-length handoff message', () => {
     expect(validateRule({ name: 'N', action: { type: 'escalate', handoffMessage: 'x'.repeat(501) }, trigger: { type: 'low_confidence' } }).ok).toBe(false)
   })
+  test('accepts every richer terminal action', () => {
+    const trigger = { type: 'low_confidence' }
+    expect(validateRule({ name: 'Reply', trigger, action: { type: 'reply', message: 'One moment', continue: true } }).ok).toBe(true)
+    expect(validateRule({ name: 'Resolve', trigger, action: { type: 'resolve', message: 'All set' } }).ok).toBe(true)
+    expect(validateRule({ name: 'Assign', trigger, action: { type: 'assign_teammate', teammateUid: 'user_1' } }).ok).toBe(true)
+    expect(validateRule({ name: 'Route', trigger, action: { type: 'route_agent', agentId: 'agent_2' } }).ok).toBe(true)
+  })
+  test('requires reply content and action targets', () => {
+    const trigger = { type: 'low_confidence' }
+    expect(validateRule({ name: 'Reply', trigger, action: { type: 'reply', message: '' } }).ok).toBe(false)
+    expect(validateRule({ name: 'Assign', trigger, action: { type: 'assign_teammate', teammateUid: '' } }).ok).toBe(false)
+    expect(validateRule({ name: 'Route', trigger, action: { type: 'route_agent', agentId: '../other' } }).ok).toBe(false)
+  })
+  test('normalizes reply continuation to an explicit boolean', () => {
+    const result = validateRule({
+      name: 'Reply', trigger: { type: 'keyword', keywords: ['refund'] },
+      action: { type: 'reply', message: '  Checking that now.  ', continue: 'yes' },
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.action).toEqual({ type: 'reply', message: 'Checking that now.', continue: false })
+  })
 })

@@ -1,0 +1,142 @@
+.actionSummary {
+  margin: 3px 0 0;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 580;
+  text-wrap: pretty;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.actionCard {
+  min-height: 70px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--bg-2);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition-property: border-color, background-color, box-shadow, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.actionCard:last-child {
+  grid-column: 1 / -1;
+}
+
+.actionCard:hover,
+.actionCard:focus-visible {
+  border-color: rgba(124, 92, 255, 0.52);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.09);
+}
+
+.actionCard:active {
+  scale: 0.96;
+}
+
+.actionCardSelected {
+  border-color: rgba(124, 92, 255, 0.68);
+  background: rgba(124, 92, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.12);
+}
+
+.actionCard > span:last-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.actionCard strong,
+.continueToggle strong {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 620;
+}
+
+.actionCard small,
+.continueToggle small {
+  color: var(--ink-mute);
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.actionIcon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: rgba(124, 92, 255, 0.11);
+  color: var(--accent);
+}
+
+.actionField {
+  position: relative;
+  margin-top: 14px;
+}
+
+.characterCount {
+  position: absolute;
+  right: 9px;
+  bottom: 8px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.continueToggle {
+  min-height: 58px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-2);
+  cursor: pointer;
+}
+
+.continueToggle input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+}
+
+.continueToggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (max-width: 680px) {
+  .actionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .actionCard:last-child {
+    grid-column: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actionCard {
+    transition-duration: 0.01ms;
+  }
+}

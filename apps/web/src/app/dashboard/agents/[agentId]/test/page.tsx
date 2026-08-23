@@ -29,6 +29,21 @@ type SandboxMessage = {
   sources?: Source[]
   escalated?: boolean
 }
+type SandboxStatus = 'ready' | 'waiting' | 'assigned' | 'resolved'
+
+const STATUS_LABEL: Record<SandboxStatus, string> = {
+  ready: 'Bot active',
+  waiting: 'Human queue',
+  assigned: 'Assigned',
+  resolved: 'Resolved',
+}
+
+const STATUS_DETAIL: Record<SandboxStatus, string> = {
+  ready: 'Online · sandbox',
+  waiting: 'Waiting for a human',
+  assigned: 'Assigned to a teammate',
+  resolved: 'Conversation resolved',
+}
 
 const SCENARIOS = [
   { label: 'Knowledge answer', icon: BookOpen, prompt: 'What are the most important things a new customer should know?' },
@@ -47,7 +62,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
   const [streaming, setStreaming] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [allowTools, setAllowTools] = useState(false)
-  const [status, setStatus] = useState<'ready' | 'waiting'>('ready')
+  const [status, setStatus] = useState<SandboxStatus>('ready')
   const [lastSources, setLastSources] = useState<Source[]>([])
   const [error, setError] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
@@ -92,7 +107,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
 
   async function send() {
     const text = input.trim()
-    if (!text || streaming || status === 'waiting') return
+    if (!text || streaming || status !== 'ready') return
     const userMessage: SandboxMessage = { id: crypto.randomUUID(), role: 'user', content: text }
     setMessages((current) => [...current, userMessage])
     setInput('')
@@ -122,7 +137,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
             const result = JSON.parse(data) as {
               sessionId: string
               sources?: Source[]
-              status?: 'bot' | 'waiting'
+              status?: 'bot' | 'waiting' | 'human' | 'resolved'
               escalated?: boolean
               silent?: boolean
             }
@@ -130,7 +145,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
             resultSources = result.sources ?? []
             escalated = result.escalated === true
             setLastSources(resultSources)
-            if (result.status === 'waiting') setStatus('waiting')
+            if (result.status && result.status !== 'bot') setStatus(result.status === 'human' ? 'assigned' : result.status)
             if (buffer) {
               setStreaming(false)
               setMessages((current) => [...current, {
@@ -139,7 +154,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
               }])
               setPending('')
             } else if (result.silent) {
-              setError('The agent is waiting for a human. Reset the session to test another flow.')
+              setError('This workflow stopped the conversation. Reset the session to test another flow.')
             }
           } else if (event === 'error') {
             throw new Error((JSON.parse(data) as { error: string }).error)
@@ -168,7 +183,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
   return (
     <>
       <p className={styles.intro}>
-        Test this agent with its real knowledge and escalation rules. Sandbox sessions stay out of the inbox, customer analytics, and conversation limits.
+        Test this agent with its real knowledge and workflow rules. Sandbox sessions stay out of the inbox, customer analytics, and conversation limits.
       </p>
 
       <div className={styles.grid}>
@@ -176,7 +191,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
           <p className={styles.eyebrow}>Test scenarios</p>
           <div className={styles.scenarioList}>
             {SCENARIOS.map(({ label, icon: Icon, prompt }) => (
-              <button key={label} type="button" className={styles.scenarioButton} onClick={() => chooseScenario(prompt)} disabled={streaming || status === 'waiting'}>
+              <button key={label} type="button" className={styles.scenarioButton} onClick={() => chooseScenario(prompt)} disabled={streaming || status !== 'ready'}>
                 <Icon size={14} /> {label}
               </button>
             ))}
@@ -210,8 +225,8 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
           <div className={styles.diagnostics}>
             <div className={styles.diagnosticRow}>
               <span className={styles.diagnosticLabel}>Flow</span>
-              <span className={`${styles.diagnosticValue} ${status === 'waiting' ? styles.statusWaiting : styles.statusReady}`}>
-                {status === 'waiting' ? 'Handed off' : 'Bot active'}
+              <span className={`${styles.diagnosticValue} ${status !== 'ready' ? styles.statusWaiting : styles.statusReady}`}>
+                {STATUS_LABEL[status]}
               </span>
             </div>
             <div className={styles.diagnosticRow}>
@@ -242,7 +257,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
                 : <span className={styles.messageAvatar}><Bot size={15} /></span>}
               <div className={styles.agentCopy}>
                 <p className={styles.agentName}>{agent?.name ?? 'Test agent'}</p>
-                <p className={styles.agentState}>{status === 'waiting' ? 'Waiting for a human' : 'Online · sandbox'}</p>
+                <p className={styles.agentState}>{STATUS_DETAIL[status]}</p>
               </div>
               <span className={styles.testBadge}>Test traffic</span>
             </header>
@@ -252,7 +267,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
                 <div className={styles.emptyState}>
                   <span className={styles.emptyIcon}><Sparkles size={18} /></span>
                   <p className={styles.emptyTitle}>Run a realistic support conversation</p>
-                  <p className={styles.emptyHint}>Choose a scenario or write your own message. Knowledge retrieval and escalation rules behave exactly as they do for customers.</p>
+                  <p className={styles.emptyHint}>Choose a scenario or write your own message. Knowledge retrieval and workflow rules behave exactly as they do for customers.</p>
                 </div>
               ) : (
                 messages.map((message) => (
@@ -286,8 +301,8 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
               <div ref={endRef} />
             </div>
 
-            {status === 'waiting' && (
-              <p className={styles.handoffNotice}><AlertTriangle size={14} /> Escalation fired. Reset to test another conversation.</p>
+            {status !== 'ready' && (
+              <p className={styles.handoffNotice}><AlertTriangle size={14} /> Workflow action: {STATUS_LABEL[status].toLowerCase()}. Reset to test another conversation.</p>
             )}
             {error && <p role="alert" className={styles.errorNotice}>{error}</p>}
 
@@ -303,16 +318,16 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
                     void send()
                   }
                 }}
-                disabled={streaming || status === 'waiting'}
+                disabled={streaming || status !== 'ready'}
                 maxLength={5_000}
                 rows={1}
-                placeholder={status === 'waiting' ? 'Reset to continue testing' : 'Type a customer message…'}
+                placeholder={status !== 'ready' ? 'Reset to continue testing' : 'Type a customer message…'}
               />
               <button
                 type="button"
                 className={`btn btn-primary ${styles.sendButton}`}
                 onClick={() => void send()}
-                disabled={streaming || status === 'waiting' || !input.trim()}
+                disabled={streaming || status !== 'ready' || !input.trim()}
                 aria-label="Send test message"
               >
                 {streaming ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : allowTools ? <Wrench size={15} /> : <Send size={15} />}

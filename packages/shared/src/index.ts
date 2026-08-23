@@ -406,9 +406,47 @@ export type WorkflowTrigger =
   | { type: 'keyword'; keywords: string[] }
   | { type: 'off_hours'; timezone: string; days: number[]; start: string; end: string }
 
-export interface WorkflowAction {
+export interface EscalateWorkflowAction {
   type: 'escalate'
   handoffMessage?: string
+}
+
+export interface ReplyWorkflowAction {
+  type: 'reply'
+  message: string
+  /** Keep evaluating later matching rules; if none match, continue to the AI response. */
+  continue: boolean
+}
+
+export interface ResolveWorkflowAction {
+  type: 'resolve'
+  message?: string
+}
+
+export interface AssignTeammateWorkflowAction {
+  type: 'assign_teammate'
+  teammateUid: string
+  message?: string
+}
+
+export interface RouteAgentWorkflowAction {
+  type: 'route_agent'
+  agentId: string
+  message?: string
+}
+
+export type WorkflowAction =
+  | EscalateWorkflowAction
+  | ReplyWorkflowAction
+  | ResolveWorkflowAction
+  | AssignTeammateWorkflowAction
+  | RouteAgentWorkflowAction
+
+export type WorkflowActionType = WorkflowAction['type']
+
+export interface WorkflowTargets {
+  teammates: Array<{ uid: string; name: string; email: string }>
+  agents: Array<{ id: string; name: string }>
 }
 
 /** API↔web contract for a rule (no timestamps). */

@@ -122,7 +122,7 @@ email.post('/webhook/:channelId', async (c) => {
     // The conversation now exists (prepareTurn created it); attach email metadata.
     await convRef.update({ ...emailFields, updatedAt: new Date() }).catch(() => {})
 
-    if (prepared.kind === 'escalated') {
+    if (prepared.kind === 'workflow') {
       await sendEmail({
         apiKey, from: supportAddress, to: parsed.fromAddress,
         subject: replySubject(parsed.subject), text: prepared.message, inReplyTo: parsed.messageId,
@@ -136,23 +136,24 @@ email.post('/webhook/:channelId', async (c) => {
     })
 
     const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools, prepared.mcpTools)
-    let reply = ''
+    let generated = ''
     let promptTokens = 0
     let completionTokens = 0
     try {
       while (true) {
         const next = await gen.next()
         if (next.done) { promptTokens = next.value.promptTokens; completionTokens = next.value.completionTokens; break }
-        reply += next.value.text
+        generated += next.value.text
       }
-      reply = reply.trim()
-      generation.end({ output: reply, usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens } })
+      generated = generated.trim()
+      generation.end({ output: generated, usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens } })
     } catch (err) {
       console.error('[email/webhook] LLM stream failed:', err)
       generation.end({ level: 'ERROR', statusMessage: err instanceof Error ? err.message : String(err) })
       return c.json({ ok: true })
     }
 
+    let reply = [prepared.prefix, generated].filter(Boolean).join('\n\n')
     if (!reply) reply = 'Sorry, I could not generate a response.'
     await prepared.persist(reply, promptTokens, completionTokens)
     await sendEmail({

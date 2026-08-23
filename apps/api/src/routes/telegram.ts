@@ -106,14 +106,14 @@ telegram.post('/webhook/:channelId', async (c) => {
       if (prepared.kind === 'silent') {
         return c.json({ ok: true })
       }
-      if (prepared.kind === 'escalated') {
+      if (prepared.kind === 'workflow') {
         await sendMessage(token, chatId, prepared.message)
         return c.json({ ok: true })
       }
 
       // Accumulate the full reply (Telegram doesn't stream), then send once.
       const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools, prepared.mcpTools)
-      let reply = ''
+      let generated = ''
       let promptTokens = 0
       let completionTokens = 0
       const generation = prepared.trace.generation({ name: 'llm-chat', model: prepared.llmModel, input: { system: prepared.chatParams.systemPrompt, messages: prepared.chatParams.messages } })
@@ -121,16 +121,17 @@ telegram.post('/webhook/:channelId', async (c) => {
         while (true) {
           const next = await gen.next()
           if (next.done) { promptTokens = next.value.promptTokens; completionTokens = next.value.completionTokens; break }
-          reply += next.value.text
+          generated += next.value.text
         }
-        reply = reply.trim()
-        generation.end({ output: reply, usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens } })
+        generated = generated.trim()
+        generation.end({ output: generated, usage: { input: promptTokens, output: completionTokens, total: promptTokens + completionTokens } })
       } catch (err) {
         generation.end({ level: 'ERROR', statusMessage: err instanceof Error ? err.message : String(err) })
         await sendMessage(token, chatId, 'Sorry, something went wrong. Please try again.')
         return c.json({ ok: true })
       }
 
+      let reply = [prepared.prefix, generated].filter(Boolean).join('\n\n')
       if (reply.length === 0) reply = 'Sorry, I could not generate a response.'
       await prepared.persist(reply, promptTokens, completionTokens)
       await sendMessage(token, chatId, reply)

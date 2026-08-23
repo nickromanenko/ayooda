@@ -225,6 +225,65 @@ describe('prepareTurn prompt assembly', () => {
   })
 })
 
+describe('prepareTurn workflow actions', () => {
+  const workflowPath = 'workspaces/w/agents/inline/workflowRules'
+
+  test('a continuing response prefixes the normal AI turn', async () => {
+    seed({ visitorId: 'v', status: 'bot' })
+    state.queries.set(workflowPath, [{
+      name: 'Acknowledge uncertainty', enabled: true, order: 0,
+      trigger: { type: 'low_confidence' },
+      action: { type: 'reply', message: 'I’m checking that carefully.', continue: true },
+    }])
+    const result = await turn()
+    expect(result.kind).toBe('ready')
+    if (result.kind === 'ready') expect(result.prefix).toBe('I’m checking that carefully.')
+  })
+
+  test('resolve sends the configured response and closes the conversation', async () => {
+    seed({ visitorId: 'v', status: 'bot', timingTrackedAt: new Date(), createdAt: new Date() })
+    state.queries.set(workflowPath, [{
+      name: 'Resolved by rule', enabled: true, order: 0,
+      trigger: { type: 'low_confidence' }, action: { type: 'resolve', message: 'You’re all set.' },
+    }])
+    const result = await turn()
+    expect(result).toMatchObject({ kind: 'workflow', action: 'resolve', status: 'resolved', message: 'You’re all set.' })
+    const update = state.updates.find((row) => row.path === CONV && row.data.workflowAction === 'resolve')
+    expect(update?.data.pendingPostProcess).toBe(true)
+    expect(update?.data.resolvedAt).toBeInstanceOf(Date)
+  })
+
+  test('teammate assignment uses the existing human-owned conversation state', async () => {
+    seed({ visitorId: 'v', status: 'bot' })
+    state.queries.set(workflowPath, [{
+      name: 'Assign billing', enabled: true, order: 0,
+      trigger: { type: 'low_confidence' }, action: { type: 'assign_teammate', teammateUid: 'billing_uid' },
+    }])
+    const result = await turn()
+    expect(result).toMatchObject({ kind: 'workflow', action: 'assign_teammate', status: 'human' })
+    expect(state.docs.get(CONV)).toMatchObject({ status: 'human', operatorId: 'billing_uid' })
+  })
+
+  test('agent routing persists and the destination handles the next turn', async () => {
+    seed({ visitorId: 'v', status: 'bot' })
+    state.queries.set(workflowPath, [{
+      name: 'Send to sales', enabled: true, order: 0,
+      trigger: { type: 'low_confidence' }, action: { type: 'route_agent', agentId: 'sales', message: 'Sales can help.' },
+    }])
+    const routed = await turn()
+    expect(routed).toMatchObject({ kind: 'workflow', action: 'route_agent', status: 'bot' })
+    expect(state.docs.get(CONV)?.agentId).toBe('sales')
+
+    state.queries.delete(workflowPath)
+    state.docs.set('workspaces/w/agents/sales', {
+      systemPrompt: 'You are the sales specialist.', llmModel: 'google/gemini-2.5-flash', knowledgeNamespace: 'sales_ns',
+    })
+    const next = await turn()
+    expect(next.kind).toBe('ready')
+    if (next.kind === 'ready') expect(next.chatParams.systemPrompt).toBe('You are the sales specialist.')
+  })
+})
+
 describe('prepareTurn sandbox isolation', () => {
   test('stores outside conversations and does not increment production usage', async () => {
     seed({ visitorId: 'v', status: 'bot' })
