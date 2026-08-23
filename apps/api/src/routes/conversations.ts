@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
+import { elapsedMs } from '../lib/analytics/timing'
 
 const conversations = new Hono<{ Variables: AuthVariables }>()
 
@@ -70,6 +71,8 @@ conversations.post('/:id/takeover', async (c) => {
     // prepareTurn reopens such a conversation on the next visitor message. Clearing it
     // here stops the bot answering over an operator who has just taken over.
     autoClosedAt: FieldValue.delete(),
+    resolvedAt: FieldValue.delete(),
+    resolutionMs: FieldValue.delete(),
     updatedAt: FieldValue.serverTimestamp(),
   })
 
@@ -85,10 +88,14 @@ conversations.post('/:id/resolve', async (c) => {
   const convSnap = await convRef.get()
   if (!convSnap.exists) return c.json({ error: 'Conversation not found' }, 404)
 
+  const resolvedAt = new Date()
+  const resolutionMs = convSnap.data()?.timingTrackedAt ? elapsedMs(convSnap.data()?.createdAt, resolvedAt) : null
+
   await convRef.update({
     status: 'resolved',
     operatorId: null,
     pendingPostProcess: true,
+    ...(resolutionMs !== null ? { resolvedAt, resolutionMs } : {}),
     // Same invariant as takeover: an operator resolving an already auto-closed
     // conversation is an explicit human decision, so it must not be undone by the
     // next visitor message reopening it.

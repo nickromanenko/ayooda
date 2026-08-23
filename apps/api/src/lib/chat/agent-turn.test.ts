@@ -111,6 +111,8 @@ describe('prepareTurn silence guard', () => {
     // Every field describing the closed state is cleared, so the conversation behaves like a
     // live one and its eventual re-close scores the whole transcript, not just the first half.
     expect(update!.data.autoClosedAt).toEqual(FieldValue.delete())
+    expect(update!.data.resolvedAt).toEqual(FieldValue.delete())
+    expect(update!.data.resolutionMs).toEqual(FieldValue.delete())
     expect(update!.data.pendingPostProcess).toEqual(FieldValue.delete())
     expect(update!.data.postProcessedAt).toEqual(FieldValue.delete())
     expect(update!.data.scoredAt).toEqual(FieldValue.delete())
@@ -135,6 +137,29 @@ describe('prepareTurn silence guard', () => {
     seed({ visitorId: 'v', status: 'bot' })
     expect((await turn()).kind).toBe('ready')
     expect(reopenUpdate()).toBeUndefined()
+  })
+
+  test('a new conversation records timing only when its first reply is persisted', async () => {
+    seed({ visitorId: 'v', status: 'bot' })
+    state.docs.delete(CONV)
+    const result = await turn()
+    expect(result.kind).toBe('ready')
+    expect(state.docs.get(CONV)?.timingTrackedAt).toBeDefined()
+    expect(state.docs.get(CONV)?.firstReplyMs).toBeUndefined()
+    if (result.kind !== 'ready') throw new Error('expected a ready turn')
+
+    await result.persist('Hello!', 2, 3)
+    const timingUpdate = state.updates.find((u) => u.path === CONV && typeof u.data.firstReplyMs === 'number')
+    expect(timingUpdate?.data.firstReplyAt).toBeInstanceOf(Date)
+    expect(timingUpdate?.data.firstReplyMs).toBeGreaterThanOrEqual(0)
+  })
+
+  test('an older untracked conversation is not given a misleading first-reply time', async () => {
+    seed({ visitorId: 'v', status: 'bot', createdAt: new Date('2025-01-01T00:00:00Z') })
+    const result = await turn()
+    if (result.kind !== 'ready') throw new Error('expected a ready turn')
+    await result.persist('Hello!', 2, 3)
+    expect(state.updates.some((u) => u.path === CONV && 'firstReplyMs' in u.data)).toBe(false)
   })
 })
 

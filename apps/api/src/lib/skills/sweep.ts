@@ -4,6 +4,7 @@ import { adminDb } from '../firebase-admin'
 import { resolveGatewayKey } from '../llm/resolve'
 import { liveFacts, nextExpiry } from './memory'
 import { loadEnabledSkills } from './registry'
+import { elapsedMs } from '../analytics/timing'
 import './all'   // registers every skill module; without it the sweep silently skips scoring
 
 export const IDLE_CLOSE_MINUTES = 30
@@ -64,7 +65,12 @@ export async function runSweep(now = new Date()): Promise<SweepReport> {
       .get()
     for (const doc of idle.docs) {
       try {
-        await doc.ref.update({ status: 'resolved', autoClosedAt: now, pendingPostProcess: true })
+        const data = doc.data()
+        const resolutionMs = data.timingTrackedAt ? elapsedMs(data.createdAt, now) : null
+        await doc.ref.update({
+          status: 'resolved', autoClosedAt: now, pendingPostProcess: true,
+          ...(resolutionMs !== null ? { resolvedAt: now, resolutionMs } : {}),
+        })
         report.closed++
       } catch (err) {
         console.warn('[sweep] close failed:', doc.ref.path, err)

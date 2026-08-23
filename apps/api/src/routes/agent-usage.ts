@@ -3,6 +3,7 @@ import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { shouldResetPeriod, checkEntitlement } from '../lib/billing/entitlement'
+import { averageTiming } from '../lib/analytics/timing'
 
 /**
  * Per-agent usage.
@@ -100,7 +101,7 @@ agentUsage.get('/', async (c) => {
   const conv = adminDb.collection(`workspaces/${ws}/conversations`)
   const mine = conv.where('agentId', '==', agentId)
 
-  const [totalAgg, resolvedAgg, takeoverAgg, waitingAgg, periodAgg, agentSnap, knowledgeSnap, channelsSnap, escalatedSnap, allTakeoversSnap] =
+  const [totalAgg, resolvedAgg, takeoverAgg, waitingAgg, periodAgg, agentSnap, knowledgeSnap, channelsSnap, escalatedSnap, allTakeoversSnap, firstReplySnap, resolutionSnap] =
     await Promise.all([
       mine.count().get(),
       mine.where('status', '==', 'resolved').count().get(),
@@ -126,6 +127,14 @@ agentUsage.get('/', async (c) => {
         console.warn('[agent-usage] takeover causes unavailable:', err)
         return null
       }),
+      mine.where('firstReplyMs', '>=', 0).select('firstReplyMs').get().catch((err: unknown) => {
+        console.warn('[agent-usage] first-reply timing unavailable (index building?):', err)
+        return null
+      }),
+      mine.where('resolutionMs', '>=', 0).select('resolutionMs').get().catch((err: unknown) => {
+        console.warn('[agent-usage] resolution timing unavailable (index building?):', err)
+        return null
+      }),
     ])
 
   const total = totalAgg.data().count
@@ -141,6 +150,10 @@ agentUsage.get('/', async (c) => {
     ...(escalatedSnap?.docs ?? []),
     ...(allTakeoversSnap?.docs ?? []),
   ].map((d) => ({ id: d.id, ...d.data() })))
+  const timing = {
+    firstReply: averageTiming((firstReplySnap?.docs ?? []).map((d) => d.data().firstReplyMs)),
+    resolution: averageTiming((resolutionSnap?.docs ?? []).map((d) => d.data().resolutionMs)),
+  }
 
   // CSAT: the scoring skill writes score (1–5) on resolved conversations.
   // The `where score >= 1` leg needs a composite index (agentId + score); degrade
@@ -194,6 +207,7 @@ agentUsage.get('/', async (c) => {
     // resolved, the share it resolved without a human stepping in.
     automationRate: resolved > 0 ? Math.round((automated / resolved) * 100) : null,
     handoffs,
+    timing,
     csat,
     messages: {
       count: (agentUsageDoc.messageCount as number | undefined) ?? null,
@@ -226,6 +240,7 @@ agentUsage.get('/export', async (c) => {
 
   const header = [
     'conversation_id', 'visitor', 'channel', 'status', 'created_at', 'updated_at',
+    'first_reply_at', 'first_reply_ms', 'resolved_at', 'resolution_ms',
     'score', 'summary', 'had_takeover', 'escalation_reason', 'last_message',
   ]
   const lines = [header.join(',')]
@@ -237,6 +252,10 @@ agentUsage.get('/export', async (c) => {
       r.status ?? '',
       toDate(r.createdAt)?.toISOString() ?? '',
       toDate(r.updatedAt)?.toISOString() ?? '',
+      toDate(r.firstReplyAt)?.toISOString() ?? '',
+      typeof r.firstReplyMs === 'number' ? r.firstReplyMs : '',
+      toDate(r.resolvedAt)?.toISOString() ?? '',
+      typeof r.resolutionMs === 'number' ? r.resolutionMs : '',
       typeof r.score === 'number' ? r.score : '',
       r.summary ?? '',
       r.hadTakeover === true ? 'true' : 'false',

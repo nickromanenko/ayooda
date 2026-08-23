@@ -81,13 +81,14 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Still missing:** WhatsApp, Messenger, Instagram, SMS, Slack.
 - **Status:** 🟠 Partial (web widget + Telegram + email ship; 5 channels don't) · **Priority:** P1
 
-### 🟠 GAP-05 — Analytics: CSAT, export, and hand-off causes now ship
+### 🟠 GAP-05 — Analytics: CSAT, export, hand-off causes, and timing now ship
 - **Claim:** *"Resolution rate, CSAT, hand-off causes, confidence trends — all in real time, all exportable."* Hero *"resolution time 00:04.1"* / *"1.8s first reply"*.
 - **Was:** only counts existed (total, resolved, automated vs handed-off, tokens, docs/chunks). A per-conversation 1–5 score appeared in the inbox, but no aggregate CSAT and no CSV export.
 - **Now (2026-08-22):** `routes/agent-usage.ts` returns an aggregate **CSAT** (average + 1–5 distribution, computed from the scoring skill's per-conversation scores) and exposes **`GET /agents/:agentId/usage/export`** (CSV of the agent's conversations). The Usage page shows an *Avg CSAT* tile, a *CSAT distribution* bar, and an *Export CSV* button. Added the `(agentId, score)` composite index to `firestore.indexes.json`.
 - **Now (2026-08-23):** the Usage page also ranks hand-off causes from escalation-rule names and manual takeovers, with counts and percentages.
-- **Still missing:** confidence trends and first-reply/resolution-time metrics (the hero "1.8s / 00:04.1" numbers remain mock text).
-- **Status:** 🟠 Partial (CSAT + export + hand-off causes ship; confidence trends / timing don't) · **Priority:** P1
+- **Now (2026-08-23):** newly tracked conversations record first-reply and resolution durations. The Usage page shows transparent averages and sample counts; older conversations without reliable timestamps are excluded.
+- **Still missing:** confidence trends. The hero's exact "1.8s / 00:04.1" values remain illustrative rather than live workspace data.
+- **Status:** 🟠 Partial (CSAT + export + hand-off causes + timing ship; confidence trends don't) · **Priority:** P1
 
 ### 🟠 GAP-06 — Auto-syncing knowledge
 - **Claim:** *"Ayooda auto-syncs with helpdesk articles, docs, and product changes — no more stale answers."*

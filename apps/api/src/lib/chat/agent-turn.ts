@@ -16,6 +16,7 @@ import { checkEntitlement, shouldResetPeriod, type GateReason } from '../billing
 import { emitOverageEvent } from '../billing/overage'
 import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
 import { gatherContext } from '../skills/run'
+import { elapsedMs, timestampDate } from '../analytics/timing'
 import '../skills/all'
 
 export interface PrepareTurnInput {
@@ -76,6 +77,8 @@ export function evaluateSilenceGate(data: FirebaseFirestore.DocumentData | undef
     update: {
       status: 'bot',
       autoClosedAt: FieldValue.delete(),
+      resolvedAt: FieldValue.delete(),
+      resolutionMs: FieldValue.delete(),
       pendingPostProcess: FieldValue.delete(),
       postProcessedAt: FieldValue.delete(),
       scoredAt: FieldValue.delete(),
@@ -89,6 +92,7 @@ export function evaluateSilenceGate(data: FirebaseFirestore.DocumentData | undef
  * widget, accumulate+sendMessage for Telegram) and calls persist() with the final reply.
  */
 export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn> {
+  const turnStartedAt = new Date()
   const { workspaceId, channelId, conversationId, visitorId, message, channelType, telegramChatId, agentId } = input
   const trimmed = message.trim()
 
@@ -133,6 +137,9 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   if (convSnap.exists && convSnap.data()!.visitorId !== visitorId) {
     return { kind: 'error', error: 'Not found' }
   }
+  const existingConversation = convSnap.data()
+  const timingTracked = !convSnap.exists || !!existingConversation?.timingTrackedAt
+  const conversationStartedAt = convSnap.exists ? timestampDate(existingConversation?.createdAt) : turnStartedAt
 
   // Silence guard: a conversation a human owns/queued never gets a bot reply.
   const gate = evaluateSilenceGate(convSnap.exists ? convSnap.data() : undefined)
@@ -173,6 +180,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       status: 'bot',
       operatorId: null,
       createdAt: FieldValue.serverTimestamp(),
+      timingTrackedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       lastMessage: trimmed,
       ...(telegramChatId !== undefined ? { telegramChatId } : {}),
@@ -230,8 +238,16 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     })
     if (hit) {
       const handoff = hit.action.handoffMessage?.trim() || DEFAULT_HANDOFF
+      const repliedAt = new Date()
+      const firstReplyMs = timingTracked && typeof existingConversation?.firstReplyMs !== 'number'
+        ? elapsedMs(conversationStartedAt, repliedAt)
+        : null
       await messagesRef.add({ role: 'assistant', content: handoff, createdAt: FieldValue.serverTimestamp(), metadata: { escalated: true } })
-      await convRef.update({ status: 'waiting', escalationReason: hit.name, operatorId: null, updatedAt: FieldValue.serverTimestamp(), lastMessage: handoff.slice(0, 200) })
+      await convRef.update({
+        status: 'waiting', escalationReason: hit.name, operatorId: null,
+        updatedAt: FieldValue.serverTimestamp(), lastMessage: handoff.slice(0, 200),
+        ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
+      })
       await workspaceRef.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
       await agentUsageRef?.update({ 'usage.messageCount': FieldValue.increment(2) }).catch(() => {})
       trace.update({ output: { escalated: hit.name } })
@@ -254,6 +270,10 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const { tools, skillTools, mcpTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
+    const repliedAt = new Date()
+    const firstReplyMs = timingTracked && typeof existingConversation?.firstReplyMs !== 'number'
+      ? elapsedMs(conversationStartedAt, repliedAt)
+      : null
     const messageRef = await messagesRef.add({
       role: 'assistant',
       content: reply,
@@ -261,7 +281,10 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       metadata: { sources, llmModel, promptTokens, completionTokens },
     })
     try {
-      await convRef.update({ updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200), botReplyCount: FieldValue.increment(1) })
+      await convRef.update({
+        updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200), botReplyCount: FieldValue.increment(1),
+        ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
+      })
       await workspaceRef.update({
         'usage.messageCount': FieldValue.increment(2),
         'usage.tokenCount': FieldValue.increment(promptTokens + completionTokens),

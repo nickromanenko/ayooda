@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, MessageSquare, Zap, Coins, BookOpen, Star, Download } from 'lucide-react'
+import { Loader2, MessageSquare, Zap, Coins, BookOpen, Star, Download, Clock3, Timer } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, muted } from '@/components/dashboard/ui'
@@ -11,6 +11,10 @@ interface Usage {
   conversations: { total: number; thisPeriod: number | null; resolved: number; automated: number; handedOff: number; waiting: number }
   automationRate: number | null
   handoffs: { total: number; causes: Array<{ reason: string; count: number; percentage: number }> }
+  timing: {
+    firstReply: { averageMs: number | null; count: number }
+    resolution: { averageMs: number | null; count: number }
+  }
   csat: { average: number | null; count: number; distribution: [number, number, number, number, number] }
   messages: { count: number | null; tokens: number | null; trackedSince: string | null }
   knowledge: { docs: number; indexed: number; chunks: number }
@@ -21,6 +25,12 @@ interface Usage {
 const nf = new Intl.NumberFormat('en-US')
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })
+const fmtDuration = (ms: number | null) => {
+  if (ms === null) return '—'
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)}s`
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`
+  return `${(ms / 3_600_000).toFixed(ms < 36_000_000 ? 1 : 0)}h`
+}
 
 function Tile({ icon: Icon, accent, value, name, sub }: {
   icon: typeof MessageSquare; accent: string; value: string; name: string; sub?: string
@@ -165,6 +175,16 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
           icon={BookOpen} accent="var(--accent)"
           value={nf.format(u.knowledge.indexed)} name="Knowledge docs"
           sub={`${nf.format(u.knowledge.chunks)} chunks`}
+        />
+        <Tile
+          icon={Clock3} accent="var(--blue)"
+          value={fmtDuration(u.timing.firstReply.averageMs)} name="Avg first reply"
+          sub={u.timing.firstReply.count > 0 ? `${nf.format(u.timing.firstReply.count)} tracked` : 'tracking new conversations'}
+        />
+        <Tile
+          icon={Timer} accent="var(--mint)"
+          value={fmtDuration(u.timing.resolution.averageMs)} name="Avg resolution"
+          sub={u.timing.resolution.count > 0 ? `${nf.format(u.timing.resolution.count)} tracked` : 'tracking new resolutions'}
         />
       </div>
 
