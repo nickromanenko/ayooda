@@ -15,6 +15,7 @@ import {
 } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { auth } from '@/lib/firebase'
+import { identifyProductUser, resetProductAnalytics } from '@/lib/product-analytics'
 
 interface AuthContextValue {
   user: User | null
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser)
+      if (firebaseUser) identifyProductUser(firebaseUser.uid)
       setLoading(false)
     })
     return unsubscribe
@@ -63,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await fetch('/api/session', { method: 'DELETE' })
     await firebaseSignOut(auth)
+    resetProductAnalytics()
     router.push('/login')
   }, [router])
 

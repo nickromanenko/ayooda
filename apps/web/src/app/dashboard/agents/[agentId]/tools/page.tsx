@@ -3,6 +3,7 @@
 import { use, useState, useEffect, useCallback } from 'react'
 import { CheckCircle2, CircleDashed, ExternalLink, KeyRound, Loader2, PackagePlus, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { trackProductEvent } from '@/lib/product-analytics'
 import {
   TOOL_BUNDLES,
   TOOL_TEMPLATES,
@@ -102,6 +103,9 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
     setNotice(outcome === 'success'
       ? `${label} connected with OAuth. Its missing actions were installed; review write actions before enabling them.`
       : `${label} authorization was not completed. You can try OAuth again or use a private token.`)
+    if (outcome === 'success') {
+      trackProductEvent('Connector Installed', { provider: providerId, install_method: 'oauth' })
+    }
     window.history.replaceState({}, '', window.location.pathname)
   }, [])
 
@@ -146,6 +150,11 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
       const data = await res.json().catch(() => ({})) as { error?: string; installed?: ToolDef[]; skippedTemplateIds?: string[] }
       if (!res.ok) { setError(data.error ?? 'Could not install the connector.'); return }
       const installed = data.installed?.length ?? 0
+      trackProductEvent('Connector Installed', {
+        provider: p.bundle.id,
+        install_method: 'token',
+        actions_installed: installed,
+      })
       setPicker(null)
       setNotice(installed
         ? `${p.bundle.label} connected with ${installed} new action${installed === 1 ? '' : 's'}. Review write actions before enabling them.`

@@ -1,5 +1,6 @@
 import {
   GoogleAuthProvider,
+  getAdditionalUserInfo,
   signInWithPopup,
   signInWithEmailAndPassword,
   linkWithCredential,
@@ -9,7 +10,7 @@ import {
 import { auth } from './firebase'
 
 export type GoogleSignInOutcome =
-  | { kind: 'success'; user: User }
+  | { kind: 'success'; user: User; isNewUser: boolean }
   | { kind: 'needs-link'; email: string; pendingCred: AuthCredential }
   | { kind: 'cancelled' }
   | { kind: 'error'; code: string; message: string }
@@ -17,7 +18,7 @@ export type GoogleSignInOutcome =
 export async function googleSignInOrPrepareLink(): Promise<GoogleSignInOutcome> {
   try {
     const result = await signInWithPopup(auth, new GoogleAuthProvider())
-    return { kind: 'success', user: result.user }
+    return { kind: 'success', user: result.user, isNewUser: getAdditionalUserInfo(result)?.isNewUser === true }
   } catch (err) {
     const code = (err as { code?: string })?.code ?? ''
     if (code === 'auth/account-exists-with-different-credential') {

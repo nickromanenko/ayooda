@@ -14,6 +14,7 @@ import {
   UserRoundCheck,
   Wrench,
 } from 'lucide-react'
+import { trackProductEvent } from '@/lib/product-analytics'
 import type { AgentDoc } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { readSSE } from '@/lib/sse'
@@ -123,6 +124,9 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { error?: string }
         throw new Error(data.error ?? 'Could not send the test message.')
+      }
+      if (messages.length === 0) {
+        trackProductEvent('Agent Test Started', { tools_enabled: allowTools })
       }
 
       let buffer = ''

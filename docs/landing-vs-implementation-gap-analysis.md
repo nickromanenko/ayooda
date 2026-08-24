@@ -1,7 +1,7 @@
 # Landing Page vs. Implemented Functionality — Gap Analysis
 
-- **Date:** 2026-08-22
-- **Branch:** `master` @ `fe50922`
+- **Date:** 2026-08-24
+- **Branch:** `master` (audit baseline `fb5f2d1`, plus the current working tree)
 - **Scope:** `apps/web/src/components/LandingPage.tsx` (marketing) vs. `apps/api`, `apps/web`, `apps/widget`, `packages/shared` (product)
 - **Method:** Read the landing page end-to-end, then traced every promoted capability to its implementation in the API routes, lib modules, shared types, and dashboard pages.
 
@@ -22,7 +22,7 @@
 
 ## Executive summary
 
-The landing page is a **marketing page that runs well ahead of the product**. The core loop is real and shipped — sign up → create agent → ingest knowledge (scrape + upload) → deploy a web widget, Telegram bot, email mailbox, Slack app, or Twilio SMS number → RAG chat with streaming, escalation, human takeover, and Stripe billing. Several headline claims are still aspirational. The most exposed ones (**Model Context Protocol**, **email**, **Slack**, and **SMS**) were **implemented after this analysis** (see GAP-01 and GAP-04).
+The core product loop is real and shipped — sign up → create an agent → ingest knowledge → deploy a web widget, Telegram bot, email mailbox, Slack app, or Twilio SMS number → RAG chat with workflows, escalation, human takeover, analytics, and Stripe billing. Nine of the twelve original gaps are now resolved. Three landing claims remain broader than the implementation: the three unshipped Meta channels (GAP-04), upstream knowledge syncing beyond webpages (GAP-06), and managed private-network model endpoints (GAP-08).
 
 ---
 
@@ -51,6 +51,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | CSAT aggregate (avg + 1–5 distribution) + CSV export of conversations | ✅ | `routes/agent-usage.ts`, `dashboard/agents/[agentId]/usage/page.tsx` |
 | Channel reliability: provider diagnostics, delivery health, recent failures | ✅ | `lib/channels/reliability.ts`, `routes/channels.ts`, `dashboard/channels/page.tsx` |
 | Channel reliability alerts: configurable consecutive-failure threshold, email/Slack incident and recovery notices | ✅ | `lib/channels/alerts.ts`, `routes/channels.ts`, `dashboard/channels/page.tsx` |
+| Product analytics: Mixpanel autocapture and EU-hosted session recording | ✅ | `components/providers/MixpanelAnalytics.tsx`, `docs/product-analytics.md` |
 
 ---
 
@@ -67,7 +68,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
   - Dashboard: `apps/web/src/app/dashboard/agents/[agentId]/mcp/page.tsx` + `AgentTabs.tsx`
 - **Status:** ✅ Implemented · **Priority:** P0 (resolved)
 
-### 🟠 GAP-02 — "First-party connectors" and write actions
+### ✅ GAP-02 — "First-party connectors" and write actions
 - **Claim:** Shopify/Stripe/HubSpot/Notion/Zendesk/Linear/Intercom/Zapier shown as live connectors; demo runs `shopify.orders.refund`, `stripe.customer.update`, *"refunded · customer notified · ticket closed (4.1s)"*.
 - **Now (2026-08-23):** the tool gallery ships provider-aware API-token templates for all eight advertised brands. Shopify includes order/transaction lookup and refund-with-notification; Stripe and HubSpot include customer/contact updates; Zendesk includes public resolution + solve; Notion, Linear, and Intercom include lookups; Zapier includes a Catch Hook action. JSON and form-encoded request bodies are supported end-to-end, write tools remain disabled until explicitly enabled, and manual write tests require confirmation.
 - **Now, phase 2 (2026-08-24):** the Tools dashboard groups all eight providers into connector cards with available/partial/installed status. One setup and credential step atomically installs every missing provider action, deterministic document ids make retries duplicate-safe, provider-specific setup is host/format validated, and write actions remain disabled for explicit review. Individual templates and fully custom tools remain available.
@@ -81,7 +82,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Now, phase 1 (2026-08-23):** those triggers can send an exact response, resolve the conversation, place it in the human queue, assign a specific teammate, or route future turns to another AI agent. Response actions can stop immediately or continue through later matching rules and into the normal AI response. Targets are workspace-verified before storage, routed conversations stay with their destination, and legacy escalation rules remain compatible.
 - **Now, phase 2A (2026-08-23):** each agent has a persisted, visual directed graph with Start, condition, and action nodes; explicit Yes/No/Next branches; sequential response actions; an inspector for all phase-1 triggers/actions; auto-layout; pause/resume; and a safe return to ordered rules. Existing rules open as a non-active converted preview and only switch runtimes after explicit activation. The graph executes ahead of the rules fallback with cycle, reachability, target, size, and runtime-step validation.
 - **Now, phase 2B (2026-08-24):** nodes can be dragged directly around the canvas with grid-snapped persisted positions. Labeled Yes, No, and Next output handles can be dragged onto condition or action nodes to create or rewire paths, with a live connection preview, connected-port states, drop-target emphasis, and immediate cycle prevention. Keyboard selection, auto-layout, and inspector connection selects remain available as accessible alternatives.
-- **Status:** ✅ Implemented · **Priority:** P1
+- **Status:** ✅ Implemented · **Priority:** P1 (resolved)
 
 ### 🟠 GAP-04 — Channels: "ten channels" — email, Slack, and SMS now ship, 3 channels remain
 - **Claim:** FAQ *"Live chat, email, WhatsApp, Messenger, Instagram, SMS, Slack, in-app widgets"* · pricing *"Collaborative inbox for all customer emails"* · *"One agent. Ten channels."*
@@ -101,11 +102,11 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Now (2026-08-23):** every response records a normalized **knowledge confidence** from its strongest retrieval match. Per-agent atomic counters and daily buckets power a 30-day trend, average, and low-confidence rate; conversation-level values are included in CSV exports. The dashboard explicitly distinguishes retrieval support from guaranteed answer correctness.
 - **Status:** ✅ Implemented. The hero's exact "1.8s / 00:04.1" values remain illustrative rather than live workspace data. · **Priority:** P1 (resolved)
 
-### ✅ GAP-06 — Auto-syncing knowledge now ships for webpages
+### 🟠 GAP-06 — Auto-syncing knowledge ships for webpages only
 - **Claim:** *"Ayooda auto-syncs with helpdesk articles, docs, and product changes — no more stale answers."*
 - **Was:** Ingestion was manual (paste URL / upload) and re-index required `POST /:id/reindex`.
 - **Now (2026-08-23):** webpage sources can be refreshed daily, weekly, or monthly from the Knowledge dashboard. The existing internal sweep claims due sources transactionally, launches re-ingestion, prevents duplicate jobs with a one-hour recovery lease, and retries failures with bounded backoff. The dashboard exposes next/last sync state, errors, and a manual **Sync now** action. Uploaded files remain manual because their stored content is immutable; replacing a file requires a new upload.
-- **Status:** ✅ Implemented for webpage sources · **Priority:** P2 (resolved)
+- **Status:** 🟠 Partial. Scheduled webpage refresh ships, but the broader claim implies live upstream helpdesk/doc/product integrations that are not implemented. Uploaded files also remain manual. · **Priority:** P2
 
 ### ✅ GAP-07 — "Test before you ship" sandbox now ships
 - **Claim:** *"Use the sandbox — real chat widget, fake traffic — to stress-test every flow."*
@@ -122,11 +123,11 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Still missing:** the literal `your.company.internal` example requires deployment-level private networking/VPC support. The hosted product intentionally accepts only publicly resolvable HTTPS endpoints; a self-hosted Ayooda API can be adapted to reach private inference infrastructure within its own trusted network.
 - **Status:** 🟠 Partial (Gateway BYOK, dynamic model/Llama selection, and public OpenAI-compatible/self-hosted endpoints ship; managed private-network connectivity does not) · **Priority:** P2
 
-### 🟠 GAP-09 — Security/trust badges
+### ✅ GAP-09 — Security/trust claims grounded in shipped controls
 - **Was:** the landing page claimed *"Enterprise-grade encryption, scoped API keys, SSO"*, *"GDPR-compliant"*, and *"Europe-hosted"* without SSO/SAML/OIDC, scoped API keys, formal compliance evidence, or code-enforced EU residency.
 - **Now, phase 1 (2026-08-24):** the three trust badges sell controls that are directly enforced in the product: authenticated AES-256-GCM encryption for connector/model credentials, workspace roles plus per-agent editor authorization, and signature verification for inbound Slack, Twilio SMS, and Resend email traffic. The unsupported SSO, GDPR, and EU-hosting guarantees are no longer published.
-- **Still missing:** enterprise SSO and deployment-level regional data-residency controls remain future product work. Formal compliance language should only return with the corresponding operational and legal evidence.
-- **Status:** 🟠 Partial (public claim risk resolved; enterprise SSO/residency not implemented) · **Priority:** P2
+- **Not advertised:** enterprise SSO and deployment-level regional data-residency controls remain future product opportunities. Formal compliance language should only return with the corresponding operational and legal evidence.
+- **Status:** ✅ Marketing gap resolved. Every current public trust claim maps to an enforced control; SSO/residency are not represented as shipped. · **Priority:** P2 (resolved)
 
 ### ✅ GAP-10 — Social proof claims reframed around shipped capabilities
 - **Was:** *"Trusted by modern support teams at 10,000+ companies"* plus three named testimonials with specific automation figures, none of which had supporting evidence in the repository.
@@ -145,19 +146,14 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 
 ---
 
-## 3. Prioritized implementation plan
+## 3. Current gap priorities
 
 | Order | Item | Status | Priority |
 |---|---|---|---|
-| 1 | **MCP support** (GAP-01) | ✅ Done | P0 |
-| 2 | **Landing-page honesty/reframe pass** — dead CTAs, social proof, performance benchmarks, and security badges are now grounded in shipped capabilities (GAP-09/GAP-10/GAP-11/GAP-12); remaining channel claims still need qualification (GAP-04). | 🟠 (security/trust portion done) | P0 |
-| 3 | **Analytics: CSV export + aggregate CSAT** (closes GAP-05) | ✅ Done | P1 |
-| 4 | **Email channel** (closes GAP-04 highest-value piece) | ✅ Done | P1 |
-| 5 | **Visual workflow builder** (GAP-03) | ✅ Done | P1 |
-| 6 | **BYO LLM / custom endpoint** (GAP-08) | 🟠 Gateway BYOK + dynamic catalog + public custom endpoints done | P2 |
-| 7 | **Auto-sync knowledge** (GAP-06) | ✅ Done | P2 |
-| 8 | **Sandbox/test mode** (GAP-07) | ✅ Done | P2 |
-| 9 | **SSO / regional hosting controls** (GAP-09 phase 2+) | 🔴 Product gap; public claims reframed | P2 |
+| 1 | **WhatsApp, Messenger, and Instagram channels** (GAP-04) | 🟠 Five channels ship; three advertised Meta channels remain | P1 |
+| 2 | **Upstream knowledge connectors/sync** (GAP-06) | 🟠 Scheduled webpages ship; uploaded files and upstream helpdesk/doc systems remain manual | P2 |
+| 3 | **Managed private-network model connectivity** (GAP-08) | 🟠 Public OpenAI-compatible endpoints ship; hosted VPC/private DNS connectivity does not | P2 |
+| — | **GAP-01/02/03/05/07/09/10/11/12** | ✅ Resolved | — |
 
 ---
 
@@ -180,8 +176,8 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 ### Definition of done — met
 - GAP-01 is now ✅ Implemented; the "Model Context Protocol support" claim on the landing page is backed by a real, working feature.
 
-### Remaining honesty items (still open — next)
-GAP-04 (remaining channels: WhatsApp/Messenger/Instagram), GAP-08 (private-network endpoint connectivity), and GAP-09 phase 2+ (SSO/regional controls) remain product opportunities. Their unsupported public claims have been removed or replaced with capability-backed language. GAP-03, GAP-05, GAP-09 phase 1, GAP-10, GAP-11, and GAP-12 are now resolved.
+### Remaining gap items
+GAP-04 (WhatsApp/Messenger/Instagram), GAP-06 (upstream knowledge connectors beyond scheduled webpages), and GAP-08 (managed private-network endpoint connectivity) remain partial. GAP-01/02/03/05/07/09/10/11/12 are resolved. Enterprise SSO and regional controls remain product opportunities, but they are no longer landing-page gaps because the site does not advertise them.
 
 ---
 

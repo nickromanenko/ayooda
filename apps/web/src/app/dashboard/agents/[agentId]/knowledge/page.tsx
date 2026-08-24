@@ -3,6 +3,7 @@
 import { use, useState, useEffect, useCallback } from 'react'
 import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle, FileText, RotateCw } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { trackProductEvent } from '@/lib/product-analytics'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
 import { Loading, EmptyState } from '@/components/dashboard/Loading'
 import type { KnowledgeDocStatus } from '@ayooda/shared'
@@ -118,6 +119,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
         throw new Error(data.error ?? 'Failed to add URL')
       }
       setUrlInput('')
+      trackProductEvent('Knowledge Source Added', { source_type: 'website', context: 'dashboard' })
       await fetchDocs()
     } catch (err: unknown) {
       setUrlError(err instanceof Error ? err.message : 'Failed to add URL')
@@ -221,7 +223,13 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
           We&apos;ll crawl the page and its linked pages (up to 25 pages).
         </p>
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
-          <KnowledgeUpload uploadPath={`/agents/${agentId}/knowledge/upload`} onUploaded={() => void fetchDocs()} />
+          <KnowledgeUpload
+            uploadPath={`/agents/${agentId}/knowledge/upload`}
+            onUploaded={() => {
+              trackProductEvent('Knowledge Source Added', { source_type: 'file', context: 'dashboard' })
+              void fetchDocs()
+            }}
+          />
         </div>
       </div>
 

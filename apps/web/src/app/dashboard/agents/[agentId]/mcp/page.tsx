@@ -3,6 +3,7 @@
 import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Trash2, Plus, Plug } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { trackProductEvent } from '@/lib/product-analytics'
 import { MCP_TRANSPORT_LABELS, type McpServerDef, type McpTransportType, type McpServerAuthType } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
@@ -70,6 +71,7 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
 
   async function save() {
     if (!form) return
+    const isCreating = !form.id
     setSaving(true); setError('')
     try {
       const res = form.id
@@ -77,6 +79,9 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
         : await apiRequest(`/agents/${agentId}/mcp`, { method: 'POST', body: JSON.stringify(payload(form)) })
       const d = await res.json().catch(() => ({})) as { error?: string }
       if (!res.ok) { setError(d.error ?? 'Could not save the server'); return }
+      if (isCreating) {
+        trackProductEvent('MCP Server Connected', { transport: form.transport, auth_type: form.authType })
+      }
       setForm(null); await load()
     } finally { setSaving(false) }
   }

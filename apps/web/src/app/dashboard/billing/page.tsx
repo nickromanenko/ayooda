@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, type ComponentType, type CSSProperties } from 'react'
 import { Check, Sparkles, Zap, Rocket, ArrowRight, CreditCard } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { trackProductEvent } from '@/lib/product-analytics'
 import { Loading } from '@/components/dashboard/Loading'
 
 interface PlanDef { tier: string; name: string; priceUsd: number; conversationCap: number }
@@ -66,6 +67,7 @@ export default function BillingPage() {
     const params = new URLSearchParams(window.location.search)
     if (params.get('checkout') === 'success') {
       setJustPaid(true)
+      trackProductEvent('Checkout Completed', {})
       window.history.replaceState(null, '', window.location.pathname)
     }
   }, [])
@@ -89,6 +91,7 @@ export default function BillingPage() {
       const res = await apiRequest('/billing/checkout', { method: 'POST', body: JSON.stringify({ tier }) })
       const body = await res.json().catch(() => ({})) as { url?: string; error?: string }
       if (!res.ok || !body.url) { setError(body.error ?? 'Could not start checkout. Please try again.'); return }
+      trackProductEvent('Checkout Started', { tier })
       window.location.href = body.url
     } catch { setError('Could not start checkout. Please try again.') }
     finally { setBusy('') }

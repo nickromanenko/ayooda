@@ -3,6 +3,7 @@
 import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink, Smartphone } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { trackProductEvent } from '@/lib/product-analytics'
 import { Loading } from '@/components/dashboard/Loading'
 import { label, errorText, input } from '@/components/dashboard/ui'
 import WidgetAppearance from '@/components/dashboard/WidgetAppearance'
@@ -87,7 +88,8 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   async function createWidget() {
     setWidgetBusy(true)
     try {
-      await apiRequest(`${base}/web-widget`, { method: 'POST' })
+      const res = await apiRequest(`${base}/web-widget`, { method: 'POST' })
+      if (res.ok) trackProductEvent('Channel Connected', { channel_type: 'web_widget', context: 'dashboard' })
       await fetchChannels()
     } finally { setWidgetBusy(false) }
   }
@@ -119,6 +121,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       const data = await res.json().catch(() => ({})) as { error?: string }
       if (!res.ok) { setTelegramError(data.error ?? 'Failed to connect the Telegram bot.'); return }
       setBotToken('')
+      trackProductEvent('Channel Connected', { channel_type: 'telegram', context: 'dashboard' })
       await fetchChannels()
     } catch {
       setTelegramError('Failed to connect the Telegram bot.')
@@ -148,6 +151,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       if (!res.ok) { setEmailError(data.error ?? 'Failed to connect email.'); return }
       setEmailWebhookUrl(data.webhookUrl ?? '')
       setEmailForm({ resendApiKey: '', fromAddress: '', inboxAddress: '', webhookSecret: '' })
+      trackProductEvent('Channel Connected', { channel_type: 'email', context: 'dashboard' })
       await fetchChannels()
     } catch {
       setEmailError('Failed to connect email.')
@@ -177,6 +181,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       if (!res.ok) { setSlackError(data.error ?? 'Failed to connect Slack.'); return }
       setSlackWebhookUrl(data.webhookUrl ?? '')
       setSlackForm({ botToken: '', signingSecret: '' })
+      trackProductEvent('Channel Connected', { channel_type: 'slack', context: 'dashboard' })
       await fetchChannels()
     } catch {
       setSlackError('Failed to connect Slack.')
@@ -212,6 +217,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       if (!res.ok) { setSmsError(data.error ?? 'Failed to connect Twilio SMS.'); return }
       setSmsWebhookUrl(data.webhookUrl ?? '')
       setSmsForm({ accountSid: '', authToken: '', fromNumber: '' })
+      trackProductEvent('Channel Connected', { channel_type: 'sms', context: 'dashboard' })
       await fetchChannels()
     } catch {
       setSmsError('Failed to connect Twilio SMS.')

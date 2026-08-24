@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { Loader2, Upload, X } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { trackProductEvent } from '@/lib/product-analytics'
 import {
   AGENT_ROLES,
   DEFAULT_AGENT_ROLE_ID,
@@ -81,6 +82,7 @@ export default function NewAgentForm({
         }
       }
       if (preview) URL.revokeObjectURL(preview)
+      trackProductEvent('Agent Created', { role, has_logo: Boolean(file) })
       onCreated(agent, warning)
     } finally {
       setBusy(false)

@@ -3,6 +3,7 @@ import Script from 'next/script'
 import { Montserrat } from 'next/font/google'
 import { JetBrains_Mono } from 'next/font/google'
 import { AuthProvider } from '@/components/providers/AuthProvider'
+import { MixpanelAnalytics } from '@/components/providers/MixpanelAnalytics'
 import './globals.css'
 
 const montserrat = Montserrat({
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="theme-init" strategy="beforeInteractive">{themeScript}</Script>
       </head>
       <body className="h-full">
+        <MixpanelAnalytics />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

@@ -14,6 +14,7 @@ import {
   googleSignInOrPrepareLink,
   completeGoogleLinkWithPassword,
 } from '@/lib/auth-linking'
+import { trackProductEvent } from '@/lib/product-analytics'
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -122,6 +123,7 @@ function LoginForm() {
       const outcome = await googleSignInOrPrepareLink()
       if (outcome.kind === 'success') {
         await createSession(outcome.user)
+        trackProductEvent(outcome.isNewUser ? 'Sign Up Completed' : 'Sign In Completed', { method: 'google' })
         router.push(redirectTo)
       } else if (outcome.kind === 'needs-link') {
         setLinkingState({ email: outcome.email, pendingCred: outcome.pendingCred })
@@ -142,6 +144,7 @@ function LoginForm() {
     try {
       const result = await signInWithEmailAndPassword(auth, email, password)
       await createSession(result.user)
+      trackProductEvent('Sign In Completed', { method: 'email' })
       router.push(redirectTo)
     } catch (err: unknown) {
       setError(friendlyError(err))
@@ -162,6 +165,7 @@ function LoginForm() {
         linkingState.pendingCred,
       )
       await createSession(linkedUser)
+      trackProductEvent('Sign In Completed', { method: 'account_link' })
       router.push(redirectTo)
     } catch (err: unknown) {
       setError(friendlyError(err))

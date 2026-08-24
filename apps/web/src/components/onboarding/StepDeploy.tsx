@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Copy, Loader2 } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { trackProductEvent } from '@/lib/product-analytics'
 import type { IdentityData } from './StepIdentity'
 
 export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDone: () => void }) {
@@ -25,6 +26,7 @@ export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDon
         if (!res.ok) throw new Error('Failed to create widget channel')
         const data = (await res.json()) as { embedCode: string }
         setEmbedCode(data.embedCode)
+        trackProductEvent('Channel Connected', { channel_type: 'web_widget', context: 'onboarding' })
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Something went wrong')
       }

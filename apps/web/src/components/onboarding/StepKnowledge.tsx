@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Globe, Loader2, CheckCircle2, XCircle, X } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { trackProductEvent } from '@/lib/product-analytics'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
 import type { KnowledgeDocStatus } from '@ayooda/shared'
 
@@ -78,6 +79,7 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
       if (!res.ok) throw new Error('Failed to queue URL')
       const data = (await res.json()) as { docId: string; status: KnowledgeDocStatus }
       setQueued(prev => [...prev, { docId: data.docId, url: trimmed, status: data.status }])
+      trackProductEvent('Knowledge Source Added', { source_type: 'website', context: 'onboarding' })
       setUrlInput('')
     } catch (err: unknown) {
       setUrlError(err instanceof Error ? err.message : 'Failed to add URL')
@@ -138,9 +140,10 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
 
         <KnowledgeUpload
           uploadPath={`/agents/${agentId}/knowledge/upload`}
-          onUploaded={(doc) =>
+          onUploaded={(doc) => {
+            trackProductEvent('Knowledge Source Added', { source_type: 'file', context: 'onboarding' })
             setQueued((prev) => [...prev, { docId: doc.docId, url: doc.source, status: 'pending' }])
-          }
+          }}
         />
 
         {/* Queued URLs */}
