@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, CSSProperties, ReactNode, Compone
 import Link from 'next/link'
 import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier, SiWhatsapp, SiGmail, SiAirtable, SiGraphql, SiModelcontextprotocol } from 'react-icons/si'
 import { Sparkles, Zap, Rocket, Webhook, Braces, Database, Boxes, Network } from 'lucide-react'
+import { LANDING_LINKS } from '@/lib/landing-links'
 
 // ─── Reveal ───────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ function ChatBubble({ m }: { m: ChatMsg }) {
     )
   }
   return (
-    <div style={{
+    <div id="demo" tabIndex={-1} aria-label="Ayooda support conversation demo" style={{
       alignSelf: isUser ? 'flex-end' : 'flex-start',
       maxWidth: '76%', display: 'flex', gap: 10,
       flexDirection: isUser ? 'row-reverse' : 'row',
@@ -310,10 +311,10 @@ function Hero() {
         <Reveal delay={340}>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
             <Link href="/signup" className="btn btn-primary">Start free trial</Link>
-            <button className="btn btn-ghost">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 1l9 5-9 5V1z" fill="currentColor" /></svg>
-              Watch 90-sec demo
-            </button>
+            <a href={LANDING_LINKS.demo} className="btn btn-ghost landing-cta">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: 2 }}><path d="M2 1l9 5-9 5V1z" fill="currentColor" /></svg>
+              Watch live demo
+            </a>
           </div>
         </Reveal>
 
@@ -833,8 +834,10 @@ function OrbitRing({ radius, items, duration, reverse, size = 50, fontSize = 11,
     }}>
       {items.map((it, i) => {
         const angle = (i / items.length) * Math.PI * 2
-        const x = Math.cos(angle) * radius + radius
-        const y = Math.sin(angle) * radius + radius
+        // Stable pixel precision avoids server/browser style serialization
+        // disagreeing on near-zero trigonometric values during hydration.
+        const x = Math.round((Math.cos(angle) * radius + radius) * 1_000) / 1_000
+        const y = Math.round((Math.sin(angle) * radius + radius) * 1_000) / 1_000
         return (
           <div key={it.label} title={it.label} style={{
             position: 'absolute', left: x - size / 2, top: y - size / 2,
@@ -872,8 +875,8 @@ function Integrations() {
             </Reveal>
             <Reveal delay={240}>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <Link href="/signup" className="btn btn-primary">Browse connectors</Link>
-                <button className="btn btn-ghost">Read the MCP docs</button>
+                <Link href={LANDING_LINKS.connectors} className="btn btn-primary landing-cta">Browse connectors</Link>
+                <Link href={LANDING_LINKS.mcpDocs} className="btn btn-ghost landing-cta">Read the MCP docs</Link>
               </div>
             </Reveal>
           </div>
@@ -1188,12 +1191,12 @@ function FAQ() {
               </h2>
             </Reveal>
             <Reveal delay={160}>
-              <p style={{ color: 'var(--ink-dim)', marginTop: 22, fontSize: 15, lineHeight: 1.6, maxWidth: 340 }}>
-                Still curious? Ask Ayooda directly — she&apos;ll hand you off to a human if she doesn&apos;t know.
+              <p style={{ color: 'var(--ink-dim)', marginTop: 22, fontSize: 15, lineHeight: 1.6, maxWidth: 340, textWrap: 'pretty' as CSSProperties['textWrap'] }}>
+                Still curious? Build your own agent and test its answers, sources, workflows, and hand-offs in the isolated sandbox.
               </p>
             </Reveal>
             <Reveal delay={220}>
-              <button className="btn btn-ghost" style={{ marginTop: 14 }}>Ask Ayooda →</button>
+              <Link href={LANDING_LINKS.sandbox} className="btn btn-ghost landing-cta" style={{ marginTop: 14 }}>Test your own agent →</Link>
             </Reveal>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--line)' }}>
@@ -1226,10 +1229,10 @@ function FinalCTA() {
         <Reveal delay={200}>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
             <Link href="/signup" className="btn btn-primary">Start free trial</Link>
-            <button className="btn btn-ghost">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 1l9 5-9 5V1z" fill="currentColor" /></svg>
-              Watch demo
-            </button>
+            <a href={LANDING_LINKS.demo} className="btn btn-ghost landing-cta">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: 2 }}><path d="M2 1l9 5-9 5V1z" fill="currentColor" /></svg>
+              Watch live demo
+            </a>
           </div>
           <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', margin: 0 }}>
             14-DAY FREE TRIAL · NO CARD REQUIRED
@@ -1243,36 +1246,10 @@ function FinalCTA() {
 // ─── Footer ───────────────────────────────────────────────────────────────────
 
 function Footer() {
-  const cols = [
-    { h: 'Product', links: ['Features', 'Integrations', 'Pricing', 'Changelog'] },
-    { h: 'Company', links: ['About', 'Customers', 'Careers', 'Blog'] },
-    { h: 'Resources', links: ['Docs', 'MCP guide', 'Status', 'Contact'] },
-  ]
-  const showLinks = false // links block temporarily hidden
   return (
-    <footer style={{ padding: showLinks ? '60px 0 40px' : '32px 0', borderTop: '1px solid var(--line)' }}>
+    <footer style={{ padding: '32px 0', borderTop: '1px solid var(--line)' }}>
       <div className="container">
-        {showLinks && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr repeat(3, 1fr)', gap: 40, marginBottom: 40 }}>
-          <div>
-            <Logo />
-            <p style={{ marginTop: 14, color: 'var(--ink-mute)', fontSize: 13, maxWidth: 260, lineHeight: 1.5 }}>
-              The AI support agent your customers will want to talk to.
-            </p>
-          </div>
-          {cols.map(col => (
-            <div key={col.h}>
-              <div className="eyebrow" style={{ marginBottom: 14 }}>{col.h}</div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-                {col.links.map(l => (
-                  <li key={l}><a href="#" style={{ fontSize: 13.5, color: 'var(--ink-dim)' }}>{l}</a></li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-        )}
-        <div style={{ display: 'flex', gap: 16, justifyContent: 'space-between', paddingTop: showLinks ? 24 : 0, borderTop: showLinks ? '1px solid var(--line)' : 'none', fontSize: 12, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
+        <div style={{ display: 'flex', gap: 16, justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
           <span>© 2026 Ayooda · All rights reserved</span>
           <span>Made for the humans behind the inbox.</span>
         </div>
