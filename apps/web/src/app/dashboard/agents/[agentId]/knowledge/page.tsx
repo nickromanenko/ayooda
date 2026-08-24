@@ -57,7 +57,7 @@ const STATUS_CONFIG: Record<KnowledgeDocStatus, { icon: React.ReactNode; label: 
   error: {
     icon: <XCircle size={12} />,
     label: 'Error',
-    style: { background: 'rgba(239,68,68,0.1)', color: '#f87171' },
+    style: { background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' },
   },
 }
 
@@ -174,7 +174,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
       </p>
 
       {syncConfigError && (
-        <p role="alert" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#f87171', margin: '-8px 0 14px' }}>
+        <p role="alert" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--danger)', margin: '-8px 0 14px' }}>
           <AlertCircle size={12} /> {syncConfigError}
         </p>
       )}
@@ -193,12 +193,12 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
               placeholder="https://yourwebsite.com"
               style={{
                 width: '100%', paddingLeft: 36, paddingRight: 12, paddingTop: 9, paddingBottom: 9,
-                borderRadius: 'var(--r-sm)', border: `1px solid ${urlError ? '#f87171' : 'var(--line-2)'}`,
+                borderRadius: 'var(--r-sm)', border: `1px solid ${urlError ? 'var(--danger)' : 'var(--line-2)'}`,
                 background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14,
                 outline: 'none', fontFamily: 'var(--font-sans)', boxSizing: 'border-box',
               }}
-              onFocus={e => (e.currentTarget.style.borderColor = urlError ? '#f87171' : 'var(--accent)')}
-              onBlur={e => (e.currentTarget.style.borderColor = urlError ? '#f87171' : 'var(--line-2)')}
+              onFocus={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--accent)')}
+              onBlur={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--line-2)')}
             />
           </div>
           <button
@@ -213,7 +213,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
           </button>
         </div>
         {urlError && (
-          <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#f87171', marginTop: 8 }}>
+          <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>
             <AlertCircle size={12} /> {urlError}
           </p>
         )}
@@ -243,10 +243,10 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                     <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>{doc.chunkCount} chunks indexed</p>
                   )}
                   {doc.status === 'error' && doc.errorMessage && (
-                    <p style={{ fontSize: 11, color: '#f87171', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.errorMessage}</p>
+                    <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.errorMessage}</p>
                   )}
                   {doc.type === 'webpage' && doc.autoSyncEnabled && doc.syncIntervalHours && (
-                    <p style={{ fontSize: 11, color: doc.syncError ? '#f87171' : 'var(--ink-mute)', marginTop: 2 }}>
+                    <p style={{ fontSize: 11, color: doc.syncError ? 'var(--danger)' : 'var(--ink-mute)', marginTop: 2 }}>
                       Auto-sync {SYNC_INTERVAL_LABELS[doc.syncIntervalHours].toLowerCase()}
                       {formatTimestamp(doc.nextSyncAt) ? ` · Next ${formatTimestamp(doc.nextSyncAt)}` : ''}
                       {doc.syncError ? ` · Last attempt failed` : ''}
@@ -304,7 +304,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                   onClick={() => void handleDelete(doc.id)}
                   disabled={deletingId === doc.id}
                   style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', opacity: deletingId === doc.id ? 0.4 : 1, transition: 'color .15s' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#f87171')}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')}
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-mute)')}
                   aria-label="Delete"
                 >

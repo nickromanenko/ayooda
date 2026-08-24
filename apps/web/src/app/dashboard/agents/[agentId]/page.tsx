@@ -158,7 +158,7 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
             </button>
           )}
           {!agent.isDefault && (
-            <button type="button" onClick={() => void remove()} disabled={busy} className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: '#f87171' }}>
+            <button type="button" onClick={() => void remove()} disabled={busy} className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: 'var(--danger)' }}>
               {busy ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={13} />} Delete agent
             </button>
           )}

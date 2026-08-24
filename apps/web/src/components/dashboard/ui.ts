@@ -33,4 +33,4 @@ export const input: CSSProperties = {
 
 export const muted: CSSProperties = { fontSize: 13, color: 'var(--ink-mute)' }
 
-export const errorText: CSSProperties = { fontSize: 12, color: '#f87171' }
+export const errorText: CSSProperties = { fontSize: 12, color: 'var(--danger)' }

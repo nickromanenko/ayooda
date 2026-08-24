@@ -148,7 +148,7 @@ export default function BillingPage() {
       )}
 
       {error && (
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13, marginBottom: 20 }}>{error}</div>
+        <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)', fontSize: 13, marginBottom: 20 }}>{error}</div>
       )}
 
       {/* Current status */}
@@ -168,8 +168,8 @@ export default function BillingPage() {
                 {currentPlanName ?? (trialLeft !== null ? 'Free trial' : 'No plan')}
               </span>
               {trialLeft !== null && <span className="pill" style={{ padding: '3px 10px', fontSize: 11.5 }}>{trialLeft} day{trialLeft === 1 ? '' : 's'} left</span>}
-              {sub?.status === 'past_due' && <span className="pill" style={{ padding: '3px 10px', fontSize: 11.5, color: '#f59e0b', borderColor: 'rgba(245,158,11,0.4)' }}>Payment past due</span>}
-              {!data.entitled && <span className="pill" style={{ padding: '3px 10px', fontSize: 11.5, color: '#f87171', borderColor: 'rgba(248,113,113,0.4)' }}>Service paused</span>}
+              {sub?.status === 'past_due' && <span className="pill" style={{ padding: '3px 10px', fontSize: 11.5, color: 'var(--warning)', borderColor: 'rgba(245,158,11,0.4)' }}>Payment past due</span>}
+              {!data.entitled && <span className="pill" style={{ padding: '3px 10px', fontSize: 11.5, color: 'var(--danger)', borderColor: 'rgba(248,113,113,0.4)' }}>Service paused</span>}
             </div>
           </div>
           {sub?.tier && (
@@ -186,7 +186,7 @@ export default function BillingPage() {
             <span style={{ fontFamily: 'var(--font-mono)' }}>{data.usage.periodConversationCount.toLocaleString()} / {data.includedCap.toLocaleString()}</span>
           </div>
           <div style={{ height: 10, borderRadius: 999, background: 'var(--bg-2)', overflow: 'hidden', border: '1px solid var(--line)' }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? '#f87171' : activeViz.gradient, transition: 'width .4s ease' }} />
+            <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? 'var(--danger)' : activeViz.gradient, transition: 'width .4s ease' }} />
           </div>
           {data.overageCount > 0 && (
             <p style={{ fontSize: 13, color: 'var(--accent)', marginTop: 10 }}>

@@ -16,7 +16,7 @@ const STATUS_COLOR: Record<KnowledgeDocStatus, string> = {
   pending: 'var(--ink-mute)',
   processing: 'var(--accent)',
   indexed: 'var(--mint)',
-  error: '#f87171',
+  error: 'var(--danger)',
 }
 
 const STATUS_LABEL: Record<KnowledgeDocStatus, string> = {
@@ -116,9 +116,9 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
                 onChange={e => { setUrlInput(e.target.value); setUrlError('') }}
                 onKeyDown={handleKeyDown}
                 placeholder="https://yourwebsite.com"
-                style={{ ...inputStyle, borderColor: urlError ? '#f87171' : undefined }}
-                onFocus={e => (e.currentTarget.style.borderColor = urlError ? '#f87171' : 'var(--accent)')}
-                onBlur={e => (e.currentTarget.style.borderColor = urlError ? '#f87171' : 'var(--line-2)')}
+                style={{ ...inputStyle, borderColor: urlError ? 'var(--danger)' : undefined }}
+                onFocus={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--accent)')}
+                onBlur={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--line-2)')}
               />
             </div>
             <button
@@ -130,7 +130,7 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
               {adding ? 'Adding…' : 'Add'}
             </button>
           </div>
-          {urlError && <p style={{ fontSize: 12, color: '#f87171', marginTop: 6 }}>{urlError}</p>}
+          {urlError && <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{urlError}</p>}
           <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 6 }}>
             We&apos;ll crawl the page and its linked pages automatically.
           </p>

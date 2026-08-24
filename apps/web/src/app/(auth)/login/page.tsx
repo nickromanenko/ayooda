@@ -207,7 +207,7 @@ function LoginForm() {
             </div>
 
             {error && (
-              <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13 }}>
+              <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)', fontSize: 13 }}>
                 {error}
               </div>
             )}
@@ -241,7 +241,7 @@ function LoginForm() {
           </p>
 
           {resetSuccess && (
-            <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#86efac', fontSize: 13, marginBottom: 16 }}>
+            <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--success)', fontSize: 13, marginBottom: 16 }}>
               Your password has been reset. Sign in to continue.
             </div>
           )}
@@ -305,7 +305,7 @@ function LoginForm() {
             </div>
 
             {error && (
-              <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: 13 }}>
+              <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)', fontSize: 13 }}>
                 {error}
               </div>
             )}

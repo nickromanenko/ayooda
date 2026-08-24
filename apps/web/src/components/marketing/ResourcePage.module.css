@@ -28,6 +28,12 @@
   color: var(--ink);
 }
 
+.navActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .backLink,
 .primaryLink {
   min-height: 44px;
@@ -111,9 +117,9 @@
   border-radius: var(--r-lg);
   background: color-mix(in oklab, var(--panel) 92%, transparent);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, .08),
-    0 1px 2px rgba(0, 0, 0, .25),
-    0 16px 48px rgba(0, 0, 0, .2);
+    0 0 0 1px var(--line),
+    0 1px 2px rgba(0, 0, 0, .08),
+    0 16px 48px rgba(0, 0, 0, .10);
 }
 
 .cardTop {

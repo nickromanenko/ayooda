@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { SignOutButton } from '@/components/onboarding/SignOutButton'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -14,7 +15,10 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
           </svg>
           <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 16 }}>Ayooda</span>
         </Link>
-        <SignOutButton />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ThemeToggle />
+          <SignOutButton />
+        </div>
       </header>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 16px' }}>
         <div style={{ width: '100%', maxWidth: 560 }}>{children}</div>

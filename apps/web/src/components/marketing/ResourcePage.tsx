@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import styles from './ResourcePage.module.css'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
 export function ResourcePage({
   eyebrow,
@@ -25,10 +26,13 @@ export function ResourcePage({
             </svg>
             Ayooda
           </Link>
-          <Link href="/" className={styles.backLink}>
-            <ArrowLeft size={14} aria-hidden="true" />
-            <span className={styles.backLabel}>Back to home</span>
-          </Link>
+          <div className={styles.navActions}>
+            <ThemeToggle />
+            <Link href="/" className={styles.backLink}>
+              <ArrowLeft size={14} aria-hidden="true" />
+              <span className={styles.backLabel}>Back to home</span>
+            </Link>
+          </div>
         </nav>
       </header>
       <main className="container">

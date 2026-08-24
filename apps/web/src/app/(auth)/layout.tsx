@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
@@ -10,6 +11,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       justifyContent: 'center',
       padding: '48px 16px',
     }}>
+      <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 2 }}><ThemeToggle /></div>
       {/* Ambient glow */}
       <div aria-hidden style={{
         position: 'fixed', top: -300, left: '50%', transform: 'translateX(-50%)',

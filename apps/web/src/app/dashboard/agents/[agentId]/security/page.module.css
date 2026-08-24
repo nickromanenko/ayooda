@@ -85,13 +85,13 @@
 }
 
 .statusPlatform {
-  color: #a5b4fc;
+  color: var(--ai);
   background: rgba(129, 140, 248, 0.12);
   box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.17);
 }
 
 .statusNone {
-  color: #fbbf24;
+  color: var(--warning);
   background: rgba(251, 191, 36, 0.11);
   box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.16);
 }
@@ -266,7 +266,7 @@
 }
 
 .error {
-  color: #f87171;
+  color: var(--danger);
 }
 
 .keyActions {
@@ -295,7 +295,7 @@
 
 .dangerButton {
   min-height: 40px;
-  color: #f87171 !important;
+  color: var(--danger) !important;
 }
 
 .confirmBox {

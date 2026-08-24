@@ -117,7 +117,7 @@
 
 .bundleStatusPartial {
   background: rgba(251, 191, 36, 0.09);
-  color: #fbbf24;
+  color: var(--warning);
 }
 
 .bundleStatusInstalled {
@@ -202,7 +202,7 @@
   padding: 8px 11px;
   border-radius: 10px;
   background: rgba(251, 191, 36, 0.08);
-  color: #fbbf24;
+  color: var(--warning);
   font-size: 11px;
   text-wrap: pretty;
 }

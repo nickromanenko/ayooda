@@ -70,7 +70,7 @@ export function KnowledgeUpload({
         {uploading ? 'Uploading…' : 'Upload a document (PDF, DOCX, TXT, CSV, MD — max 10 MB)'}
       </button>
       {error && (
-        <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#f87171', marginTop: 8 }}>
+        <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>
           <AlertCircle size={12} /> {error}
         </p>
       )}

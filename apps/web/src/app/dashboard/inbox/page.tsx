@@ -32,8 +32,8 @@ interface Message {
 
 const STATUS_STYLE: Record<Conversation['status'], React.CSSProperties> = {
   bot: { background: 'var(--accent-soft)', color: 'var(--accent)' },
-  waiting: { background: 'rgba(239,68,68,0.15)', color: '#f87171' },
-  human: { background: 'rgba(245,165,36,0.18)', color: '#ffd27a' },
+  waiting: { background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' },
+  human: { background: 'rgba(245,165,36,0.18)', color: 'var(--accent-2)' },
   resolved: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
 }
 
@@ -269,7 +269,7 @@ export default function InboxPage() {
                 {' · '}Agent: {agentName(selectedConv.agentId)}
               </p>
               {selectedConv.status === 'waiting' && selectedConv.escalationReason && (
-                <p style={{ fontSize: 11, color: '#f87171', marginTop: 2 }}>Escalated: {selectedConv.escalationReason}</p>
+                <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>Escalated: {selectedConv.escalationReason}</p>
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -331,7 +331,7 @@ export default function InboxPage() {
                     ? <User size={12} style={{ color: 'var(--ink-mute)' }} />
                     : msg.role === 'operator'
                       ? <User size={12} style={{ color: 'var(--accent)' }} />
-                      : <Bot size={12} style={{ color: '#818cf8' }} />}
+                      : <Bot size={12} style={{ color: 'var(--ai)' }} />}
                 </div>
                 <div style={{
                   padding: '8px 12px', borderRadius: 16, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap',

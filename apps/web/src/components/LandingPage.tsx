@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier, SiWhatsapp, SiGmail, SiAirtable, SiGraphql, SiModelcontextprotocol } from 'react-icons/si'
 import { Sparkles, Zap, Rocket, Webhook, Braces, Database, Boxes, Network } from 'lucide-react'
 import { LANDING_LINKS } from '@/lib/landing-links'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
 // ─── Reveal ───────────────────────────────────────────────────────────────────
 
@@ -100,6 +101,7 @@ function Nav() {
           ))}
         </nav>
         <div className="landing-nav-actions" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ThemeToggle />
           <Link href="/login" className="btn btn-ghost" style={{ padding: '9px 14px', fontSize: 13 }}>Sign in</Link>
           <Link href="/signup" className="btn btn-primary" style={{ padding: '9px 14px', fontSize: 13 }}>Start free →</Link>
         </div>
@@ -122,6 +124,7 @@ function Nav() {
           {links.map(([label, href]) => (
             <a key={href} href={href} onClick={() => setMobileOpen(false)}>{label}<span aria-hidden>→</span></a>
           ))}
+          <ThemeToggle showLabel className="landing-mobile-theme" />
           <div className="landing-mobile-actions">
             <Link href="/login" className="btn btn-ghost" onClick={() => setMobileOpen(false)}>Sign in</Link>
             <Link href="/signup" className="btn btn-primary" onClick={() => setMobileOpen(false)}>Start free →</Link>
@@ -572,8 +575,8 @@ function FeatureMock({ kind }: { kind: string }) {
       { name: 'Shopify', Icon: SiShopify, color: '#95BF47' },
       { name: 'Stripe', Icon: SiStripe, color: '#635BFF' },
       { name: 'HubSpot', Icon: SiHubspot, color: '#FF7A59' },
-      { name: 'Notion', Icon: SiNotion, color: '#f4f4f0' },
-      { name: 'Zendesk', Icon: SiZendesk, color: '#f4f4f0' },
+      { name: 'Notion', Icon: SiNotion, color: 'var(--brand-neutral)' },
+      { name: 'Zendesk', Icon: SiZendesk, color: 'var(--brand-neutral)' },
       { name: 'Linear', Icon: SiLinear, color: '#9CA3F0' },
       { name: 'Intercom', Icon: SiIntercom, color: '#3B82F6' },
       { name: 'Zapier', Icon: SiZapier, color: '#FF4F00' },
@@ -942,18 +945,18 @@ function Integrations() {
                 { label: 'WhatsApp', Icon: SiWhatsapp, color: '#25D366' },
                 { label: 'Gmail', Icon: SiGmail, color: '#EA4335' },
                 { label: 'Intercom', Icon: SiIntercom, color: '#3B82F6' },
-                { label: 'Zendesk', Icon: SiZendesk, color: '#f4f4f0' },
+                { label: 'Zendesk', Icon: SiZendesk, color: 'var(--brand-neutral)' },
               ]} />
               <OrbitRing radius={200} duration={70} reverse size={54} items={[
                 { label: 'Shopify', Icon: SiShopify, color: '#95BF47' },
                 { label: 'Stripe', Icon: SiStripe, color: '#635BFF' },
                 { label: 'HubSpot', Icon: SiHubspot, color: '#FF7A59' },
                 { label: 'Airtable', Icon: SiAirtable, color: '#FCB400' },
-                { label: 'Notion', Icon: SiNotion, color: '#f4f4f0' },
+                { label: 'Notion', Icon: SiNotion, color: 'var(--brand-neutral)' },
                 { label: 'Linear', Icon: SiLinear, color: '#9CA3F0' },
               ]} />
               <OrbitRing radius={260} duration={100} size={48} dashed items={[
-                { label: 'MCP', Icon: SiModelcontextprotocol, color: '#f4f4f0' },
+                { label: 'MCP', Icon: SiModelcontextprotocol, color: 'var(--brand-neutral)' },
                 { label: 'Webhooks', Icon: Webhook, color: '#9CA3F0' },
                 { label: 'REST', Icon: Braces, color: '#8be3b5' },
                 { label: 'GraphQL', Icon: SiGraphql, color: '#E10098' },

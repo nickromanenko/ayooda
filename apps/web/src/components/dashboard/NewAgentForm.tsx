@@ -181,7 +181,7 @@ export default function NewAgentForm({
         knowledge are configured after creation.
       </p>
 
-      {error && <p style={{ fontSize: 13, color: '#f87171', marginBottom: 14 }}>{error}</p>}
+      {error && <p style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 14 }}>{error}</p>}
 
       <div style={{ display: 'flex', gap: 10 }}>
         <button type="submit" className="btn btn-primary" disabled={busy} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

@@ -2,6 +2,8 @@
 
 /* ─── Ayooda Design Tokens ─── */
 :root {
+  color-scheme: dark;
+
   /* Surface */
   --bg: #0b0c10;
   --bg-2: #101217;
@@ -25,6 +27,11 @@
   --blue: #7aa2ff;
   --mint: #8be3b5;
   --violet: #b58bff;
+  --ai: #818cf8;
+  --success: #86efac;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --brand-neutral: #f4f4f0;
 
   /* Radii */
   --r-sm: 10px;
@@ -35,11 +42,45 @@
   /* Shadows */
   --shadow-soft: 0 1px 0 rgba(255,255,255,0.04) inset, 0 10px 40px rgba(0,0,0,0.35);
   --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 20px 60px rgba(0,0,0,0.45);
+  --shadow-control: 0 0 0 1px var(--line), 0 2px 8px rgba(0,0,0,0.18);
 
   /* Fonts — set by next/font, fallbacks here. Montserrat everywhere. */
   --font-sans: var(--font-montserrat, "Montserrat"), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: var(--font-montserrat, "Montserrat"), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f8f6f0;
+  --bg-2: #f0ede5;
+  --panel: #ffffff;
+  --panel-2: #f4f1e9;
+  --line: rgba(28, 27, 24, 0.10);
+  --line-2: rgba(28, 27, 24, 0.18);
+
+  --ink: #1c1b18;
+  --ink-dim: #4c4941;
+  --ink-mute: #716d62;
+  --ink-faint: #938e82;
+
+  --accent: #d9860b;
+  --accent-2: #b96c00;
+  --accent-soft: rgba(217, 134, 11, 0.13);
+
+  --blue: #3f63bd;
+  --mint: #18794e;
+  --violet: #7048b8;
+  --ai: #4f46e5;
+  --success: #18794e;
+  --warning: #9a5b00;
+  --danger: #c92a2a;
+  --brand-neutral: #1c1b18;
+
+  --shadow-soft: 0 0 0 1px rgba(0,0,0,0.04), 0 10px 34px rgba(54,45,28,0.10);
+  --shadow-card: 0 0 0 1px rgba(0,0,0,0.05), 0 20px 54px rgba(54,45,28,0.13);
+  --shadow-control: 0 0 0 1px rgba(0,0,0,0.08), 0 2px 8px rgba(54,45,28,0.10);
 }
 
 /* Tailwind theme bridge */
@@ -53,6 +94,12 @@
 html, body {
   background: var(--bg);
   color: var(--ink);
+}
+
+html {
+  transition-property: background-color, color;
+  transition-duration: 180ms;
+  transition-timing-function: ease-out;
 }
 
 /* Anchor-nav offset for the fixed header + smooth scrolling (respecting
@@ -127,6 +174,82 @@ a { color: inherit; text-decoration: none; }
 .btn-ghost { border-color: var(--line); color: var(--ink-dim); }
 .btn-ghost:hover { border-color: var(--line-2); color: var(--ink); }
 
+.theme-toggle {
+  all: unset;
+  box-sizing: border-box;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--ink-dim);
+  background: var(--panel);
+  box-shadow: var(--shadow-control);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition-property: scale, color, background-color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.theme-toggle:hover {
+  color: var(--ink);
+  background: var(--panel-2);
+  box-shadow: 0 0 0 1px var(--line-2), 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.theme-toggle:active { scale: 0.96; }
+.theme-toggle[data-label='false'] { width: 44px; padding: 0; }
+
+.dashboard-theme-toggle {
+  align-self: center;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dashboard-theme-toggle[data-label='true'] {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.theme-toggle-icons {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.theme-toggle-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  scale: 0.25;
+  filter: blur(4px);
+  transition-property: opacity, scale, filter;
+  transition-duration: 300ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.theme-toggle-icon[data-visible='true'] {
+  opacity: 1;
+  scale: 1;
+  filter: blur(0);
+}
+
+.theme-toggle[data-ready='false'] .theme-toggle-icon { transition: none; }
+
 .landing-mobile-toggle,
 .landing-mobile-menu {
   display: none;
@@ -149,7 +272,7 @@ a { color: inherit; text-decoration: none; }
     border-radius: 12px;
     color: var(--ink);
     background: var(--panel);
-    box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-control);
     cursor: pointer;
     transition-property: scale, background-color, box-shadow;
     transition-duration: 150ms;
@@ -247,6 +370,12 @@ a { color: inherit; text-decoration: none; }
     margin-top: 6px;
     padding-top: 8px;
     border-top: 1px solid var(--line);
+  }
+
+  .landing-mobile-theme {
+    width: 100%;
+    justify-content: flex-start;
+    margin-top: 6px;
   }
 
   .landing-mobile-actions .btn {

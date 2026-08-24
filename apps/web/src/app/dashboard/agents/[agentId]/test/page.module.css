@@ -232,7 +232,7 @@
   font-size: 11px;
 }
 
-.errorNotice { margin: 0 14px 10px; color: #f87171; font-size: 11px; }
+.errorNotice { margin: 0 14px 10px; color: var(--danger); font-size: 11px; }
 
 .composer {
   padding: 10px;

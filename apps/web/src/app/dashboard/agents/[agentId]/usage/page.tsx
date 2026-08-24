@@ -151,7 +151,7 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
   if (loading) {
     return <Loading />
   }
-  if (!u) return <p style={{ ...muted, color: '#f87171' }}>{error}</p>
+  if (!u) return <p style={{ ...muted, color: 'var(--danger)' }}>{error}</p>
 
   const c = u.conversations
   const unresolved = Math.max(0, c.total - c.resolved)

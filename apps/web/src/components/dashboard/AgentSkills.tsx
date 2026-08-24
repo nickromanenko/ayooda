@@ -45,7 +45,7 @@ export default function AgentSkills({ agentId }: { agentId: string }) {
 
   return (
     <div>
-      {error && <p style={{ ...muted, color: '#f87171' }}>{error}</p>}
+      {error && <p style={{ ...muted, color: 'var(--danger)' }}>{error}</p>}
       {skills.map((s) => (
         <div key={s.id} style={{ ...card, opacity: s.locked ? 0.6 : 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -68,7 +68,7 @@ export default function TeamPage() {
             <UserPlus size={14} /> {inviting ? 'Inviting…' : 'Invite'}
           </button>
         </div>
-        {error && <p style={{ fontSize: 12, color: '#f87171', marginTop: 8 }}>{error}</p>}
+        {error && <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</p>}
         {inviteLink && (
           <div style={{ marginTop: 12 }}>
             <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 6 }}>Share this link with them (they join when they sign up with the invited email):</p>
@@ -108,7 +108,7 @@ export default function TeamPage() {
           {invites.map((i) => (
             <div key={i.email} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--line)' }}>
               <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-dim)' }}>{i.email}</span>
-              <button type="button" onClick={() => void revoke(i.email)} disabled={busyId === 'invite:' + i.email} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13, color: '#f87171' }}>
+              <button type="button" onClick={() => void revoke(i.email)} disabled={busyId === 'invite:' + i.email} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13, color: 'var(--danger)' }}>
                 {busyId === 'invite:' + i.email ? 'Revoking…' : 'Revoke'}
               </button>
             </div>

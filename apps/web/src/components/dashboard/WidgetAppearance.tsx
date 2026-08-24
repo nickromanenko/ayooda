@@ -146,7 +146,7 @@ export default function WidgetAppearance({
             onChange={(e) => setDraft({ ...draft, welcomeMessage: e.target.value })}
             style={{ ...input, minHeight: 62, resize: 'vertical', fontSize: 13, padding: '8px 10px' }}
           />
-          <p style={{ fontSize: 11, color: tooLong ? '#f87171' : 'var(--ink-faint)', marginTop: 4 }}>
+          <p style={{ fontSize: 11, color: tooLong ? 'var(--danger)' : 'var(--ink-faint)', marginTop: 4 }}>
             {draft.welcomeMessage.length}/{MAX_WELCOME_MESSAGE_CHARS}
           </p>
 

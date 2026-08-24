@@ -304,7 +304,7 @@ function CopilotPageInner() {
             <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>{activeAgent?.name ?? 'New thread'}</p>
           </div>
 
-          {error && <p style={{ fontSize: 12, color: '#f87171', margin: '12px 20px 0' }}>{error}</p>}
+          {error && <p style={{ fontSize: 12, color: 'var(--danger)', margin: '12px 20px 0' }}>{error}</p>}
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {messages.map((msg) => (
@@ -324,7 +324,7 @@ function CopilotPageInner() {
                   }}>
                     {msg.role === 'user'
                       ? <User size={12} style={{ color: 'var(--ink-mute)' }} />
-                      : <Bot size={12} style={{ color: '#818cf8' }} />}
+                      : <Bot size={12} style={{ color: 'var(--ai)' }} />}
                   </div>
                   <div style={{
                     padding: '8px 12px', borderRadius: 16, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap',
@@ -352,7 +352,7 @@ function CopilotPageInner() {
             {(streaming || pending) && (
               <div style={{ display: 'flex', gap: 8, maxWidth: '75%' }}>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2, background: 'rgba(99,102,241,0.15)' }}>
-                  <Bot size={12} style={{ color: '#818cf8' }} />
+                  <Bot size={12} style={{ color: 'var(--ai)' }} />
                 </div>
                 <div style={{ padding: '8px 12px', borderRadius: 16, borderTopLeftRadius: 4, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap', background: 'var(--panel)', color: 'var(--ink-dim)', border: '1px solid var(--line)' }}>
                   {pending || <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />}

@@ -17,6 +17,7 @@ import {
   PanelLeftOpen,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
 // Knowledge, tools, escalation rules and deployment all configure one agent, so
 // they are reached through that agent's tabs rather than as siblings here.
@@ -160,6 +161,8 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
       {/* Bottom */}
       <div style={{ padding: '8px 8px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {visibleBottom.map(renderLink)}
+
+        <ThemeToggle className="dashboard-theme-toggle" showLabel={!collapsed} />
 
         {/* User + sign out */}
         <div style={{ marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--line)' }}>

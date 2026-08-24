@@ -343,7 +343,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
                 onSaved={applyAppearance}
               />
 
-              <button type="button" onClick={() => void removeWidget()} disabled={widgetBusy} className="btn btn-ghost" style={{ marginTop: 20, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: '#f87171' }}>
+              <button type="button" onClick={() => void removeWidget()} disabled={widgetBusy} className="btn btn-ghost" style={{ marginTop: 20, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: 'var(--danger)' }}>
                 {widgetBusy ? 'Removing…' : 'Remove widget'}
               </button>
             </>
