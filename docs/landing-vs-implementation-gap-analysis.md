@@ -121,9 +121,10 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Status:** 🟠 Partial (Gateway BYOK, dynamic model/Llama selection, and public OpenAI-compatible/self-hosted endpoints ship; managed private-network connectivity does not) · **Priority:** P2
 
 ### 🟠 GAP-09 — Security/trust badges
-- **Claim:** *"Enterprise-grade encryption, scoped API keys, SSO"* · *"GDPR-compliant"* · *"Europe-hosted (EU servers)"*.
-- **Reality:** Firebase Auth (Google + email only) — **no SSO/SAML/OIDC**. Secrets are encrypted and per-agent access control exists, but no SSO, no scoped API-key system, and no EU-region enforcement in code.
-- **Status:** 🔴 Missing (SSO/EU) · **Priority:** P2
+- **Was:** the landing page claimed *"Enterprise-grade encryption, scoped API keys, SSO"*, *"GDPR-compliant"*, and *"Europe-hosted"* without SSO/SAML/OIDC, scoped API keys, formal compliance evidence, or code-enforced EU residency.
+- **Now, phase 1 (2026-08-24):** the three trust badges sell controls that are directly enforced in the product: authenticated AES-256-GCM encryption for connector/model credentials, workspace roles plus per-agent editor authorization, and signature verification for inbound Slack, Twilio SMS, and Resend email traffic. The unsupported SSO, GDPR, and EU-hosting guarantees are no longer published.
+- **Still missing:** enterprise SSO and deployment-level regional data-residency controls remain future product work. Formal compliance language should only return with the corresponding operational and legal evidence.
+- **Status:** 🟠 Partial (public claim risk resolved; enterprise SSO/residency not implemented) · **Priority:** P2
 
 ### ✅ GAP-10 — Social proof claims reframed around shipped capabilities
 - **Was:** *"Trusted by modern support teams at 10,000+ companies"* plus three named testimonials with specific automation figures, none of which had supporting evidence in the repository.
@@ -147,14 +148,14 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | Order | Item | Status | Priority |
 |---|---|---|---|
 | 1 | **MCP support** (GAP-01) | ✅ Done | P0 |
-| 2 | **Landing-page honesty/reframe pass** — dead CTAs, unverified social proof, and unsupported performance benchmarks are reframed (GAP-10/GAP-11/GAP-12); unshipped channel/security claims still need qualification (GAP-04/GAP-09). | 🟠 (trust portion done) | P0 |
+| 2 | **Landing-page honesty/reframe pass** — dead CTAs, social proof, performance benchmarks, and security badges are now grounded in shipped capabilities (GAP-09/GAP-10/GAP-11/GAP-12); remaining channel claims still need qualification (GAP-04). | 🟠 (security/trust portion done) | P0 |
 | 3 | **Analytics: CSV export + aggregate CSAT** (closes GAP-05) | ✅ Done | P1 |
 | 4 | **Email channel** (closes GAP-04 highest-value piece) | ✅ Done | P1 |
 | 5 | **Visual workflow builder** (GAP-03) | ✅ Done | P1 |
 | 6 | **BYO LLM / custom endpoint** (GAP-08) | 🟠 Gateway BYOK + dynamic catalog + public custom endpoints done | P2 |
 | 7 | **Auto-sync knowledge** (GAP-06) | ✅ Done | P2 |
 | 8 | **Sandbox/test mode** (GAP-07) | ✅ Done | P2 |
-| 9 | **SSO / EU hosting** (GAP-09) | 🔴 | P2 |
+| 9 | **SSO / regional hosting controls** (GAP-09 phase 2+) | 🔴 Product gap; public claims reframed | P2 |
 
 ---
 
@@ -178,7 +179,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - GAP-01 is now ✅ Implemented; the "Model Context Protocol support" claim on the landing page is backed by a real, working feature.
 
 ### Remaining honesty items (still open — next)
-GAP-04 (remaining channels: WhatsApp/Messenger/Instagram), GAP-08 (private-network endpoint connectivity), and GAP-09 (SSO/EU) still need either implementation or a "coming soon" relabel. GAP-03, GAP-05, GAP-10, GAP-11, and GAP-12 are now resolved.
+GAP-04 (remaining channels: WhatsApp/Messenger/Instagram), GAP-08 (private-network endpoint connectivity), and GAP-09 phase 2+ (SSO/regional controls) remain product opportunities. Their unsupported public claims have been removed or replaced with capability-backed language. GAP-03, GAP-05, GAP-09 phase 1, GAP-10, GAP-11, and GAP-12 are now resolved.
 
 ---
 

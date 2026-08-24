@@ -450,7 +450,7 @@ function Why() {
 // ─── Solutions Band ───────────────────────────────────────────────────────────
 
 function BadgeShield({ kind }: { kind: string }) {
-  const labels: Record<string, string> = { security: 'SEC', gdpr: 'GDPR', eu: 'EU' }
+  const labels: Record<string, string> = { encrypted: 'ENC', access: 'ACL', verified: 'SIG' }
   return (
     <div style={{
       width: 44, height: 48,
@@ -489,9 +489,9 @@ function SolutionsBand() {
     { h: 'Smart escalation.', b: 'Knows its limits. Routes to the right human with a compact summary of context.' },
   ]
   const trust = [
-    { badge: 'security', h: 'Security at the core.', b: 'Enterprise-grade encryption, scoped API keys, SSO, and strict access control by default.' },
-    { badge: 'gdpr', h: 'GDPR-compliant.', b: "Built to meet Europe's strictest privacy standards — full audit trail and transparent data handling." },
-    { badge: 'eu', h: 'Europe-hosted.', b: 'All data stored and processed on EU servers. No data leaves the region without your explicit consent.' },
+    { badge: 'encrypted', h: 'Credentials stay encrypted.', b: 'Connector and model secrets are protected with authenticated AES-256-GCM encryption before storage.' },
+    { badge: 'access', h: 'Access follows your team.', b: 'Workspace roles and per-agent editor access keep configuration in the hands of the right teammates.' },
+    { badge: 'verified', h: 'Inbound traffic is verified.', b: 'Slack, SMS, and email webhooks are signature-checked before customer messages enter a workflow.' },
   ]
   return (
     <section style={{ padding: '100px 0' }}>

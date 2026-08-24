@@ -23,3 +23,19 @@ test('public landing copy does not publish unsupported social proof or performan
 test('scripted landing demo is identified as a representative walkthrough', () => {
   assert.match(landingSource, /product walkthrough · representative workflow/i)
 })
+
+test('public landing copy does not promise unimplemented enterprise controls or hosting guarantees', () => {
+  const unsupportedTrustClaims = [
+    /scoped API keys/i,
+    /\bSSO\b|\bSAML\b|\bOIDC\b/i,
+    /GDPR-compliant/i,
+    /Europe-hosted|EU servers/i,
+  ]
+
+  for (const claim of unsupportedTrustClaims) {
+    assert.doesNotMatch(publicMarketingCopy, claim)
+  }
+
+  assert.match(landingSource, /AES-256-GCM/)
+  assert.match(landingSource, /signature-checked/i)
+})
