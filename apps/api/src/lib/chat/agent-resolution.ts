@@ -1,11 +1,13 @@
 import { adminDb } from '../firebase-admin'
 import { resolveAgentDoc } from '../agents/agent-helpers'
+import type { StoredCustomEndpoint } from '../llm/custom-endpoint'
 
 export type AgentRec = {
   id: string
   systemPrompt: string
   llmModel: string
   gatewayKey?: string
+  customEndpoint?: StoredCustomEndpoint
   knowledgeNamespace: string
 }
 
@@ -21,6 +23,7 @@ export function toAgentRec(
     systemPrompt: d.systemPrompt ?? '',
     llmModel: d.llmModel ?? DEFAULT_MODEL,
     gatewayKey: d.gatewayKey,
+    ...(d.customEndpoint ? { customEndpoint: d.customEndpoint } : {}),
     knowledgeNamespace: d.knowledgeNamespace ?? `ws_${workspaceId}`,
   }
 }

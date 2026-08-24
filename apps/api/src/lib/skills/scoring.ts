@@ -1,9 +1,10 @@
-import { generateObject, createGateway } from 'ai'
+import { generateObject } from 'ai'
 import { z } from 'zod'
 import type { ScoringConfig } from '@ayooda/shared'
 import { adminDb } from '../firebase-admin'
 import { registerSkill } from './registry'
 import { SKILL_LLM_MODEL, type ConversationContext, type SkillModule } from './types'
+import { createRuntimeLanguageModel } from '../llm/runtime'
 
 const MAX_SUMMARY_CHARS = 500
 
@@ -31,7 +32,7 @@ export const scoringSkill: SkillModule<ScoringConfig> = {
   async afterConversation(ctx: ConversationContext<ScoringConfig>) {
     const transcript = ctx.messages.map((m) => `${m.role}: ${m.content}`).join('\n')
     const { object } = await generateObject({
-      model: createGateway({ apiKey: ctx.apiKey })(SKILL_LLM_MODEL),
+      model: createRuntimeLanguageModel(ctx.runtime, ctx.runtime.type === 'gateway' ? SKILL_LLM_MODEL : ctx.modelId),
       schema: z.object({ score: z.number(), summary: z.string() }),
       prompt: buildScoringPrompt(ctx.config.rubric, transcript),
     })

@@ -4,9 +4,10 @@ import { adminDb, adminBucket } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { namespaceFor } from '../lib/pinecone'
 import { agentNamespace, agentDeleteGuard } from '../lib/agents/agent-helpers'
-import { encryptSecret } from '../lib/crypto'
+import { decryptSecret, encryptSecret } from '../lib/crypto'
 import { gatewayKeyStatus, parseGatewayKeyBody, testGatewayKey } from '../lib/llm/gateway-key'
 import { loadGatewayModelCatalog, recommendedGatewayModels, validateGatewayModelSelection } from '../lib/llm/model-catalog'
+import { customEndpointStatus, parseCustomEndpointBody, testCustomEndpoint } from '../lib/llm/custom-endpoint'
 import { agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type GatewayModelCatalog, type WorkspaceRole } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
@@ -329,6 +330,66 @@ agents.delete('/:id/gateway-key', requireOwner, async (c) => {
 
   await ref.update({ gatewayKey: FieldValue.delete(), updatedAt: new Date() })
   return c.json(gatewayKeyStatus(undefined))
+})
+
+/** GET /agents/:id/custom-endpoint — masked endpoint configuration; the key is never returned. */
+agents.get('/:id/custom-endpoint', requireOwner, async (c) => {
+  const ref = adminDb.doc(`workspaces/${c.get('workspaceId')}/agents/${c.req.param('id')}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+  return c.json(customEndpointStatus(snap.data()!.customEndpoint))
+})
+
+/** PUT /agents/:id/custom-endpoint — verify model discovery, encrypt the key, and activate the endpoint. */
+agents.put('/:id/custom-endpoint', requireOwner, async (c) => {
+  const ref = adminDb.doc(`workspaces/${c.get('workspaceId')}/agents/${c.req.param('id')}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+  const parsed = parseCustomEndpointBody(await c.req.json().catch(() => null))
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+
+  const existing = snap.data()!.customEndpoint as { baseURL?: string; apiKeyEnc?: string } | undefined
+  let apiKey: string | undefined
+  let apiKeyEnc: string | undefined
+  try {
+    if (typeof parsed.value.apiKey === 'string') {
+      apiKey = parsed.value.apiKey
+      apiKeyEnc = encryptSecret(apiKey)
+    } else if (parsed.value.apiKey === undefined && existing?.apiKeyEnc && existing.baseURL === parsed.value.baseURL) {
+      apiKey = decryptSecret(existing.apiKeyEnc)
+      apiKeyEnc = existing.apiKeyEnc
+    } else if (parsed.value.apiKey === undefined) {
+      return c.json({ error: 'Enter an API key, or explicitly choose a keyless endpoint.' }, 400)
+    }
+  } catch {
+    return c.json({ error: 'The saved endpoint key could not be read. Enter a replacement key.' }, 400)
+  }
+
+  const verified = await testCustomEndpoint({
+    baseURL: parsed.value.baseURL,
+    modelId: parsed.value.modelId,
+    ...(apiKey ? { apiKey } : {}),
+  })
+  if (!verified.ok) return c.json({ error: verified.error }, verified.reason === 'invalid' ? 400 : 502)
+
+  await ref.update({
+    customEndpoint: {
+      baseURL: parsed.value.baseURL,
+      modelId: parsed.value.modelId,
+      ...(apiKeyEnc ? { apiKeyEnc } : {}),
+    },
+    updatedAt: new Date(),
+  })
+  return c.json(customEndpointStatus({ baseURL: parsed.value.baseURL, modelId: parsed.value.modelId, ...(apiKeyEnc ? { apiKeyEnc } : {}) }))
+})
+
+/** DELETE /agents/:id/custom-endpoint — return this agent to its Gateway model and key. */
+agents.delete('/:id/custom-endpoint', requireOwner, async (c) => {
+  const ref = adminDb.doc(`workspaces/${c.get('workspaceId')}/agents/${c.req.param('id')}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Agent not found' }, 404)
+  await ref.update({ customEndpoint: FieldValue.delete(), updatedAt: new Date() })
+  return c.json(customEndpointStatus(undefined))
 })
 
 /**

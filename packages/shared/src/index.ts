@@ -388,6 +388,14 @@ export interface GatewayKeyStatus {
   source: 'agent' | 'platform' | 'none'
 }
 
+/** Masked OpenAI-compatible endpoint state. The API key is write-only. */
+export interface CustomEndpointStatus {
+  configured: boolean
+  baseURL: string | null
+  modelId: string | null
+  hasApiKey: boolean
+}
+
 /** Compact shape for pickers/lists. */
 export interface AgentSummary {
   id: string

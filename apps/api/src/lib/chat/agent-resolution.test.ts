@@ -6,9 +6,11 @@ describe('toAgentRec', () => {
     expect(toAgentRec('a1', {
       systemPrompt: 'be helpful', llmModel: 'anthropic/claude-haiku-4.5',
       gatewayKey: 'enc', knowledgeNamespace: 'ns_1',
+      customEndpoint: { baseURL: 'https://models.example.com/v1', modelId: 'llama', apiKeyEnc: 'custom-enc' },
     }, 'ws1')).toEqual({
       id: 'a1', systemPrompt: 'be helpful', llmModel: 'anthropic/claude-haiku-4.5',
       gatewayKey: 'enc', knowledgeNamespace: 'ns_1',
+      customEndpoint: { baseURL: 'https://models.example.com/v1', modelId: 'llama', apiKeyEnc: 'custom-enc' },
     })
   })
 

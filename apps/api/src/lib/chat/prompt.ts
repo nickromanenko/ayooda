@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatParams } from '../llm/chat'
+import type { LlmRuntime } from '../llm/runtime'
 
 export interface BuildChatParamsInput {
   systemPrompt: string
@@ -7,7 +8,8 @@ export interface BuildChatParamsInput {
   /** Oldest-first. The final entry is the current message and is dropped. */
   history: Array<{ role: string; content: string }>
   message: string
-  apiKey: string
+  apiKey?: string
+  runtime?: LlmRuntime
   model: string
 }
 
@@ -29,6 +31,7 @@ export function buildChatParams(input: BuildChatParamsInput): ChatParams {
     model: input.model,
     systemPrompt: input.systemPrompt + contextSection,
     messages,
-    apiKey: input.apiKey,
+    ...(input.runtime ? { runtime: input.runtime } : {}),
+    ...(input.apiKey ? { apiKey: input.apiKey } : {}),
   }
 }

@@ -2,8 +2,8 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink, Eye, EyeOff, KeyRound, Loader2, Lock, ShieldCheck, Trash2 } from 'lucide-react'
-import type { AgentAccessEntry, GatewayKeyStatus } from '@ayooda/shared'
+import { ExternalLink, Eye, EyeOff, KeyRound, Loader2, Lock, ServerCog, ShieldCheck, Trash2 } from 'lucide-react'
+import type { AgentAccessEntry, CustomEndpointStatus, GatewayKeyStatus } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, muted, errorText } from '@/components/dashboard/ui'
@@ -22,21 +22,37 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
   const [keyError, setKeyError] = useState('')
   const [keySuccess, setKeySuccess] = useState('')
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [custom, setCustom] = useState<CustomEndpointStatus | null>(null)
+  const [customBaseURL, setCustomBaseURL] = useState('')
+  const [customModelId, setCustomModelId] = useState('')
+  const [customApiKey, setCustomApiKey] = useState('')
+  const [customKeyless, setCustomKeyless] = useState(false)
+  const [showCustomKey, setShowCustomKey] = useState(false)
+  const [customBusy, setCustomBusy] = useState<'save' | 'remove' | ''>('')
+  const [customError, setCustomError] = useState('')
+  const [customSuccess, setCustomSuccess] = useState('')
+  const [confirmRemoveCustom, setConfirmRemoveCustom] = useState(false)
 
   const load = useCallback(async () => {
     try {
-      const [accessRes, keyRes] = await Promise.all([
+      const [accessRes, keyRes, customRes] = await Promise.all([
         apiRequest(`/agents/${agentId}/access`),
         apiRequest(`/agents/${agentId}/gateway-key`),
+        apiRequest(`/agents/${agentId}/custom-endpoint`),
       ])
-      if (accessRes.status === 403 || keyRes.status === 403) { setForbidden(true); return }
-      if (!accessRes.ok || !keyRes.ok) { setError('Could not load security settings for this agent.'); return }
-      const [access, keyStatus] = await Promise.all([
+      if (accessRes.status === 403 || keyRes.status === 403 || customRes.status === 403) { setForbidden(true); return }
+      if (!accessRes.ok || !keyRes.ok || !customRes.ok) { setError('Could not load security settings for this agent.'); return }
+      const [access, keyStatus, customStatus] = await Promise.all([
         accessRes.json() as Promise<{ people: AgentAccessEntry[] }>,
         keyRes.json() as Promise<GatewayKeyStatus>,
+        customRes.json() as Promise<CustomEndpointStatus>,
       ])
       setPeople(access.people)
       setGateway(keyStatus)
+      setCustom(customStatus)
+      setCustomBaseURL(customStatus.baseURL ?? '')
+      setCustomModelId(customStatus.modelId ?? '')
+      setCustomKeyless(customStatus.configured && !customStatus.hasApiKey)
     } catch {
       setError('Could not load security settings for this agent.')
     }
@@ -95,6 +111,53 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
     } finally { setKeyBusy('') }
   }
 
+  async function saveCustomEndpoint() {
+    const baseURL = customBaseURL.trim()
+    const modelId = customModelId.trim()
+    if (!baseURL || !modelId) return
+    setCustomBusy('save'); setCustomError(''); setCustomSuccess(''); setConfirmRemoveCustom(false)
+    try {
+      const res = await apiRequest(`/agents/${agentId}/custom-endpoint`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          baseURL,
+          modelId,
+          ...(customKeyless ? { apiKey: null } : customApiKey.trim() ? { apiKey: customApiKey.trim() } : {}),
+        }),
+      })
+      const data = await res.json().catch(() => ({})) as CustomEndpointStatus & { error?: string }
+      if (!res.ok) { setCustomError(data.error ?? 'Could not verify this endpoint.'); return }
+      setCustom(data)
+      setCustomBaseURL(data.baseURL ?? baseURL)
+      setCustomModelId(data.modelId ?? modelId)
+      setCustomApiKey('')
+      setCustomKeyless(!data.hasApiKey)
+      setShowCustomKey(false)
+      setCustomSuccess('Endpoint verified and activated. New chat, Copilot, and skill activity will use it immediately.')
+    } catch {
+      setCustomError('Could not reach the server. Please try again.')
+    } finally { setCustomBusy('') }
+  }
+
+  async function removeCustomEndpoint() {
+    setCustomBusy('remove'); setCustomError(''); setCustomSuccess('')
+    try {
+      const res = await apiRequest(`/agents/${agentId}/custom-endpoint`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({})) as CustomEndpointStatus & { error?: string }
+      if (!res.ok) { setCustomError(data.error ?? 'Could not remove this endpoint.'); return }
+      setCustom(data)
+      setCustomBaseURL('')
+      setCustomModelId('')
+      setCustomApiKey('')
+      setCustomKeyless(false)
+      setShowCustomKey(false)
+      setConfirmRemoveCustom(false)
+      setCustomSuccess('Custom endpoint removed. This agent now uses its AI Gateway configuration.')
+    } catch {
+      setCustomError('Could not reach the server. Please try again.')
+    } finally { setCustomBusy('') }
+  }
+
   if (forbidden) {
     return (
       <p style={{ ...muted, margin: 0 }}>
@@ -107,14 +170,158 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
   }
 
   const members = people?.filter((p) => !p.locked) ?? []
+  const canReuseCustomKey = !!custom?.hasApiKey && customBaseURL.trim().replace(/\/$/, '') === custom.baseURL
 
   return (
     <>
       <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 20 }}>
-        Control who can configure this agent and which encrypted AI Gateway credential pays for its model usage.
+        Control who can configure this agent and which secure model connection handles its AI activity.
       </p>
 
       {error && <p style={{ ...errorText, marginBottom: 12 }}>{error}</p>}
+
+      {custom && (
+        <section className={`${styles.gatewayCard} ${styles.customCard}`} aria-labelledby="custom-endpoint-title">
+          <div className={styles.gatewayHeader}>
+            <div className={styles.gatewayTitleRow}>
+              <span className={`${styles.gatewayIcon} ${styles.customIcon}`}><ServerCog size={16} /></span>
+              <div>
+                <h2 id="custom-endpoint-title" className={styles.gatewayTitle}>OpenAI-compatible endpoint</h2>
+                <p className={styles.gatewayDescription}>
+                  Connect this agent directly to a public HTTPS endpoint. When active, it overrides AI Gateway for chat, Copilot, and background skills.
+                </p>
+              </div>
+            </div>
+            <span className={`${styles.statusBadge} ${custom.configured ? styles.statusAgent : styles.statusInactive}`}>
+              {custom.configured && <ShieldCheck size={12} />}
+              {custom.configured ? 'Custom endpoint active' : 'AI Gateway active'}
+            </span>
+          </div>
+
+          <form onSubmit={(event) => { event.preventDefault(); void saveCustomEndpoint() }}>
+            <div className={styles.endpointFields}>
+              <div className={styles.fullField}>
+                <label htmlFor="custom-base-url" className={styles.fieldLabel}>Base URL</label>
+                <input
+                  id="custom-base-url"
+                  type="url"
+                  className={styles.keyInput}
+                  value={customBaseURL}
+                  onChange={(event) => { setCustomBaseURL(event.target.value); setCustomError(''); setCustomSuccess('') }}
+                  placeholder="https://models.example.com/v1"
+                  maxLength={2048}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="custom-model-id" className={styles.fieldLabel}>Model ID</label>
+                <input
+                  id="custom-model-id"
+                  className={styles.keyInput}
+                  value={customModelId}
+                  onChange={(event) => { setCustomModelId(event.target.value); setCustomError(''); setCustomSuccess('') }}
+                  placeholder="your-model-id"
+                  maxLength={200}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="custom-api-key" className={styles.fieldLabel}>
+                  API key {canReuseCustomKey && !customKeyless ? '(leave blank to keep current)' : ''}
+                </label>
+                <div className={styles.keyField}>
+                  <input
+                    id="custom-api-key"
+                    type={showCustomKey ? 'text' : 'password'}
+                    className={styles.keyInput}
+                    value={customApiKey}
+                    onChange={(event) => { setCustomApiKey(event.target.value); setCustomError(''); setCustomSuccess('') }}
+                    placeholder={customKeyless ? 'Not required' : canReuseCustomKey ? 'Stored securely' : 'Paste the endpoint API key'}
+                    maxLength={4096}
+                    autoComplete="new-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    disabled={customKeyless}
+                  />
+                  <button
+                    type="button"
+                    className={styles.revealButton}
+                    onClick={() => setShowCustomKey((current) => !current)}
+                    aria-label={showCustomKey ? 'Hide custom endpoint API key' : 'Show custom endpoint API key'}
+                    disabled={customKeyless}
+                  >
+                    {showCustomKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.endpointFooter}>
+              <label className={styles.keylessOption}>
+                <input
+                  type="checkbox"
+                  checked={customKeyless}
+                  onChange={(event) => {
+                    setCustomKeyless(event.target.checked)
+                    if (event.target.checked) { setCustomApiKey(''); setShowCustomKey(false) }
+                    setCustomError(''); setCustomSuccess('')
+                  }}
+                />
+                This endpoint does not require an API key
+              </label>
+              <button
+                type="submit"
+                className={`btn btn-primary ${styles.actionButton}`}
+                disabled={!customBaseURL.trim() || !customModelId.trim() || (!customKeyless && !customApiKey.trim() && !canReuseCustomKey) || customBusy !== ''}
+              >
+                {customBusy === 'save' ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Verifying…</> : custom.configured ? 'Verify & update' : 'Verify & activate'}
+              </button>
+            </div>
+            <div className={styles.helperRow}>
+              <p className={styles.helperText}>Verification checks the endpoint&apos;s <code>/models</code> response for this model ID. It does not generate content.</p>
+              <a className={styles.docsLink} href="https://ai-sdk.dev/providers/openai-compatible-providers" target="_blank" rel="noreferrer">
+                Compatibility guide <ExternalLink size={11} />
+              </a>
+            </div>
+          </form>
+
+          <div aria-live="polite">
+            {customError && <p className={`${styles.feedback} ${styles.error}`}>{customError}</p>}
+            {customSuccess && <p className={`${styles.feedback} ${styles.success}`}>{customSuccess}</p>}
+          </div>
+
+          {custom.configured && (
+            <>
+              <div className={styles.keyActions}>
+                <p className={styles.configuredCopy}>
+                  Requests are restricted to <code>{custom.baseURL}</code>. Removing this connection restores the agent&apos;s AI Gateway configuration.
+                </p>
+                <button type="button" className={`btn btn-ghost ${styles.actionButton} ${styles.dangerButton}`} onClick={() => setConfirmRemoveCustom(true)} disabled={customBusy !== ''}>
+                  <Trash2 size={13} /> Remove endpoint
+                </button>
+              </div>
+              {confirmRemoveCustom && (
+                <div className={styles.confirmBox}>
+                  <p className={styles.confirmCopy}>Remove this custom endpoint and its stored secret? The original secret cannot be recovered.</p>
+                  <div className={styles.confirmButtons}>
+                    <button type="button" className={`btn btn-ghost ${styles.actionButton}`} onClick={() => setConfirmRemoveCustom(false)} disabled={customBusy !== ''}>Cancel</button>
+                    <button type="button" className={`btn btn-ghost ${styles.actionButton} ${styles.dangerButton}`} onClick={() => void removeCustomEndpoint()} disabled={customBusy !== ''}>
+                      {customBusy === 'remove' ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Removing…</> : 'Confirm removal'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       {gateway && (
         <section className={styles.gatewayCard} aria-labelledby="gateway-key-title">
@@ -124,13 +331,15 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
               <div>
                 <h2 id="gateway-key-title" className={styles.gatewayTitle}>AI Gateway key</h2>
                 <p className={styles.gatewayDescription}>
-                  Used by this agent for customer chat, Copilot, and background skills. The key is encrypted at rest and never shown again.
+                  {custom?.configured
+                    ? 'Ready as the fallback connection while the custom endpoint is active. The key is encrypted at rest and never shown again.'
+                    : 'Used by this agent for customer chat, Copilot, and background skills. The key is encrypted at rest and never shown again.'}
                 </p>
               </div>
             </div>
             <span className={`${styles.statusBadge} ${gateway.source === 'agent' ? styles.statusAgent : gateway.source === 'platform' ? styles.statusPlatform : styles.statusNone}`}>
               {gateway.source === 'agent' && <ShieldCheck size={12} />}
-              {gateway.source === 'agent' ? 'Agent key active' : gateway.source === 'platform' ? 'Platform key active' : 'No key available'}
+              {gateway.source === 'agent' ? (custom?.configured ? 'Agent key on standby' : 'Agent key active') : gateway.source === 'platform' ? (custom?.configured ? 'Platform key on standby' : 'Platform key active') : 'No key available'}
             </span>
           </div>
 

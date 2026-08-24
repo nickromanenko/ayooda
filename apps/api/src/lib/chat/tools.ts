@@ -1,6 +1,6 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import type { ToolMethod, ToolParam, ToolBodyEncoding } from '@ayooda/shared'
-import { streamText as aiStreamText, createGateway, stepCountIs, tool, type ToolSet } from 'ai'
+import { streamText as aiStreamText, stepCountIs, tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import type { ChatParams, ChatChunk, ChatResult, ChatMessage } from '../llm/chat'
 import { decryptSecret } from '../crypto'
@@ -8,6 +8,7 @@ import { isBlockedAddress } from '../tools/ssrf'
 import { adminDb } from '../firebase-admin'
 import type { LangfuseTrace } from '../langfuse'
 import { resolveConnectorAccessTokenEnc } from '../tools/credential'
+import { createRuntimeLanguageModel } from '../llm/runtime'
 
 export interface StoredTool {
   id: string
@@ -246,8 +247,9 @@ interface RunDeps {
 }
 
 /**
- * Channel-agnostic agent turn. Uses the AI SDK's streamText (routed through AI Gateway) to
- * stream text and run the multi-step tool loop natively (stopWhen: stepCountIs(MAX_ROUNDS)).
+ * Channel-agnostic agent turn. Uses the AI SDK's streamText with the resolved Gateway or
+ * OpenAI-compatible runtime to stream text and run the multi-step tool loop natively
+ * (stopWhen: stepCountIs(MAX_ROUNDS)).
  * Keeps the AsyncGenerator<ChatChunk, ChatResult> shape so the channels are unchanged.
  */
 export async function* runAgentTurn(
@@ -258,10 +260,16 @@ export async function* runAgentTurn(
   skillTools: ToolSet = {},
   mcpTools: ToolSet = {},
 ): AsyncGenerator<ChatChunk, ChatResult, void> {
-  // The default wrapper swaps the model string for the Gateway model, so an injected
-  // streamText (tests) never touches createGateway.
+  // The default wrapper swaps the model string for the selected provider model, so an
+  // injected streamText (tests) never touches a live provider.
   const run = deps.streamText ?? ((opts) =>
-    aiStreamText({ ...opts, model: createGateway({ apiKey: chatParams.apiKey })(chatParams.model) } as Parameters<typeof aiStreamText>[0]) as unknown as StreamResult)
+    aiStreamText({
+      ...opts,
+      model: createRuntimeLanguageModel(
+        chatParams.runtime ?? { type: 'gateway', apiKey: chatParams.apiKey ?? '' },
+        chatParams.model,
+      ),
+    } as Parameters<typeof aiStreamText>[0]) as unknown as StreamResult)
   const execute = deps.execute ?? executeTool
   const customerTools = tools.length ? toAiSdkTools(tools, trace, execute) : {}
   for (const name of Object.keys(customerTools)) {

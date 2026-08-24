@@ -9,7 +9,7 @@ import {
 } from '@ayooda/shared'
 import { adminDb } from '../firebase-admin'
 import { triggerIngestion } from '../scraper'
-import { resolveGatewayKey } from '../llm/resolve'
+import { resolveAgentRuntime } from '../llm/resolve'
 import { liveFacts, nextExpiry } from './memory'
 import { loadEnabledSkills } from './registry'
 import { elapsedMs } from '../analytics/timing'
@@ -299,8 +299,10 @@ async function postProcess(doc: FirebaseFirestore.QueryDocumentSnapshot): Promis
     .filter((s) => !!s.module.afterConversation)
   if (skills.length === 0) return { hookFailed: false }
 
-  const key = resolveGatewayKey(agentDoc.data()?.gatewayKey)
-  if (!key.ok) return { hookFailed: false }
+  const agentData = agentDoc.data()!
+  const runtime = resolveAgentRuntime(agentData.gatewayKey, agentData.customEndpoint)
+  if (!runtime.ok) return { hookFailed: false }
+  const modelId = String(agentData.customEndpoint?.modelId ?? agentData.llmModel ?? 'google/gemini-2.5-flash')
 
   const msgSnap = await doc.ref.collection('messages').orderBy('createdAt', 'asc').limit(50).get()
   const messages = msgSnap.docs.map((m) => ({
@@ -314,7 +316,7 @@ async function postProcess(doc: FirebaseFirestore.QueryDocumentSnapshot): Promis
       await s.module.afterConversation!({
         workspaceId, agentId: agentDoc.id, conversationId,
         visitorId: String(data.visitorId ?? ''),
-        messages, apiKey: key.apiKey, config: s.config,
+        messages, runtime: runtime.runtime, modelId, config: s.config,
       })
     } catch (err) {
       // Kept isolated per skill so one failing hook doesn't block another, but surfaced to

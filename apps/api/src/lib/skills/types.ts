@@ -1,8 +1,9 @@
 import type { ToolSet } from 'ai'
 import type { SkillId } from '@ayooda/shared'
 import type { LangfuseTrace } from '../langfuse'
+import type { LlmRuntime } from '../llm/runtime'
 
-/** Skill LLM work runs on a fixed cheap model, never the agent's configured one. */
+/** Gateway skill work uses a fixed inexpensive model; custom model names are provider-specific. */
 export const SKILL_LLM_MODEL = 'google/gemini-2.5-flash'
 
 export interface SkillContext<C> {
@@ -21,7 +22,8 @@ export interface ConversationContext<C> {
   conversationId: string
   visitorId: string
   messages: Array<{ role: string; content: string }>
-  apiKey: string // resolved Gateway key; hooks make their own LLM calls
+  runtime: LlmRuntime
+  modelId: string
   config: C
 }
 

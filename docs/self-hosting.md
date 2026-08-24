@@ -2,7 +2,7 @@
 
 Run Ayooda on your own infrastructure, backed by **your own** Firebase project and API keys.
 
-> **What "self-hosting" means here.** Ayooda's database (Firestore), login (Firebase Auth), and file storage (Firebase Storage) are Google-managed services. Self-hosting means you run the **application** yourself (the web, api, scraper, and widget), pointed at **your own** Firebase project plus your own Pinecone / Gemini / OpenRouter keys. It is **not** a from-scratch, dependency-free deployment — a full de-Firebase build (Postgres, self-hosted auth, S3/MinIO, an OSS vector DB) is out of scope.
+> **What "self-hosting" means here.** Ayooda's database (Firestore), login (Firebase Auth), and file storage (Firebase Storage) are Google-managed services. Self-hosting means you run the **application** yourself (the web, api, scraper, and widget), pointed at **your own** Firebase project plus your own Pinecone, Gemini, and model-provider credentials. It is **not** a from-scratch, dependency-free deployment — a full de-Firebase build (Postgres, self-hosted auth, S3/MinIO, an OSS vector DB) is out of scope.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ Run Ayooda on your own infrastructure, backed by **your own** Firebase project a
 | **scraper** | Node + Puppeteer/Chromium | Crawls URLs / parses uploaded files → embeds → upserts to Pinecone. Triggered by the api. |
 | **widget** | Static JS (Vite) | The embeddable `widget.js` visitors load on customer sites. |
 
-**Data flow:** visitor → widget → api → (Firestore, Pinecone, OpenRouter) → streamed reply. Operator → web → api. Knowledge: web/api → scraper → (Gemini embeddings, Pinecone).
+**Data flow:** visitor → widget → api → (Firestore, Pinecone, AI Gateway or a configured OpenAI-compatible endpoint) → streamed reply. Operator → web → api. Knowledge: web/api → scraper → (Gemini embeddings, Pinecone).
 
 Everything persistent lives in **your** Firebase project (Firestore) and **your** Pinecone index. No data flows to Ayooda.
 
@@ -75,6 +75,12 @@ cp apps/scraper/.env.example  apps/scraper/.env
 | `STRIPE_*`, `BILLING_*` | *Optional.* Billing (see §7). For usage-based overage, also set `STRIPE_PRICE_OVERAGE` (the metered price printed by `setup-stripe.ts`) and `STRIPE_OVERAGE_METER_EVENT`. |
 | `LANGFUSE_*` | *Optional.* Tracing. |
 | `<PROVIDER>_OAUTH_CLIENT_ID` / `<PROVIDER>_OAUTH_CLIENT_SECRET` | *Optional.* Enables OAuth for Shopify, HubSpot, Zendesk, Notion, Linear, or Intercom. Register `https://<api-host>/connector-oauth/<provider>/callback` with the provider. Stripe continues to use a restricted key and Zapier uses its Catch Hook URL. |
+
+### Custom model endpoints
+
+An owner can open an agent's **Security** tab and configure a public HTTPS OpenAI-compatible base URL, model ID, and optional bearer API key. The endpoint must expose the standard `GET <base-url>/models` response and list the selected model. Ayooda uses that non-generative request for activation, encrypts the key with `API_KEY_ENCRYPTION_SECRET`, and then uses the custom endpoint instead of AI Gateway for that agent's chat, Copilot, scoring, and memory calls. Removing it restores the agent or platform Gateway key.
+
+For SSRF protection, endpoint hostnames must resolve exclusively to public IP addresses and redirects are rejected. Private names and RFC 1918 addresses are therefore not accepted by the stock build, even when the Ayooda API is self-hosted; supporting a private inference network requires an explicit, deployment-specific trust policy.
 
 ### web (`apps/web/.env`)
 

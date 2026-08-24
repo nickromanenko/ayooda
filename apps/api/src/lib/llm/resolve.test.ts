@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeAll, afterEach } from 'bun:test'
 import { encryptSecret } from '../crypto'
-import { resolveGatewayKey } from './resolve'
+import { resolveAgentRuntime, resolveGatewayKey } from './resolve'
 
 beforeAll(() => { process.env.API_KEY_ENCRYPTION_SECRET = 'test-secret' })
 
@@ -19,5 +19,24 @@ describe('resolveGatewayKey', () => {
   test('missing everything → not ok', () => {
     delete process.env.AI_GATEWAY_API_KEY
     expect(resolveGatewayKey(undefined)).toEqual({ ok: false, reason: 'missing_key' })
+  })
+})
+
+describe('resolveAgentRuntime', () => {
+  test('a configured custom endpoint takes precedence over Gateway keys', () => {
+    const apiKeyEnc = encryptSecret('custom-key')
+    expect(resolveAgentRuntime(encryptSecret('gateway-key'), {
+      baseURL: 'https://models.example.com/v1', modelId: 'llama', apiKeyEnc,
+    })).toEqual({
+      ok: true,
+      runtime: { type: 'openai-compatible', baseURL: 'https://models.example.com/v1', apiKey: 'custom-key' },
+    })
+  })
+
+  test('supports an explicitly keyless custom endpoint', () => {
+    expect(resolveAgentRuntime(undefined, { baseURL: 'https://models.example.com/v1', modelId: 'llama' })).toEqual({
+      ok: true,
+      runtime: { type: 'openai-compatible', baseURL: 'https://models.example.com/v1' },
+    })
   })
 })

@@ -69,7 +69,9 @@ mock.module('../firebase-admin', () => ({ adminDb, adminAuth: {}, adminBucket: (
 mock.module('../langfuse', () => ({ getLangfuse: () => ({ trace: () => traceStub }) }))
 mock.module('../gemini', () => ({ LEGACY_MODEL_MAP: {}, embedText: async () => [0.1, 0.2] }))
 mock.module('../pinecone', () => ({ namespaceFor: () => ({ query: async () => ({ matches: state.matches }) }) }))
-mock.module('../llm/resolve', () => ({ resolveGatewayKey: () => ({ ok: true, apiKey: 'k' }) }))
+mock.module('../llm/resolve', () => ({
+  resolveAgentRuntime: () => ({ ok: true, runtime: { type: 'gateway', apiKey: 'k' } }),
+}))
 
 const { prepareTurn, evaluateSilenceGate } = await import('./agent-turn')
 
@@ -194,7 +196,7 @@ describe('prepareTurn prompt assembly', () => {
     // Below the score threshold: retrieved but discarded, so it must not reach the model.
     expect(chatParams.systemPrompt).not.toContain('BELOW-THRESHOLD-BLOCK')
     expect(chatParams.model).toBe('google/gemini-2.5-flash')
-    expect(chatParams.apiKey).toBe('k')
+    expect(chatParams.runtime).toEqual({ type: 'gateway', apiKey: 'k' })
 
     // History in order, no duplicate of the current message, and the visitor speaks last.
     expect(chatParams.messages).toEqual([

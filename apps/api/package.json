@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.35",
     "@ayooda/shared": "workspace:*",
     "@google/generative-ai": "^0.15.0",
     "@modelcontextprotocol/sdk": "^1.30.0",

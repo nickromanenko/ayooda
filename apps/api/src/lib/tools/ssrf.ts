@@ -23,3 +23,14 @@ export function isBlockedAddress(ip: string): boolean {
   if (a >= 224) return true // multicast + reserved
   return false
 }
+
+/** Resolve immediately before a request and fail closed on private or mixed public/private DNS. */
+export async function assertSafeHttpsUrl(rawUrl: string): Promise<URL> {
+  let url: URL
+  try { url = new URL(rawUrl) } catch { throw new Error('invalid url') }
+  if (url.protocol !== 'https:') throw new Error('only https is allowed')
+  const addrs = await lookup(url.hostname, { all: true })
+  if (addrs.length === 0 || addrs.some((address) => isBlockedAddress(address.address))) throw new Error('blocked host')
+  return url
+}
+import { lookup } from 'node:dns/promises'

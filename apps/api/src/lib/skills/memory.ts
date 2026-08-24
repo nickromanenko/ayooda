@@ -1,10 +1,11 @@
-import { generateObject, createGateway } from 'ai'
+import { generateObject } from 'ai'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
 import type { MemoryConfig, VisitorMemoryFact } from '@ayooda/shared'
 import { adminDb } from '../firebase-admin'
 import { registerSkill } from './registry'
 import { SKILL_LLM_MODEL, type ConversationContext, type SkillContext, type SkillModule } from './types'
+import { createRuntimeLanguageModel } from '../llm/runtime'
 
 export const MAX_FACTS = 20
 const MAX_NEW_FACTS = 3
@@ -75,7 +76,7 @@ export const memorySkill: SkillModule<MemoryConfig> = {
   async afterConversation(ctx: ConversationContext<MemoryConfig>) {
     const transcript = ctx.messages.map((m) => `${m.role}: ${m.content}`).join('\n')
     const { object } = await generateObject({
-      model: createGateway({ apiKey: ctx.apiKey })(SKILL_LLM_MODEL),
+      model: createRuntimeLanguageModel(ctx.runtime, ctx.runtime.type === 'gateway' ? SKILL_LLM_MODEL : ctx.modelId),
       schema: z.object({ facts: z.array(z.string()).max(MAX_NEW_FACTS) }),
       prompt:
         `Extract at most ${MAX_NEW_FACTS} durable facts about the visitor from this support conversation. ` +

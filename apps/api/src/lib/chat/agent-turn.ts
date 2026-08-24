@@ -5,7 +5,7 @@ import { LEGACY_MODEL_MAP } from '../gemini'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
 import { type ChatParams } from '../llm/chat'
 import { type StoredTool } from './tools'
-import { resolveGatewayKey } from '../llm/resolve'
+import { resolveAgentRuntime } from '../llm/resolve'
 import { resolveAgentRec } from './agent-resolution'
 import { retrieveContext } from './retrieval'
 import { buildChatParams } from './prompt'
@@ -103,7 +103,7 @@ export function evaluateSilenceGate(data: FirebaseFirestore.DocumentData | undef
 }
 
 /**
- * Channel-agnostic agent turn: billing gate → conversation setup → RAG → key resolution
+ * Channel-agnostic agent turn: billing gate → conversation setup → RAG → model runtime resolution
  * → prompt + ChatParams, plus a persist() closure. The caller drives streamChat (SSE for the
  * widget, accumulate+sendMessage for Telegram) and calls persist() with the final reply.
  */
@@ -143,8 +143,8 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     : adminDb.doc(`workspaces/${workspaceId}/agents/${agentRec.id}`)
 
   const systemPrompt: string = agentRec.systemPrompt
-  const storedModel: string = agentRec.llmModel ?? 'gemini-flash-latest'
-  const llmModel: string = LEGACY_MODEL_MAP[storedModel] ?? storedModel
+  const storedModel: string = agentRec.customEndpoint?.modelId ?? agentRec.llmModel ?? 'gemini-flash-latest'
+  const llmModel: string = agentRec.customEndpoint ? storedModel : LEGACY_MODEL_MAP[storedModel] ?? storedModel
 
   let skills: LoadedSkill[] = []
   try {
@@ -408,15 +408,15 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     console.warn('[agent-turn] workflow check failed:', err)
   }
 
-  // Key resolution
-  let keyResult
+  // Model runtime resolution
+  let runtimeResult
   try {
-    keyResult = resolveGatewayKey(agentRec.gatewayKey)
+    runtimeResult = resolveAgentRuntime(agentRec.gatewayKey, agentRec.customEndpoint)
   } catch (err) {
-    console.error('[agent-turn] key resolution failed:', err)
-    return { kind: 'error', error: 'AI model needs an API key' }
+    console.error('[agent-turn] model runtime resolution failed:', err)
+    return { kind: 'error', error: 'AI model configuration is unavailable' }
   }
-  if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
+  if (!runtimeResult.ok) return { kind: 'error', error: 'AI model configuration is unavailable' }
 
   const { tools, skillTools, mcpTools } = isSandbox && !sandbox.allowTools
     ? { tools: [], skillTools: {}, mcpTools: {} }
@@ -468,7 +468,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       skillBlocks,
       history,
       message: trimmed,
-      apiKey: keyResult.apiKey,
+      runtime: runtimeResult.runtime,
       model: llmModel,
     }),
     sources,

@@ -1,8 +1,7 @@
-import { lookup } from 'node:dns/promises'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
-import { isBlockedAddress } from '../tools/ssrf'
+import { assertSafeHttpsUrl } from '../tools/ssrf'
 import { decryptSecret } from '../crypto'
 import type { McpTransportType } from '@ayooda/shared'
 
@@ -37,14 +36,7 @@ export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promis
 /** Resolve the host and refuse private/loopback/link-local targets before the
  *  SDK ever dials them. Mirrors the custom-tool executor's guard. */
 export async function assertSafeUrl(rawUrl: string): Promise<URL> {
-  let url: URL
-  try { url = new URL(rawUrl) } catch { throw new Error('invalid url') }
-  if (url.protocol !== 'https:') throw new Error('only https is allowed')
-  const addrs = await lookup(url.hostname, { all: true })
-  if (addrs.length === 0 || addrs.some((a) => isBlockedAddress(a.address))) {
-    throw new Error('blocked host')
-  }
-  return url
+  return assertSafeHttpsUrl(rawUrl)
 }
 
 function buildHeaders(config: McpServerConfig): Record<string, string> {

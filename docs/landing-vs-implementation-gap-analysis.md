@@ -112,8 +112,9 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Was:** 6 fixed models used one platform Gateway key. The runtime could decrypt an agent key, but no API or dashboard flow could ever set one.
 - **Now (2026-08-23):** workspace owners can add, replace, or remove a per-agent Vercel AI Gateway key from the agent's Security tab. Keys are verified against the authenticated, non-generative credit endpoint before being encrypted with AES-256-GCM; API responses expose only masked status. Customer chat, Copilot, scoring, and memory automatically prefer the agent key and return to the platform fallback when it is removed.
 - **Now, phase 2 (2026-08-23):** the agent editor discovers the live Gateway catalog, filters it to language models, and provides search, provider filtering, context size, and per-token pricing. Dynamic selections—including the catalog's Meta Llama models—are verified server-side before storage. The six original models remain recommended defaults and a five-minute server cache plus graceful fallback keeps editing available during Gateway catalog outages.
-- **Still missing:** direct provider credentials and self-hosted/OpenAI-compatible custom endpoints. Llama now runs through Vercel AI Gateway providers; the landing page's specific *"Meta self-hosted"* presentation is not yet implemented.
-- **Status:** 🟠 Partial (per-agent Gateway BYOK + dynamic model/Llama selection ship; custom/self-hosted endpoints don't) · **Priority:** P2
+- **Now, phase 3 (2026-08-24):** owners can connect each agent to a public HTTPS OpenAI-compatible endpoint with a provider API key or explicit keyless mode. Ayooda verifies the configured model through the endpoint's non-generative `/models` response, encrypts the secret, and routes customer chat, Copilot, scoring, and memory through the custom model. Runtime requests are confined to the verified base URL, reject redirects, and re-check DNS to block private-address SSRF; removing the endpoint immediately restores AI Gateway.
+- **Still missing:** the literal `your.company.internal` example requires deployment-level private networking/VPC support. The hosted product intentionally accepts only publicly resolvable HTTPS endpoints; a self-hosted Ayooda API can be adapted to reach private inference infrastructure within its own trusted network.
+- **Status:** 🟠 Partial (Gateway BYOK, dynamic model/Llama selection, and public OpenAI-compatible/self-hosted endpoints ship; managed private-network connectivity does not) · **Priority:** P2
 
 ### 🟠 GAP-09 — Security/trust badges
 - **Claim:** *"Enterprise-grade encryption, scoped API keys, SSO"* · *"GDPR-compliant"* · *"Europe-hosted (EU servers)"*.
@@ -145,7 +146,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | 3 | **Analytics: CSV export + aggregate CSAT** (closes GAP-05) | ✅ Done | P1 |
 | 4 | **Email channel** (closes GAP-04 highest-value piece) | ✅ Done | P1 |
 | 5 | **Visual workflow builder** (GAP-03) | ✅ Done | P1 |
-| 6 | **BYO LLM / custom endpoint** (GAP-08) | 🟠 BYO Gateway + dynamic catalog done | P2 |
+| 6 | **BYO LLM / custom endpoint** (GAP-08) | 🟠 Gateway BYOK + dynamic catalog + public custom endpoints done | P2 |
 | 7 | **Auto-sync knowledge** (GAP-06) | ✅ Done | P2 |
 | 8 | **Sandbox/test mode** (GAP-07) | ✅ Done | P2 |
 | 9 | **SSO / EU hosting** (GAP-09) | 🔴 | P2 |
@@ -172,7 +173,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - GAP-01 is now ✅ Implemented; the "Model Context Protocol support" claim on the landing page is backed by a real, working feature.
 
 ### Remaining honesty items (still open — next)
-GAP-04 (remaining channels: WhatsApp/Messenger/Instagram/SMS/Slack), GAP-08 (BYO Llama/custom), GAP-09 (SSO/EU), GAP-10 (social proof), and GAP-11 (dead CTAs) still need either implementation or a "coming soon" relabel. GAP-03 and GAP-05 are now resolved.
+GAP-04 (remaining channels: WhatsApp/Messenger/Instagram/SMS/Slack), GAP-08 (private-network endpoint connectivity), GAP-09 (SSO/EU), GAP-10 (social proof), and GAP-11 (dead CTAs) still need either implementation or a "coming soon" relabel. GAP-03 and GAP-05 are now resolved.
 
 ---
 

@@ -11,6 +11,12 @@
     0 10px 28px rgba(0, 0, 0, 0.08);
 }
 
+.customCard {
+  background:
+    radial-gradient(circle at top right, rgba(52, 211, 153, 0.1), transparent 42%),
+    var(--panel);
+}
+
 .gatewayHeader {
   display: flex;
   align-items: flex-start;
@@ -35,6 +41,11 @@
   border-radius: 10px;
   color: var(--accent);
   background: rgba(124, 92, 255, 0.13);
+}
+
+.customIcon {
+  color: var(--mint);
+  background: rgba(52, 211, 153, 0.12);
 }
 
 .gatewayTitle {
@@ -85,6 +96,46 @@
   box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.16);
 }
 
+.statusInactive {
+  color: var(--ink-mute);
+  background: rgba(148, 163, 184, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15);
+}
+
+.endpointFields {
+  display: grid;
+  grid-template-columns: minmax(0, 0.65fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.fullField {
+  grid-column: 1 / -1;
+}
+
+.endpointFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.keylessOption {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-mute);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.keylessOption input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
 .fieldLabel {
   display: block;
   margin-bottom: 7px;
@@ -127,6 +178,11 @@
   box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.13);
 }
 
+.keyInput:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .revealButton {
   position: absolute;
   top: 1px;
@@ -149,6 +205,11 @@
 .revealButton:hover {
   color: var(--ink);
   background: var(--panel-2);
+}
+
+.revealButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .revealButton:active,
@@ -226,6 +287,12 @@
   text-wrap: pretty;
 }
 
+.configuredCopy code,
+.helperText code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
 .dangerButton {
   min-height: 40px;
   color: #f87171 !important;
@@ -260,6 +327,7 @@
 @media (max-width: 680px) {
   .gatewayHeader,
   .helperRow,
+  .endpointFooter,
   .keyActions,
   .confirmBox {
     align-items: stretch;
@@ -272,6 +340,14 @@
 
   .keyRow {
     grid-template-columns: 1fr;
+  }
+
+  .endpointFields {
+    grid-template-columns: 1fr;
+  }
+
+  .fullField {
+    grid-column: auto;
   }
 
   .actionButton {

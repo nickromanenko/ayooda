@@ -3,7 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from '../firebase-admin'
 import { getLangfuse, type LangfuseTrace } from '../langfuse'
 import { LEGACY_MODEL_MAP } from '../gemini'
-import { resolveGatewayKey } from '../llm/resolve'
+import { resolveAgentRuntime } from '../llm/resolve'
 import type { ChatParams } from '../llm/chat'
 import { loadEnabledSkills, type LoadedSkill } from '../skills/registry'
 import { gatherContext } from '../skills/run'
@@ -96,8 +96,8 @@ export async function prepareCopilotTurn(
   const workspaceData = workspaceSnap.data()!
 
   const agentRec = await resolveAgentRec(workspaceId, agentId, workspaceData)
-  const storedModel = agentRec.llmModel
-  const llmModel = LEGACY_MODEL_MAP[storedModel] ?? storedModel
+  const storedModel = agentRec.customEndpoint?.modelId ?? agentRec.llmModel
+  const llmModel = agentRec.customEndpoint ? storedModel : LEGACY_MODEL_MAP[storedModel] ?? storedModel
 
   const trace = getLangfuse().trace({
     name: 'copilot-chat',
@@ -137,14 +137,14 @@ export async function prepareCopilotTurn(
     console.warn('[copilot] gatherContext failed:', err)
   }
 
-  let keyResult
+  let runtimeResult
   try {
-    keyResult = resolveGatewayKey(agentRec.gatewayKey)
+    runtimeResult = resolveAgentRuntime(agentRec.gatewayKey, agentRec.customEndpoint)
   } catch (err) {
-    console.error('[copilot] key resolution failed:', err)
-    return { kind: 'error', error: 'AI model needs an API key' }
+    console.error('[copilot] model runtime resolution failed:', err)
+    return { kind: 'error', error: 'AI model configuration is unavailable' }
   }
-  if (!keyResult.ok) return { kind: 'error', error: 'AI model needs an API key' }
+  if (!runtimeResult.ok) return { kind: 'error', error: 'AI model configuration is unavailable' }
 
   const { tools, skillTools, mcpTools } = await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
 
@@ -180,7 +180,7 @@ export async function prepareCopilotTurn(
     chatParams: buildChatParams({
       systemPrompt: agentRec.systemPrompt,
       contextBlocks, skillBlocks, history,
-      message: trimmed, apiKey: keyResult.apiKey, model: llmModel,
+      message: trimmed, runtime: runtimeResult.runtime, model: llmModel,
     }),
     sources, tools, skillTools, mcpTools, trace, persist,
   }
