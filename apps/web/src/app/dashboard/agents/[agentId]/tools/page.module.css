@@ -282,6 +282,116 @@
   text-wrap: pretty;
 }
 
+.credentialPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.065), 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.credentialSummary {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.credentialSummary > span:last-child {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.credentialSummary strong {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 620;
+  text-wrap: balance;
+}
+
+.credentialSummary small,
+.tokenField small {
+  color: var(--ink-faint);
+  font-size: 9.5px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.credentialIcon,
+.credentialIconConnected {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--ink-mute);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.credentialIconConnected {
+  background: rgba(52, 211, 153, 0.09);
+  color: var(--mint);
+}
+
+.oauthButton {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: start;
+  padding: 0 14px 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #1a0e08;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 620;
+  box-shadow: 0 0 0 1px rgba(245, 165, 36, 0.3), 0 5px 14px rgba(0, 0, 0, 0.14);
+  transition-property: background-color, box-shadow, opacity, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.oauthButton:hover:not(:disabled),
+.oauthButton:focus-visible {
+  outline: none;
+  background: var(--accent-2);
+  box-shadow: 0 0 0 1px rgba(245, 165, 36, 0.5), 0 0 0 4px rgba(245, 165, 36, 0.1), 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.oauthButton:active:not(:disabled) {
+  scale: 0.96;
+}
+
+.oauthButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tokenField {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tokenField > span {
+  color: var(--ink-mute);
+  font-size: 10.5px;
+  font-weight: 590;
+  text-wrap: pretty;
+}
+
 .safetyNote {
   display: flex;
   align-items: flex-start;
@@ -358,6 +468,14 @@
     flex-direction: column;
   }
 
+  .credentialPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .oauthButton {
+    width: 100%;
+  }
+
   .setupActions button {
     width: 100%;
   }
@@ -366,6 +484,7 @@
 @media (prefers-reduced-motion: reduce) {
   .bundleCard,
   .templateCard,
+  .oauthButton,
   .setupActions button {
     transition-duration: 0.01ms;
   }

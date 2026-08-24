@@ -43,6 +43,17 @@ describe('connector bundle preparation', () => {
     expect(prepareToolBundle({ bundleId: 'stripe', setup: {} })).toEqual({ ok: false, error: 'Stripe secret key (sk_…) is required.' })
   })
 
+  test('accepts only the matching shared provider credential', () => {
+    const connected = prepareToolBundle({ bundleId: 'linear', setup: {}, credentialId: 'linear' })
+    expect(connected.ok).toBe(true)
+    if (connected.ok) {
+      expect(connected.credentialId).toBe('linear')
+      expect(connected.tools[0]!.value.secret).toBeUndefined()
+    }
+    expect(prepareToolBundle({ bundleId: 'linear', setup: {}, credentialId: 'notion' }))
+      .toEqual({ ok: false, error: 'Connector credential does not match this provider.' })
+  })
+
   test('provider setup cannot escape its expected host or format', () => {
     expect(prepareToolBundle({
       bundleId: 'shopify', setup: { shop: 'store.example.com/path', apiVersion: 'latest' }, secret: 'x',

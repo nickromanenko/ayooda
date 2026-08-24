@@ -1,7 +1,7 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
-import { CheckCircle2, CircleDashed, Loader2, PackagePlus, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { CheckCircle2, CircleDashed, ExternalLink, KeyRound, Loader2, PackagePlus, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import {
   TOOL_BUNDLES,
@@ -10,6 +10,7 @@ import {
   setupFieldsForToolBundle,
   templatesForToolBundle,
   type ToolBundle,
+  type ConnectorStatus,
   type ToolDef,
   type ToolMethod,
   type ToolParamType,
@@ -69,6 +70,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
   const { agentId } = use(params)
 
   const [tools, setTools] = useState<ToolDef[]>([])
+  const [connectors, setConnectors] = useState<ConnectorStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
@@ -82,11 +84,26 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
 
   const load = useCallback(async () => {
     try {
-      const res = await apiRequest(`/agents/${agentId}/tools`)
-      if (res.ok) { const d = await res.json() as { tools: ToolDef[] }; setTools(d.tools) }
+      const [toolsRes, connectorsRes] = await Promise.all([
+        apiRequest(`/agents/${agentId}/tools`),
+        apiRequest(`/agents/${agentId}/tools/connectors`),
+      ])
+      if (toolsRes.ok) { const d = await toolsRes.json() as { tools: ToolDef[] }; setTools(d.tools) }
+      if (connectorsRes.ok) { const d = await connectorsRes.json() as { connectors: ConnectorStatus[] }; setConnectors(d.connectors) }
     } finally { setLoading(false) }
   }, [agentId])
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const providerId = params.get('connector')
+    const outcome = params.get('oauth')
+    if (!providerId || !outcome) return
+    const label = TOOL_BUNDLES.find((bundle) => bundle.id === providerId)?.label ?? 'Provider'
+    setNotice(outcome === 'success'
+      ? `${label} connected with OAuth. Its missing actions were installed; review write actions before enabling them.`
+      : `${label} authorization was not completed. You can try OAuth again or use a private token.`)
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [])
 
   function startCreate() { setForm({ ...emptyForm }); setError(''); setNotice(''); setTestResult(''); setTestArgs('{}') }
   function chooseTemplate(template: ToolTemplate) {
@@ -94,7 +111,12 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
     setError(''); setNotice('')
   }
   function chooseBundle(bundle: ToolBundle) {
-    setPicker({ kind: 'bundle', bundle, setup: Object.fromEntries(setupFieldsForToolBundle(bundle).map((field) => [field.key, ''])), secret: '' })
+    const connector = connectors.find((item) => item.providerId === bundle.id)
+    setPicker({
+      kind: 'bundle', bundle,
+      setup: Object.fromEntries(setupFieldsForToolBundle(bundle).map((field) => [field.key, connector?.setup[field.key] ?? ''])),
+      secret: '',
+    })
     setError(''); setNotice('')
   }
   function applyPickedTemplate(p: Extract<PickerState, { kind: 'template' }>) {
@@ -115,7 +137,11 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
     try {
       const res = await apiRequest(`/agents/${agentId}/tools/bundles`, {
         method: 'POST',
-        body: JSON.stringify({ bundleId: p.bundle.id, setup: p.setup, ...(p.secret ? { secret: p.secret } : {}) }),
+        body: JSON.stringify({
+          bundleId: p.bundle.id,
+          setup: p.setup,
+          ...(p.secret ? { secret: p.secret } : { credentialId: p.bundle.id }),
+        }),
       })
       const data = await res.json().catch(() => ({})) as { error?: string; installed?: ToolDef[]; skippedTemplateIds?: string[] }
       if (!res.ok) { setError(data.error ?? 'Could not install the connector.'); return }
@@ -125,6 +151,18 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
         ? `${p.bundle.label} connected with ${installed} new action${installed === 1 ? '' : 's'}. Review write actions before enabling them.`
         : `${p.bundle.label} is already fully installed.`)
       await load()
+    } finally { setSaving(false) }
+  }
+
+  async function startOAuth(p: Extract<PickerState, { kind: 'bundle' }>) {
+    setSaving(true); setError(''); setNotice('')
+    try {
+      const res = await apiRequest(`/agents/${agentId}/tools/connectors/${p.bundle.id}/oauth/start`, {
+        method: 'POST', body: JSON.stringify({ setup: p.setup }),
+      })
+      const data = await res.json().catch(() => ({})) as { authorizeUrl?: string; error?: string }
+      if (!res.ok || !data.authorizeUrl) { setError(data.error ?? 'Could not start provider authorization.'); return }
+      window.location.assign(data.authorizeUrl)
     } finally { setSaving(false) }
   }
   function startEdit(t: ToolDef) {
@@ -231,13 +269,14 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
             {TOOL_BUNDLES.map((bundle) => {
               const state = bundleState(bundle, tools)
               const installed = installedBundleTemplates(bundle, tools).length
+              const connector = connectors.find((item) => item.providerId === bundle.id)
               return (
-                <button key={bundle.id} type="button" disabled={state === 'installed'} onClick={() => chooseBundle(bundle)} className={styles.bundleCard}>
+                <button key={bundle.id} type="button" onClick={() => chooseBundle(bundle)} className={styles.bundleCard}>
                   <span className={styles.bundleCardTop}>
                     <span className={styles.providerIcon}><PackagePlus size={16} /></span>
-                    <span className={`${styles.bundleStatus} ${state === 'installed' ? styles.bundleStatusInstalled : state === 'partial' ? styles.bundleStatusPartial : ''}`}>
-                      {state === 'installed' ? <CheckCircle2 size={12} /> : <CircleDashed size={12} />}
-                      {state === 'installed' ? 'Installed' : state === 'partial' ? 'Partial' : 'Available'}
+                    <span className={`${styles.bundleStatus} ${connector?.connected || state === 'installed' ? styles.bundleStatusInstalled : state === 'partial' ? styles.bundleStatusPartial : ''}`}>
+                      {connector?.connected || state === 'installed' ? <CheckCircle2 size={12} /> : <CircleDashed size={12} />}
+                      {connector?.connected ? `Connected · ${connector.authMode}` : state === 'installed' ? 'Installed' : state === 'partial' ? 'Partial' : 'Available'}
                     </span>
                   </span>
                   <strong>{bundle.label}</strong>
@@ -302,7 +341,9 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
         const fields = setupFieldsForToolBundle(picker.bundle)
         const secretLabel = bundleSecretLabel(picker.bundle)
         const installed = installedBundleTemplates(picker.bundle, tools).length
-        const incomplete = fields.some((field) => !picker.setup[field.key]?.trim()) || (!!secretLabel && !picker.secret.trim())
+        const connector = connectors.find((item) => item.providerId === picker.bundle.id)
+        const incompleteSetup = fields.some((field) => !picker.setup[field.key]?.trim())
+        const incomplete = incompleteSetup || (!!secretLabel && !picker.secret.trim() && !connector?.connected)
         return (
           <div style={card}>
             <div className={styles.setupHeader}>
@@ -340,19 +381,34 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
                   {field.help && <small>{field.help}</small>}
                 </label>
               ))}
-              {secretLabel && (
-                <label>
-                  <span>{secretLabel}</span>
-                  <input type="password" autoComplete="off" placeholder="Enter credential" value={picker.secret} onChange={(event) => setPicker({ ...picker, secret: event.target.value })} style={input} />
-                  <small>Encrypted before storage and never returned by the API.</small>
-                </label>
-              )}
             </div>
+
+            {secretLabel && (
+              <div className={styles.credentialPanel}>
+                <div className={styles.credentialSummary}>
+                  <span className={connector?.connected ? styles.credentialIconConnected : styles.credentialIcon}><KeyRound size={16} /></span>
+                  <span>
+                    <strong>{connector?.connected ? `Workspace credential connected with ${connector.authMode === 'oauth' ? 'OAuth' : 'a private token'}` : 'Connect one workspace credential'}</strong>
+                    <small>Every {picker.bundle.label} action references this encrypted record, so replacing it updates all agents that use it.</small>
+                  </span>
+                </div>
+                {connector?.oauthAvailable && (
+                  <button type="button" className={styles.oauthButton} onClick={() => void startOAuth(picker)} disabled={saving || incompleteSetup}>
+                    <ExternalLink size={14} /> {connector.connected && connector.authMode === 'oauth' ? 'Reconnect OAuth' : `Connect ${picker.bundle.label} with OAuth`}
+                  </button>
+                )}
+                <label className={styles.tokenField}>
+                  <span>{connector?.oauthAvailable ? `Or use ${secretLabel.toLowerCase()}` : secretLabel}</span>
+                  <input type="password" autoComplete="off" placeholder={connector?.connected ? 'Leave blank to keep current credential' : 'Enter credential'} value={picker.secret} onChange={(event) => setPicker({ ...picker, secret: event.target.value })} style={input} />
+                  <small>{connector?.connected ? 'Entering a new value replaces the shared credential.' : 'Encrypted before storage and never returned by the API.'}</small>
+                </label>
+              </div>
+            )}
 
             <div className={styles.safetyNote}><ShieldCheck size={16} /><span><strong>Safe by default</strong><small>Read actions are ready immediately. Write actions stay disabled until you review and enable each one.</small></span></div>
             {error && <p style={{ ...errorText, marginTop: 12 }}>{error}</p>}
             <div className={styles.setupActions}>
-              <button type="button" onClick={() => void installBundle(picker)} disabled={saving || incomplete} className="btn btn-primary">{saving ? <Loader2 size={14} className={styles.spinner} /> : <PackagePlus size={14} />} {installed ? 'Install missing actions' : `Install ${picker.bundle.templateIds.length} actions`}</button>
+              <button type="button" onClick={() => void installBundle(picker)} disabled={saving || incomplete} className="btn btn-primary">{saving ? <Loader2 size={14} className={styles.spinner} /> : <PackagePlus size={14} />} {installed === picker.bundle.templateIds.length ? 'Update connection' : installed ? 'Install missing actions' : `Install ${picker.bundle.templateIds.length} actions`}</button>
               <button type="button" onClick={() => setPicker('gallery')} disabled={saving} className="btn btn-ghost">Back</button>
             </div>
           </div>

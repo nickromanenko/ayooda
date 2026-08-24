@@ -340,6 +340,8 @@ export interface ToolParam {
 export interface ToolAuth {
   type: ToolAuthType
   headerName?: string
+  /** Workspace connector credential used by this tool. The credential secret is never returned. */
+  credentialId?: string
 }
 
 /** The tool as returned by GET /tools — never carries the secret. */
@@ -533,6 +535,18 @@ export interface ToolBundle {
   category: string
   description: string
   templateIds: string[]
+}
+
+export type ConnectorAuthMode = 'oauth' | 'token'
+
+/** Workspace connector state returned to the dashboard. Secrets and refresh tokens are never returned. */
+export interface ConnectorStatus {
+  providerId: string
+  connected: boolean
+  authMode: ConnectorAuthMode | null
+  oauthAvailable: boolean
+  setup: Record<string, string>
+  updatedAt: string | null
 }
 
 export const TOOL_TEMPLATES: ToolTemplate[] = [

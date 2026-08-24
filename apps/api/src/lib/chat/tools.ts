@@ -7,6 +7,7 @@ import { decryptSecret } from '../crypto'
 import { isBlockedAddress } from '../tools/ssrf'
 import { adminDb } from '../firebase-admin'
 import type { LangfuseTrace } from '../langfuse'
+import { resolveConnectorAccessTokenEnc } from '../tools/credential'
 
 export interface StoredTool {
   id: string
@@ -18,7 +19,7 @@ export interface StoredTool {
   headers: Array<{ key: string; value: string }>
   bodyTemplate?: string
   bodyEncoding?: ToolBodyEncoding
-  auth: { type: 'none' | 'bearer' | 'header'; headerName?: string; secretEnc?: string }
+  auth: { type: 'none' | 'bearer' | 'header'; headerName?: string; secretEnc?: string; credentialId?: string }
   kind: 'read' | 'write'
   writeEnabled: boolean
   enabled: boolean
@@ -188,6 +189,9 @@ export async function executeTool(
   }
 
   const headers = { ...req.headers }
+  if (tool.auth.type !== 'none' && !tool.auth.secretEnc) {
+    return { status: 0, body: '', error: 'auth credential missing' }
+  }
   if (tool.auth.type !== 'none' && tool.auth.secretEnc) {
     let secret: string
     try { secret = decryptSecret(tool.auth.secretEnc) } catch { return { status: 0, body: '', error: 'auth secret error' } }
@@ -225,6 +229,13 @@ export function selectExposedTools(tools: StoredTool[]): StoredTool[] {
 export async function loadTools(workspaceId: string, agentId: string): Promise<StoredTool[]> {
   const snap = await adminDb.collection(`workspaces/${workspaceId}/agents/${agentId}/tools`).where('enabled', '==', true).get()
   const tools = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StoredTool, 'id'>) }))
+  const credentialIds = [...new Set(tools.map((item) => item.auth.credentialId).filter((id): id is string => !!id))]
+  const credentials = new Map<string, string>()
+  const resolved = await Promise.all(credentialIds.map(async (id) => [id, await resolveConnectorAccessTokenEnc(workspaceId, id)] as const))
+  for (const [id, accessTokenEnc] of resolved) if (accessTokenEnc) credentials.set(id, accessTokenEnc)
+  for (const item of tools) {
+    if (item.auth.credentialId) item.auth = { ...item.auth, secretEnc: credentials.get(item.auth.credentialId) }
+  }
   return selectExposedTools(tools)
 }
 

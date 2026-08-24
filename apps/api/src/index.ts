@@ -39,6 +39,7 @@ import mcpRoutes from './routes/mcp'
 import internalRoutes from './routes/internal'
 import copilotRoutes from './routes/copilot'
 import sandboxRoutes from './routes/sandbox'
+import connectorOAuthRoutes from './routes/connector-oauth'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -66,6 +67,7 @@ app.route('/telegram', telegramRoutes)
 app.route('/email', emailRoutes)
 app.route('/internal', internalRoutes)
 app.route('/copilot', copilotRoutes)
+app.route('/connector-oauth', connectorOAuthRoutes)
 
 const port = parseInt(process.env.PORT ?? '3001')
 console.log(`API running on http://localhost:${port}`)

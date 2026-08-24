@@ -105,6 +105,11 @@ describe('executeTool', () => {
     const r = await executeTool({ ...tool, urlTemplate: 'http://api.example.com/x' }, {}, { lookup: publicLookup })
     expect(r.error).toBe('only https is allowed')
   })
+  test('does not send authenticated tools without a credential', async () => {
+    globalThis.fetch = fetchOk('should not run')
+    const r = await executeTool({ ...tool, auth: { type: 'bearer' } }, {}, { lookup: publicLookup })
+    expect(r.error).toBe('auth credential missing')
+  })
   test('returns a param error without calling fetch', async () => {
     const r = await executeTool({ ...tool, urlTemplate: 'https://api.example.com/{id}' }, {}, { lookup: publicLookup })
     expect(r.error).toBe('missing required param: id')

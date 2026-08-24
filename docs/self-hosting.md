@@ -74,6 +74,7 @@ cp apps/scraper/.env.example  apps/scraper/.env
 | `SCRAPER_JOB_URL` | Empty for local-subprocess ingestion; a Cloud Run Job run URL to use Cloud Run Jobs. See §5. |
 | `STRIPE_*`, `BILLING_*` | *Optional.* Billing (see §7). For usage-based overage, also set `STRIPE_PRICE_OVERAGE` (the metered price printed by `setup-stripe.ts`) and `STRIPE_OVERAGE_METER_EVENT`. |
 | `LANGFUSE_*` | *Optional.* Tracing. |
+| `<PROVIDER>_OAUTH_CLIENT_ID` / `<PROVIDER>_OAUTH_CLIENT_SECRET` | *Optional.* Enables OAuth for Shopify, HubSpot, Zendesk, Notion, Linear, or Intercom. Register `https://<api-host>/connector-oauth/<provider>/callback` with the provider. Stripe continues to use a restricted key and Zapier uses its Catch Hook URL. |
 
 ### web (`apps/web/.env`)
 

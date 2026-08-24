@@ -12,7 +12,7 @@ const MAX_SECRET_LENGTH = 8_192
 
 type Fail = { ok: false; error: string }
 export type PreparedBundleTool = { templateId: string; value: ValidatedTool }
-type Prepared = { ok: true; bundle: ToolBundle; tools: PreparedBundleTool[] }
+type Prepared = { ok: true; bundle: ToolBundle; tools: PreparedBundleTool[]; credentialId?: string }
 
 const fail = (error: string): Fail => ({ ok: false, error })
 
@@ -60,7 +60,9 @@ export function prepareToolBundle(raw: unknown): Prepared | Fail {
 
   const needsSecret = templates.some((template) => template.auth.type !== 'none')
   const secret = typeof input.secret === 'string' ? input.secret : ''
-  if (needsSecret && !secret.trim()) return fail(`${templates[0]!.secretLabel} is required.`)
+  const credentialId = typeof input.credentialId === 'string' ? input.credentialId.trim() : ''
+  if (credentialId && credentialId !== bundle.id) return fail('Connector credential does not match this provider.')
+  if (needsSecret && !secret.trim() && !credentialId) return fail(`${templates[0]!.secretLabel} is required.`)
   if (secret.length > MAX_SECRET_LENGTH) return fail('Connector credential is too long.')
 
   const tools: PreparedBundleTool[] = []
@@ -80,7 +82,7 @@ export function prepareToolBundle(raw: unknown): Prepared | Fail {
     tools.push({ templateId: template.id, value: parsed.value })
   }
 
-  return { ok: true, bundle, tools }
+  return { ok: true, bundle, tools, ...(credentialId ? { credentialId } : {}) }
 }
 
 export function toolBundleDocumentId(templateId: string): string {

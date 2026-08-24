@@ -32,6 +32,12 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // One encrypted credential can be referenced by tools on multiple agents.
+      // Connector OAuth state and credentials are API-only and never client-readable.
+      match /connectorCredentials/{credentialId} {
+        allow read, write: if false;
+      }
+
       match /channels/{channelId} {
         allow read, write: if request.auth != null
           && callerData().workspaceId == workspaceId
