@@ -1,7 +1,7 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
-import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink } from 'lucide-react'
+import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink, Smartphone } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { label, errorText, input } from '@/components/dashboard/ui'
@@ -18,9 +18,10 @@ interface Channel {
   embedCode?: string
   isActive: boolean
   brandingLocked?: boolean
-  config?: Partial<Appearance> & { agentName?: string; fromAddress?: string; inboxAddress?: string }
+  config?: Partial<Appearance> & { agentName?: string; fromAddress?: string; inboxAddress?: string; accountSid?: string; fromNumber?: string }
   telegram?: { botUsername: string; botId: number }
   slack?: { teamId: string; teamName: string; botUserId: string }
+  twilio?: { accountSid: string; fromNumber: string }
   webhookUrl?: string
 }
 
@@ -62,6 +63,11 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const [slackBusy, setSlackBusy] = useState(false)
   const [slackWebhookUrl, setSlackWebhookUrl] = useState('')
   const [slackCopied, setSlackCopied] = useState(false)
+  const [smsForm, setSmsForm] = useState({ accountSid: '', authToken: '', fromNumber: '' })
+  const [smsError, setSmsError] = useState('')
+  const [smsBusy, setSmsBusy] = useState(false)
+  const [smsWebhookUrl, setSmsWebhookUrl] = useState('')
+  const [smsCopied, setSmsCopied] = useState(false)
 
   const fetchChannels = useCallback(async () => {
     const res = await apiRequest(base)
@@ -76,6 +82,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const telegram = channels.find((c) => c.type === 'telegram')
   const email = channels.find((c) => c.type === 'email')
   const slack = channels.find((c) => c.type === 'slack')
+  const sms = channels.find((c) => c.type === 'sms')
 
   async function createWidget() {
     setWidgetBusy(true)
@@ -195,6 +202,41 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
     await navigator.clipboard.writeText(url)
     setSlackCopied(true)
     setTimeout(() => setSlackCopied(false), 2_000)
+  }
+
+  async function connectSms() {
+    setSmsError(''); setSmsBusy(true); setSmsWebhookUrl('')
+    try {
+      const res = await apiRequest(`${base}/sms`, { method: 'POST', body: JSON.stringify(smsForm) })
+      const data = await res.json().catch(() => ({})) as { error?: string; webhookUrl?: string }
+      if (!res.ok) { setSmsError(data.error ?? 'Failed to connect Twilio SMS.'); return }
+      setSmsWebhookUrl(data.webhookUrl ?? '')
+      setSmsForm({ accountSid: '', authToken: '', fromNumber: '' })
+      await fetchChannels()
+    } catch {
+      setSmsError('Failed to connect Twilio SMS.')
+    } finally { setSmsBusy(false) }
+  }
+
+  async function disconnectSms() {
+    setSmsError(''); setSmsBusy(true); setSmsWebhookUrl(''); setSmsCopied(false)
+    try {
+      const res = await apiRequest(`${base}/sms`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        setSmsError(data.error ?? 'Failed to disconnect Twilio SMS.')
+        return
+      }
+      await fetchChannels()
+    } catch {
+      setSmsError('Failed to disconnect Twilio SMS.')
+    } finally { setSmsBusy(false) }
+  }
+
+  async function copySmsWebhook(url: string) {
+    await navigator.clipboard.writeText(url)
+    setSmsCopied(true)
+    setTimeout(() => setSmsCopied(false), 2_000)
   }
 
   if (loading) {
@@ -540,9 +582,119 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
         </div>
       </div>
 
+      {/* SMS */}
+      <div style={panel}>
+        <div style={head}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <div style={icon}><Smartphone size={16} style={{ color: 'var(--accent)' }} /></div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0, textWrap: 'balance' }}>SMS via Twilio</p>
+              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2, textWrap: 'pretty' }}>
+                {sms ? `Connected on ${sms.twilio?.fromNumber}` : 'Not connected'}
+              </p>
+            </div>
+          </div>
+          <span style={pill(Boolean(sms))}>{sms ? 'Live' : 'Off'}</span>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          {sms ? (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 14, lineHeight: 1.55, textWrap: 'pretty' }}>
+                This agent receives and answers text messages sent to <strong style={{ color: 'var(--ink-dim)', fontWeight: 550 }}>{sms.twilio?.fromNumber}</strong>. Replies from the Inbox are sent through the same number.
+              </p>
+              <div style={{ marginBottom: 16, padding: '14px 16px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', boxShadow: 'inset 0 0 0 1px var(--line)' }}>
+                <p style={{ ...label, marginBottom: 7 }}>Incoming-message webhook</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <code style={{ flex: 1, minWidth: 0, color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11.5, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                    {sms.webhookUrl ?? smsWebhookUrl}
+                  </code>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void copySmsWebhook(sms.webhookUrl ?? smsWebhookUrl)}
+                    disabled={!sms.webhookUrl && !smsWebhookUrl}
+                    aria-label="Copy Twilio incoming-message webhook URL"
+                    style={{ width: 40, height: 40, padding: 0, borderRadius: 10, justifyContent: 'center', flex: '0 0 auto' }}
+                  >
+                    {smsCopied ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+                <p style={{ fontSize: 11.5, color: 'var(--ink-mute)', margin: '9px 0 0', lineHeight: 1.55, textWrap: 'pretty' }}>
+                  In Twilio, set this number&apos;s “A message comes in” handler to the URL above using HTTP POST.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => void disconnectSms()} disabled={smsBusy} className="btn btn-ghost" style={{ minHeight: 40, padding: '8px 16px', fontSize: 12.5 }}>
+                  {smsBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                  Disconnect
+                </button>
+                <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/incoming" target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ minHeight: 40, padding: '8px 14px 8px 16px', fontSize: 12.5 }}>
+                  Open Twilio numbers <ExternalLink size={12} />
+                </a>
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 12, lineHeight: 1.55, textWrap: 'pretty' }}>
+                Connect a Twilio SMS-capable number. Ayooda verifies that the number belongs to the account; the Auth Token is encrypted and never returned.
+              </p>
+              <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+                <input
+                  placeholder="Account SID (AC…)"
+                  value={smsForm.accountSid}
+                  autoComplete="off"
+                  onChange={(event) => { setSmsForm({ ...smsForm, accountSid: event.target.value }); setSmsError('') }}
+                  style={input}
+                />
+                <input
+                  type="password"
+                  placeholder="Auth Token"
+                  value={smsForm.authToken}
+                  autoComplete="new-password"
+                  onChange={(event) => { setSmsForm({ ...smsForm, authToken: event.target.value }); setSmsError('') }}
+                  style={input}
+                />
+                <input
+                  type="tel"
+                  placeholder="Twilio number (for example +14155552671)"
+                  value={smsForm.fromNumber}
+                  autoComplete="tel"
+                  onChange={(event) => { setSmsForm({ ...smsForm, fromNumber: event.target.value }); setSmsError('') }}
+                  style={input}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void connectSms()}
+                disabled={smsBusy || !smsForm.accountSid.trim() || !smsForm.authToken.trim() || !smsForm.fromNumber.trim()}
+                className="btn btn-primary"
+                style={{ minHeight: 40, padding: '8px 16px', fontSize: 12.5, opacity: smsBusy || !smsForm.accountSid.trim() || !smsForm.authToken.trim() || !smsForm.fromNumber.trim() ? 0.6 : 1 }}
+              >
+                {smsBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                Verify & connect
+              </button>
+              <div style={{ marginTop: 16, padding: '14px 16px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', boxShadow: 'inset 0 0 0 1px var(--line)' }}>
+                <p style={{ ...label, marginBottom: 8 }}>Twilio setup</p>
+                <ol style={{ margin: 0, paddingLeft: 18, color: 'var(--ink-mute)', fontSize: 11.5, lineHeight: 1.65 }}>
+                  <li style={{ textWrap: 'pretty' }}>Use an SMS-capable Twilio number owned by this account.</li>
+                  <li style={{ textWrap: 'pretty' }}>Connect it here, then copy the generated webhook URL.</li>
+                  <li style={{ textWrap: 'pretty' }}>Set the number&apos;s “A message comes in” webhook to that URL using HTTP POST.</li>
+                </ol>
+              </div>
+            </>
+          )}
+          {smsError && (
+            <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', ...errorText, marginTop: 10 }}>
+              {smsError}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div style={{ background: 'var(--panel)', border: '1px dashed var(--line-2)', borderRadius: 'var(--r-md)', padding: 20 }}>
         <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-mute)', margin: '0 0 4px' }}>More channels coming soon</p>
-        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: 0 }}>WhatsApp, Messenger, Instagram, and SMS are on the roadmap.</p>
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: 0 }}>WhatsApp, Messenger, and Instagram are on the roadmap.</p>
       </div>
     </>
   )

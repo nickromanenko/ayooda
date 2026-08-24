@@ -195,7 +195,7 @@ agents.delete('/:id', requireOwner, async (c) => {
   ])
   const attachedChannels = channelsSnap.docs.map((d) => {
     const ch = d.data()
-    return ch.type === 'telegram' ? 'Telegram' : ch.type === 'web_widget' ? 'Website' : ch.type === 'email' ? 'Email' : ch.type === 'slack' ? 'Slack' : (ch.type ?? d.id)
+    return ch.type === 'telegram' ? 'Telegram' : ch.type === 'web_widget' ? 'Website' : ch.type === 'email' ? 'Email' : ch.type === 'slack' ? 'Slack' : ch.type === 'sms' ? 'SMS' : (ch.type ?? d.id)
   })
   const guard = agentDeleteGuard({
     isDefault: data.isDefault === true,

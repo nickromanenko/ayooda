@@ -69,7 +69,7 @@ export type ConversationStatus = 'bot' | 'waiting' | 'human' | 'resolved'
 export type MessageRole = 'user' | 'assistant' | 'operator'
 
 // Channels
-export type ChannelType = 'web_widget' | 'telegram' | 'email' | 'slack'
+export type ChannelType = 'web_widget' | 'telegram' | 'email' | 'slack' | 'sms'
 
 // Email channel (Resend)
 export interface EmailChannelConfig {
@@ -83,6 +83,13 @@ export interface SlackChannelConfig {
   teamId: string
   teamName: string
   botUserId: string
+}
+
+export interface SmsChannelConfig {
+  /** Twilio account that owns the sending number. */
+  accountSid: string
+  /** E.164 Twilio number used for inbound and outbound SMS. */
+  fromNumber: string
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -175,7 +182,7 @@ export interface WidgetConfig {
 
 export interface ChannelDoc {
   type: ChannelType
-  config?: WidgetConfig | EmailChannelConfig | SlackChannelConfig
+  config?: WidgetConfig | EmailChannelConfig | SlackChannelConfig | SmsChannelConfig
   embedCode?: string
   isActive: boolean
   createdAt: Date
@@ -183,9 +190,11 @@ export interface ChannelDoc {
   resendApiKeyEnc?: string
   slackBotTokenEnc?: string
   slackSigningSecretEnc?: string
+  twilioAuthTokenEnc?: string
   webhookSecret?: string
   telegram?: { botUsername: string; botId: number }
   slack?: SlackChannelConfig
+  twilio?: SmsChannelConfig
 }
 
 export interface MessageMetadata {
@@ -215,6 +224,8 @@ export interface ConversationDoc {
   lastMessage: string
   channelType?: ChannelType
   telegramChatId?: number
+  smsFrom?: string
+  smsTo?: string
   agentId?: string                // which agent served this conversation (Task 7 writes it)
   score?: number                  // 1–5, written by the scoring skill
   summary?: string                // <= 500 chars

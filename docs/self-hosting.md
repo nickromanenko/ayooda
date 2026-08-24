@@ -65,10 +65,10 @@ cp apps/scraper/.env.example  apps/scraper/.env
 | `PINECONE_API_KEY` / `PINECONE_INDEX` | Your Pinecone key and the 768-dim/cosine index name. |
 | `GEMINI_API_KEY` | Embeddings key. |
 | `AI_GATEWAY_API_KEY` | Vercel AI Gateway key; routes chat to all providers. A workspace agent can bring its own Gateway key. |
-| `API_KEY_ENCRYPTION_SECRET` | Random 32+ char string. Encrypts BYO keys, tool secrets, and channel credentials (Telegram, email, Slack) — **keep it stable**, rotating it invalidates stored secrets. |
+| `API_KEY_ENCRYPTION_SECRET` | Random 32+ char string. Encrypts BYO keys, tool secrets, and channel credentials (Telegram, email, Slack, Twilio) — **keep it stable**, rotating it invalidates stored secrets. |
 | `PORT` | Listen port (default 8080). |
 | `ALLOWED_ORIGINS` | Comma-separated web origins allowed by CORS (include your web URL). |
-| `API_PUBLIC_URL` | Public HTTPS base of the api (used for Telegram, email, and Slack webhook URLs). |
+| `API_PUBLIC_URL` | Public HTTPS base of the api (used for Telegram, email, Slack, and Twilio webhook URLs). Twilio signature validation requires this to exactly match the externally visible scheme and host. |
 | `WEB_PUBLIC_URL` | Base URL used in team-invite links. |
 | `WIDGET_BASE_URL` | Where `widget.js` is hosted (embed snippets point here). |
 | `SCRAPER_JOB_URL` | Empty for local-subprocess ingestion; a Cloud Run Job run URL to use Cloud Run Jobs. See §5. |
@@ -153,7 +153,7 @@ The cross-service URLs must line up:
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | web (build) | the api's public URL |
 | `ALLOWED_ORIGINS` | api | the web's public origin(s) |
-| `API_PUBLIC_URL` | api | the api's own public URL (Telegram webhooks) |
+| `API_PUBLIC_URL` | api | the api's own public URL (channel webhooks, including signature-sensitive Twilio SMS) |
 | `WEB_PUBLIC_URL` | api | the web's public URL (invite links) |
 | `WIDGET_BASE_URL` | api | where `widget.js` is hosted |
 
@@ -176,5 +176,6 @@ Worked example: web at `https://app.acme.com`, api at `https://api.acme.com`, wi
 5. **Chat** through the widget and confirm you get an answer grounded in your knowledge base.
 6. *(Optional)* Connect **Telegram** with a BotFather token and message the bot.
 7. *(Optional)* Connect **Slack**, add the generated request URL to the app's Event Subscriptions, subscribe to `app_mention` and `message.im`, and test a DM plus a channel mention.
+8. *(Optional)* Connect **SMS via Twilio**, copy the generated URL into the number's **A message comes in** webhook using HTTP POST, then test an inbound text, the automatic reply, human takeover silence, and an Inbox operator reply. Phase 1 handles text SMS; media-only MMS is ignored.
 
 If ingestion never leaves `pending`/`processing`, re-check §5 (the scraper mode) and the Pinecone index dimension (768).

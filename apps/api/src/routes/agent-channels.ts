@@ -7,6 +7,8 @@ import { encryptSecret, decryptSecret } from '../lib/crypto'
 import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
 import { assertValidApiKey } from '../lib/email/client'
 import { authTest as testSlackBotToken } from '../lib/slack/client'
+import { assertTwilioNumber } from '../lib/sms/client'
+import { isTwilioAccountSid, normalizePhoneNumber } from '../lib/sms/message'
 import { validateWidgetAppearance } from '../lib/channels/validate'
 import { DEFAULT_WIDGET_COLOR, DEFAULT_WIDGET_POSITION, isEmailAddress } from '@ayooda/shared'
 import { canHideBranding } from '../lib/channels/branding'
@@ -31,7 +33,7 @@ const channelsCol = (workspaceId: string) =>
   adminDb.collection(`workspaces/${workspaceId}/channels`)
 
 /** This agent's channel of a given type, or null. */
-async function channelOfType(workspaceId: string, agentId: string, type: 'web_widget' | 'telegram' | 'email' | 'slack') {
+async function channelOfType(workspaceId: string, agentId: string, type: 'web_widget' | 'telegram' | 'email' | 'slack' | 'sms') {
   const snap = await channelsCol(workspaceId)
     .where('agentId', '==', agentId)
     .where('type', '==', type)
@@ -77,8 +79,8 @@ agentChannels.get('/', async (c) => {
       return {
         id: d.id,
         ...safe,
-        ...(safe.type === 'slack' && process.env.API_PUBLIC_URL
-          ? { webhookUrl: `${process.env.API_PUBLIC_URL}/slack/events/${d.id}` }
+        ...((safe.type === 'slack' || safe.type === 'sms') && process.env.API_PUBLIC_URL
+          ? { webhookUrl: `${process.env.API_PUBLIC_URL.replace(/\/$/, '')}/${safe.type === 'slack' ? 'slack/events' : 'sms/webhook'}/${d.id}` }
           : {}),
         // Same shape as the skills catalogue: the row carries whether the plan
         // permits the option, so the UI can show it locked rather than hide it.
@@ -395,6 +397,72 @@ agentChannels.post('/slack', async (c) => {
 /** DELETE /agents/:agentId/channels/slack — disconnect this agent's Slack app. */
 agentChannels.delete('/slack', async (c) => {
   const mine = await channelOfType(c.get('workspaceId'), c.get('agentId')!, 'slack')
+  if (mine) await mine.ref.delete()
+  return c.json({ ok: true })
+})
+
+/** POST /agents/:agentId/channels/sms — connect a Twilio phone number to this agent. */
+agentChannels.post('/sms', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
+  const body = await c.req.json<{ accountSid?: string; authToken?: string; fromNumber?: string }>()
+    .catch(() => ({} as { accountSid?: string; authToken?: string; fromNumber?: string }))
+  const accountSid = body.accountSid?.trim() ?? ''
+  const authToken = body.authToken?.trim() ?? ''
+  const fromNumber = normalizePhoneNumber(body.fromNumber?.trim() ?? '')
+
+  if (!isTwilioAccountSid(accountSid)) return c.json({ error: 'A valid Twilio Account SID (AC…) is required.' }, 400)
+  if (authToken.length < 16 || authToken.length > 512) return c.json({ error: 'A valid Twilio Auth Token is required.' }, 400)
+  if (!fromNumber) return c.json({ error: 'Enter the Twilio SMS number in E.164 format, such as +14155552671.' }, 400)
+  const apiBase = process.env.API_PUBLIC_URL?.replace(/\/$/, '')
+  if (!apiBase) return c.json({ error: 'Server not configured for webhooks (API_PUBLIC_URL)' }, 500)
+
+  try {
+    await assertTwilioNumber(accountSid, authToken, fromNumber)
+  } catch (error) {
+    console.warn('[agent-channels/sms] Twilio verification failed:', error)
+    return c.json({ error: 'Those Twilio credentials or phone number could not be verified.' }, 400)
+  }
+
+  const mine = await channelOfType(workspaceId, agentId, 'sms')
+  // A Twilio number has one inbound messaging webhook, so it cannot safely serve
+  // two agents. Check globally, including other Ayooda workspaces.
+  const claimed = await adminDb.collectionGroup('channels')
+    .where('twilio.accountSid', '==', accountSid)
+    .where('twilio.fromNumber', '==', fromNumber)
+    .limit(2)
+    .get()
+  const claimedByOther = claimed.docs.find((doc) => doc.ref.path !== mine?.ref.path)
+  if (claimedByOther) {
+    const claimedWorkspaceId = claimedByOther.ref.parent.parent?.id
+    if (claimedWorkspaceId === workspaceId) {
+      const other = await adminDb.doc(`workspaces/${workspaceId}/agents/${claimedByOther.data().agentId}`).get()
+      return c.json({ error: `This Twilio number is already connected to ${(other.data()?.name as string | undefined) ?? 'another agent'}.` }, 409)
+    }
+    return c.json({ error: 'This Twilio number is already connected to another Ayooda agent.' }, 409)
+  }
+
+  const channelRef = mine ? mine.ref : channelsCol(workspaceId).doc()
+  const channelId = channelRef.id
+  const twilio = { accountSid, fromNumber }
+  await channelRef.set({
+    workspaceId,
+    id: channelId,
+    type: 'sms',
+    agentId,
+    twilioAuthTokenEnc: encryptSecret(authToken),
+    twilio,
+    config: twilio,
+    isActive: true,
+    createdAt: mine?.data().createdAt ?? new Date(),
+  })
+
+  return c.json({ channelId, fromNumber, webhookUrl: `${apiBase}/sms/webhook/${channelId}` })
+})
+
+/** DELETE /agents/:agentId/channels/sms — disconnect this agent's Twilio number. */
+agentChannels.delete('/sms', async (c) => {
+  const mine = await channelOfType(c.get('workspaceId'), c.get('agentId')!, 'sms')
   if (mine) await mine.ref.delete()
   return c.json({ ok: true })
 })

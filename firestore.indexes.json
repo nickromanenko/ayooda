@@ -95,6 +95,14 @@
         { "fieldPath": "slack.teamId", "order": "ASCENDING" },
         { "fieldPath": "slack.botUserId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "channels",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "twilio.accountSid", "order": "ASCENDING" },
+        { "fieldPath": "twilio.fromNumber", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
@@ -140,6 +148,16 @@
     },
     {
       "collectionGroup": "slackEventReceipts",
+      "fieldPath": "expiresAt",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "smsMessageReceipts",
       "fieldPath": "expiresAt",
       "indexes": [
         { "order": "ASCENDING", "queryScope": "COLLECTION" },

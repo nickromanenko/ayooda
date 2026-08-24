@@ -205,6 +205,25 @@ conversations.post('/:id/messages', async (c) => {
     }
   }
 
+  // SMS replies use the exact Twilio channel that received the conversation.
+  if (conv.channelType === 'sms' && typeof conv.smsFrom === 'string' && typeof conv.smsTo === 'string') {
+    try {
+      const channelId = typeof conv.channelId === 'string' ? conv.channelId : ''
+      const channelSnap = channelId
+        ? await adminDb.doc(`workspaces/${workspaceId}/channels/${channelId}`).get()
+        : null
+      const channel = channelSnap?.data()
+      const encrypted = channel?.twilioAuthTokenEnc as string | undefined
+      if (encrypted && typeof channel?.twilio?.accountSid === 'string' && typeof channel.twilio.fromNumber === 'string') {
+        const { decryptSecret } = await import('../lib/crypto')
+        const { sendSms } = await import('../lib/sms/client')
+        await sendSms(channel.twilio.accountSid, decryptSecret(encrypted), channel.twilio.fromNumber, conv.smsFrom, body.content.trim())
+      }
+    } catch (err) {
+      console.warn('[conversations] SMS operator delivery failed:', err)
+    }
+  }
+
   return c.json({ messageId: messageRef.id }, 201)
 })
 
