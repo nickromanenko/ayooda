@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { elapsedMs } from '../lib/analytics/timing'
+import { recordChannelReliability, safeReliabilityDetail } from '../lib/channels/reliability'
 
 const conversations = new Hono<{ Variables: AuthVariables }>()
 
@@ -138,32 +139,32 @@ conversations.post('/:id/messages', async (c) => {
   // If this is a Telegram conversation, mirror the operator reply into the chat.
   const conv = convSnap.data()!
   if (conv.channelType === 'telegram' && typeof conv.telegramChatId === 'number') {
+    const channelId = typeof conv.channelId === 'string' ? conv.channelId : ''
     try {
-      const chSnap = await adminDb
-        .collection(`workspaces/${workspaceId}/channels`)
-        .where('type', '==', 'telegram')
-        .limit(1)
-        .get()
-      const enc = chSnap.docs[0]?.data().botTokenEnc as string | undefined
+      const channelSnap = channelId
+        ? await adminDb.doc(`workspaces/${workspaceId}/channels/${channelId}`).get()
+        : null
+      const enc = channelSnap?.data()?.botTokenEnc as string | undefined
       if (enc) {
         const { decryptSecret } = await import('../lib/crypto')
         const { sendMessage } = await import('../lib/telegram/client')
         await sendMessage(decryptSecret(enc), conv.telegramChatId, body.content.trim())
+        await recordChannelReliability({ workspaceId, channelId, channelType: 'telegram', direction: 'outbound', outcome: 'success', stage: 'operator_reply', conversationId: convId })
       }
     } catch (err) {
       console.warn('[conversations] telegram operator delivery failed:', err)
+      if (channelId) await recordChannelReliability({ workspaceId, channelId, channelType: 'telegram', direction: 'outbound', outcome: 'failure', stage: 'operator_reply', detail: safeReliabilityDetail(err), conversationId: convId })
     }
   }
 
   // If this is an email conversation, mirror the operator reply via Resend.
   if (conv.channelType === 'email' && typeof conv.emailReplyTo === 'string') {
+    const channelId = typeof conv.channelId === 'string' ? conv.channelId : ''
     try {
-      const chSnap = await adminDb
-        .collection(`workspaces/${workspaceId}/channels`)
-        .where('type', '==', 'email')
-        .limit(1)
-        .get()
-      const enc = chSnap.docs[0]?.data().resendApiKeyEnc as string | undefined
+      const channelSnap = channelId
+        ? await adminDb.doc(`workspaces/${workspaceId}/channels/${channelId}`).get()
+        : null
+      const enc = channelSnap?.data()?.resendApiKeyEnc as string | undefined
       if (enc) {
         const { decryptSecret } = await import('../lib/crypto')
         const { sendEmail } = await import('../lib/email/client')
@@ -176,9 +177,11 @@ conversations.post('/:id/messages', async (c) => {
           text: body.content.trim(),
           inReplyTo: conv.emailMessageId as string | undefined,
         })
+        await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'outbound', outcome: 'success', stage: 'operator_reply', conversationId: convId })
       }
     } catch (err) {
       console.warn('[conversations] email operator delivery failed:', err)
+      if (channelId) await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'outbound', outcome: 'failure', stage: 'operator_reply', detail: safeReliabilityDetail(err), conversationId: convId })
     }
   }
 
@@ -199,9 +202,12 @@ conversations.post('/:id/messages', async (c) => {
           body.content.trim(),
           typeof conv.slackThreadTs === 'string' ? conv.slackThreadTs : undefined,
         )
+        await recordChannelReliability({ workspaceId, channelId, channelType: 'slack', direction: 'outbound', outcome: 'success', stage: 'operator_reply', conversationId: convId })
       }
     } catch (err) {
       console.warn('[conversations] Slack operator delivery failed:', err)
+      const channelId = typeof conv.channelId === 'string' ? conv.channelId : ''
+      if (channelId) await recordChannelReliability({ workspaceId, channelId, channelType: 'slack', direction: 'outbound', outcome: 'failure', stage: 'operator_reply', detail: safeReliabilityDetail(err), conversationId: convId })
     }
   }
 
@@ -218,9 +224,12 @@ conversations.post('/:id/messages', async (c) => {
         const { decryptSecret } = await import('../lib/crypto')
         const { sendSms } = await import('../lib/sms/client')
         await sendSms(channel.twilio.accountSid, decryptSecret(encrypted), channel.twilio.fromNumber, conv.smsFrom, body.content.trim())
+        await recordChannelReliability({ workspaceId, channelId, channelType: 'sms', direction: 'outbound', outcome: 'success', stage: 'operator_reply', conversationId: convId })
       }
     } catch (err) {
       console.warn('[conversations] SMS operator delivery failed:', err)
+      const channelId = typeof conv.channelId === 'string' ? conv.channelId : ''
+      if (channelId) await recordChannelReliability({ workspaceId, channelId, channelType: 'sms', direction: 'outbound', outcome: 'failure', stage: 'operator_reply', detail: safeReliabilityDetail(err), conversationId: convId })
     }
   }
 

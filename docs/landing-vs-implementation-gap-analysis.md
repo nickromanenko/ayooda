@@ -49,6 +49,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | Copilot (internal team chat over your agents) | ✅ | `routes/copilot.ts`, `apps/web/src/app/dashboard/copilot/page.tsx` |
 | Basic usage analytics (conversations, automation rate, tokens, docs/chunks) | ✅ | `routes/agent-usage.ts`, `dashboard/agents/[agentId]/usage/page.tsx` |
 | CSAT aggregate (avg + 1–5 distribution) + CSV export of conversations | ✅ | `routes/agent-usage.ts`, `dashboard/agents/[agentId]/usage/page.tsx` |
+| Channel reliability: provider diagnostics, delivery health, recent failures | ✅ | `lib/channels/reliability.ts`, `routes/channels.ts`, `dashboard/channels/page.tsx` |
 
 ---
 

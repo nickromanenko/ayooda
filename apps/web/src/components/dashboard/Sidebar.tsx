@@ -11,6 +11,7 @@ import {
   Bot,
   CreditCard,
   Settings,
+  Activity,
   Users,
   LogOut,
   PanelLeftClose,
@@ -29,6 +30,7 @@ const navItems = [
 ]
 
 const bottomItems = [
+  { label: 'Channel health', href: '/dashboard/channels', icon: Activity },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Team', href: '/dashboard/team', icon: Users },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },

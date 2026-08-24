@@ -7,6 +7,7 @@ import { runAgentTurn } from '../lib/chat/tools'
 import { sendSms } from '../lib/sms/client'
 import { formParams, verifyTwilioSignature } from '../lib/sms/signature'
 import { parseInboundSms, smsConversationId, smsVisitorId } from '../lib/sms/message'
+import { recordChannelReliability, safeReliabilityDetail } from '../lib/channels/reliability'
 
 const sms = new Hono()
 const WEBHOOK_RATE_WINDOW_MS = 60_000
@@ -163,9 +164,19 @@ sms.post('/webhook/:channelId', async (c) => {
 
   const inbound = parseInboundSms(params)
   if (!inbound || inbound.to !== channel.twilio?.fromNumber) return twiml(c)
-  await processSms(channelId, channel, inbound).catch((error) => {
+  try {
+    await processSms(channelId, channel, inbound)
+    await recordChannelReliability({
+      workspaceId: String(channel.workspaceId), channelId, channelType: 'sms',
+      direction: 'inbound', outcome: 'success', stage: 'message_processed',
+    })
+  } catch (error) {
     console.error('[sms/webhook] handler failed:', error)
-  })
+    await recordChannelReliability({
+      workspaceId: String(channel.workspaceId), channelId, channelType: 'sms',
+      direction: 'inbound', outcome: 'failure', stage: 'message_processing', detail: safeReliabilityDetail(error),
+    })
+  }
   return twiml(c)
 })
 

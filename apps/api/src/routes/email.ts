@@ -12,6 +12,7 @@ import {
 import { prepareTurn } from '../lib/chat/agent-turn'
 import { runAgentTurn } from '../lib/chat/tools'
 import { rateLimit } from '../lib/rate-limit'
+import { recordChannelReliability, safeReliabilityDetail } from '../lib/channels/reliability'
 
 /**
  * Public inbound-email webhook (Resend). The webhook carries only metadata —
@@ -59,6 +60,7 @@ email.post('/webhook/:channelId', async (c) => {
       return c.json({ ok: true })
     }
     const channel = channelDoc.data()
+    const workspaceId: string = channel.workspaceId
 
     // Verify the Svix signature against the raw body before trusting it.
     const raw = await c.req.text()
@@ -80,14 +82,15 @@ email.post('/webhook/:channelId', async (c) => {
     let apiKey: string
     try { apiKey = decryptSecret(channel.resendApiKeyEnc as string) } catch (err) {
       console.error('[email/webhook] key decrypt failed:', err)
+      await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'inbound', outcome: 'failure', stage: 'credential_decrypt', detail: safeReliabilityDetail(err) })
       return c.json({ ok: true })
     }
 
     const received = await getReceivedEmail(apiKey, event.data.email_id)
     const parsed = parseReceivedEmail(received, event.data.message_id)
     if (!parsed.text) return c.json({ ok: true }) // attachment-only / empty — nothing to answer
+    await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'inbound', outcome: 'success', stage: 'webhook_accepted' })
 
-    const workspaceId: string = channel.workspaceId
     const conversationId = conversationIdForEmail(parsed.inReplyTo ?? parsed.messageId)
     const visitorId = visitorIdForEmail(parsed.fromAddress)
     const supportAddress = (channel.config?.fromAddress as string | undefined) ?? parsed.toAddress ?? ''
@@ -123,10 +126,16 @@ email.post('/webhook/:channelId', async (c) => {
     await convRef.update({ ...emailFields, updatedAt: new Date() }).catch(() => {})
 
     if (prepared.kind === 'workflow') {
-      await sendEmail({
-        apiKey, from: supportAddress, to: parsed.fromAddress,
-        subject: replySubject(parsed.subject), text: prepared.message, inReplyTo: parsed.messageId,
-      }).catch((err) => console.warn('[email/webhook] handoff send failed:', err))
+      try {
+        await sendEmail({
+          apiKey, from: supportAddress, to: parsed.fromAddress,
+          subject: replySubject(parsed.subject), text: prepared.message, inReplyTo: parsed.messageId,
+        })
+        await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'outbound', outcome: 'success', stage: 'workflow_reply', conversationId })
+      } catch (err) {
+        console.warn('[email/webhook] handoff send failed:', err)
+        await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'outbound', outcome: 'failure', stage: 'workflow_reply', detail: safeReliabilityDetail(err), conversationId })
+      }
       return c.json({ ok: true })
     }
 
@@ -150,16 +159,23 @@ email.post('/webhook/:channelId', async (c) => {
     } catch (err) {
       console.error('[email/webhook] LLM stream failed:', err)
       generation.end({ level: 'ERROR', statusMessage: err instanceof Error ? err.message : String(err) })
+      await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'outbound', outcome: 'failure', stage: 'response_generation', detail: safeReliabilityDetail(err), conversationId })
       return c.json({ ok: true })
     }
 
     let reply = [prepared.prefix, generated].filter(Boolean).join('\n\n')
     if (!reply) reply = 'Sorry, I could not generate a response.'
     await prepared.persist(reply, promptTokens, completionTokens)
-    await sendEmail({
-      apiKey, from: supportAddress, to: parsed.fromAddress,
-      subject: replySubject(parsed.subject), text: reply, inReplyTo: parsed.messageId,
-    }).catch((err) => console.error('[email/webhook] reply send failed:', err))
+    try {
+      await sendEmail({
+        apiKey, from: supportAddress, to: parsed.fromAddress,
+        subject: replySubject(parsed.subject), text: reply, inReplyTo: parsed.messageId,
+      })
+      await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'outbound', outcome: 'success', stage: 'agent_reply', conversationId })
+    } catch (err) {
+      console.error('[email/webhook] reply send failed:', err)
+      await recordChannelReliability({ workspaceId, channelId, channelType: 'email', direction: 'outbound', outcome: 'failure', stage: 'agent_reply', detail: safeReliabilityDetail(err), conversationId })
+    }
 
     return c.json({ ok: true })
   } catch (err) {

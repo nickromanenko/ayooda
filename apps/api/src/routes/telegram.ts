@@ -7,6 +7,7 @@ import { sendMessage } from '../lib/telegram/client'
 import { prepareTurn } from '../lib/chat/agent-turn'
 import { runAgentTurn } from '../lib/chat/tools'
 import { rateLimit } from '../lib/rate-limit'
+import { recordChannelReliability, safeReliabilityDetail } from '../lib/channels/reliability'
 
 const telegram = new Hono()
 
@@ -137,9 +138,18 @@ telegram.post('/webhook/:channelId', async (c) => {
       await sendMessage(token, chatId, reply)
     } catch (err) {
       console.error('[telegram/webhook] handler error:', err)
+      await recordChannelReliability({
+        workspaceId, channelId, channelType: 'telegram', direction: 'inbound',
+        outcome: 'failure', stage: 'message_processing', detail: safeReliabilityDetail(err),
+      })
       // Best-effort user notice; always 200 so Telegram doesn't retry-storm.
       try { await sendMessage(token, chatId, 'Sorry, something went wrong.') } catch { /* ignore */ }
+      return c.json({ ok: true })
     }
+    await recordChannelReliability({
+      workspaceId, channelId, channelType: 'telegram', direction: 'inbound',
+      outcome: 'success', stage: 'message_processed',
+    })
     return c.json({ ok: true })
   } catch (err) {
     console.error('[telegram/webhook] outer handler error:', err)

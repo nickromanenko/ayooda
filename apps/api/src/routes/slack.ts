@@ -7,6 +7,7 @@ import { runAgentTurn } from '../lib/chat/tools'
 import { sendSlackMessage } from '../lib/slack/client'
 import { parseSlackEnvelope, slackConversationId, slackVisitorId, type ParsedSlackEnvelope } from '../lib/slack/events'
 import { verifySlackSignature } from '../lib/slack/signature'
+import { recordChannelReliability, safeReliabilityDetail } from '../lib/channels/reliability'
 
 const slack = new Hono()
 const WEBHOOK_RATE_WINDOW_MS = 60_000
@@ -163,9 +164,19 @@ slack.post('/events/:channelId', async (c) => {
   if (parsed.kind === 'challenge') return c.json({ challenge: parsed.challenge })
   if (parsed.kind === 'ignore' || parsed.teamId !== channel.slack?.teamId) return c.json({ ok: true })
 
-  await processSlackMessage(channelId, channel, parsed).catch((error) => {
+  try {
+    await processSlackMessage(channelId, channel, parsed)
+    await recordChannelReliability({
+      workspaceId: String(channel.workspaceId), channelId, channelType: 'slack',
+      direction: 'inbound', outcome: 'success', stage: 'message_processed',
+    })
+  } catch (error) {
     console.error('[slack/events] handler failed:', error)
-  })
+    await recordChannelReliability({
+      workspaceId: String(channel.workspaceId), channelId, channelType: 'slack',
+      direction: 'inbound', outcome: 'failure', stage: 'message_processing', detail: safeReliabilityDetail(error),
+    })
+  }
   return c.json({ ok: true })
 })
 

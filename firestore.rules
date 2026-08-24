@@ -44,6 +44,13 @@ service cloud.firestore {
           && callerData().get('role', 'owner') != 'member';
       }
 
+      // Channel delivery telemetry and provider diagnostics are owner-only API
+      // data. Error details are sanitized server-side and never client-readable.
+      match /channelReliability/{channelId} {
+        allow read, write: if false;
+        match /events/{eventId} { allow read, write: if false; }
+      }
+
       match /conversations/{conversationId} {
         allow read, write: if request.auth != null
           && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
