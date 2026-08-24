@@ -18,7 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'Ayooda — AI support agent for modern teams',
-  description: 'Resolve up to 60% of support tickets automatically. Ayooda is the AI support agent your customers will want to talk to.',
+  description: 'Resolve routine support tickets end-to-end. Ayooda gives customers grounded answers, takes guarded actions, and hands off the exceptions.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

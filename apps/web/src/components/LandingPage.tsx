@@ -229,7 +229,7 @@ function ChatDemo() {
         <span style={{ width: 10, height: 10, borderRadius: 50, background: '#ffbd2e', display: 'inline-block' }} />
         <span style={{ width: 10, height: 10, borderRadius: 50, background: '#27c93f', display: 'inline-block' }} />
         <div style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-faint)' }}>
-          live · ayooda agent · resolution time 00:04.1
+          product walkthrough · representative workflow
         </div>
       </div>
 
@@ -290,10 +290,10 @@ function Hero() {
           maxWidth: 1000, marginInline: 'auto', textWrap: 'balance' as CSSProperties['textWrap'],
         }}>
           <Reveal style={{ display: 'block' }}>
-            Resolve <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>up&nbsp;to&nbsp;60%</em> of
+            Resolve routine tickets.
           </Reveal>
           <Reveal delay={120} style={{ display: 'block' }}>
-            your support tickets.
+            Keep your team <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>focused.</em>
           </Reveal>
         </h1>
 
@@ -313,7 +313,7 @@ function Hero() {
             <Link href="/signup" className="btn btn-primary">Start free trial</Link>
             <a href={LANDING_LINKS.demo} className="btn btn-ghost landing-cta">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: 2 }}><path d="M2 1l9 5-9 5V1z" fill="currentColor" /></svg>
-              Watch live demo
+              Watch product demo
             </a>
           </div>
         </Reveal>
@@ -337,17 +337,31 @@ function Hero() {
 // ─── Logo Strip ───────────────────────────────────────────────────────────────
 
 function LogoStrip() {
+  const proofPoints = ['Grounded answers', 'Guarded actions', 'Clean hand-offs']
+
   return (
-    <section style={{ padding: '40px 0 80px' }}>
+    <section aria-label="Product capabilities" style={{ padding: '40px 0 80px' }}>
       <div className="container">
         <p style={{
           textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 11,
           letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-faint)',
-          marginBottom: 28,
+          marginBottom: 20,
         }}>
-          Trusted by modern support teams at 10,000+ companies
+          Built for support teams that need answers and actions—not another chatbot
         </p>
-        {/* logo grid hidden until real logos are ready */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {proofPoints.map(point => (
+            <div key={point} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 13px', borderRadius: 999,
+              background: 'var(--panel)', boxShadow: '0 0 0 1px var(--line)',
+              color: 'var(--ink-dim)', fontSize: 13, fontWeight: 500,
+            }}>
+              <span aria-hidden style={{ width: 6, height: 6, borderRadius: 50, background: 'var(--accent)' }} />
+              {point}
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   )
@@ -925,7 +939,7 @@ function Integrations() {
 
 // ─── Testimonials ─────────────────────────────────────────────────────────────
 
-function QuoteCard({ q, name, role, company, photo }: { q: string; name: string; role: string; company: string; photo: string }) {
+function OutcomeCard({ index, title, body, proof }: { index: string; title: string; body: string; proof: string }) {
   return (
     <article style={{
       padding: '28px 28px 24px', borderRadius: 'var(--r-lg)',
@@ -933,41 +947,46 @@ function QuoteCard({ q, name, role, company, photo }: { q: string; name: string;
       display: 'flex', flexDirection: 'column', height: '100%',
       position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ position: 'absolute', top: -10, right: 22, fontFamily: 'var(--font-display)', fontSize: 110, color: 'var(--accent-soft)', lineHeight: 1, pointerEvents: 'none' }}>&ldquo;</div>
-      <div style={{ width: '100%', height: 200, borderRadius: 12, marginBottom: 22, overflow: 'hidden', flexShrink: 0 }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photo} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }} />
+      <div aria-hidden style={{ position: 'absolute', top: -22, right: 18, fontFamily: 'var(--font-display)', fontSize: 130, color: 'var(--accent-soft)', lineHeight: 1, pointerEvents: 'none' }}>{index}</div>
+      <div style={{
+        width: 42, height: 42, borderRadius: 12, marginBottom: 44,
+        display: 'grid', placeItems: 'center',
+        background: 'var(--accent-soft)', color: 'var(--accent)',
+        fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500,
+        boxShadow: '0 0 0 1px var(--line)',
+      }}>
+        {index}
       </div>
-      <p style={{ fontSize: 15.5, lineHeight: 1.6, color: 'var(--ink)', margin: 0, flex: 1, textWrap: 'pretty' as CSSProperties['textWrap'] }}>&ldquo;{q}&rdquo;</p>
+      <h3 style={{ fontSize: 20, lineHeight: 1.3, margin: '0 0 12px', textWrap: 'balance' as CSSProperties['textWrap'] }}>{title}</h3>
+      <p style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--ink-dim)', margin: 0, flex: 1, textWrap: 'pretty' as CSSProperties['textWrap'] }}>{body}</p>
       <div style={{ borderTop: '1px solid var(--line)', marginTop: 22, paddingTop: 16 }}>
-        <div style={{ fontWeight: 500, fontSize: 14 }}>{name}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--ink-mute)' }}>{role} · {company}</div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-mute)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{proof}</div>
       </div>
     </article>
   )
 }
 
-function Testimonials() {
-  const quotes = [
-    { q: "Around 60% of our tickets are now resolved without a human touching them. Ayooda handles them end-to-end — routing, lookups, even refunds.", name: 'Antonia Renard', role: 'Marketing Director', company: 'AFS Foil', photo: '/testimonials/antonia.jpg' },
-    { q: "The impact was immediate. Ayooda now handles all incoming chats and autonomously resolves about 40% of them, freeing the team for real problems.", name: 'Geoff Sarem', role: 'Head of Operations', company: 'Emmatt', photo: '/testimonials/geoff.jpg' },
-    { q: "Roughly 40% of requests are fully automated. The rest escalate cleanly to us — with summaries — so quality never slips even as we scale.", name: 'Jim Cohen', role: 'CEO', company: 'Spidervo', photo: '/testimonials/jim.jpg' },
+function OutcomePlaybook() {
+  const outcomes = [
+    { index: '01', title: 'Answer the questions that keep coming back.', body: 'Use synced help-center content, product docs, and connected business data to give customers useful answers in the moment.', proof: 'Knowledge retrieval + confidence' },
+    { index: '02', title: 'Take action when an answer is not enough.', body: 'Look up orders, update records, and run approved workflows through connected tools—with confirmation and guardrails where they matter.', proof: 'Connected tools + workflows' },
+    { index: '03', title: 'Hand off the exceptions, already organized.', body: 'When confidence drops or a rule calls for a person, route the conversation with its context, summary, and hand-off reason intact.', proof: 'Escalation rules + shared inbox' },
   ]
   return (
-    <section id="cases" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
+    <section id="outcomes" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
       <div className="container">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 56 }}>
-          <Reveal><div className="eyebrow"><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Case studies</div></Reveal>
+          <Reveal><div className="eyebrow"><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Outcome playbook</div></Reveal>
           <Reveal delay={80}>
             <h2 className="display" style={{ fontSize: 'clamp(40px, 5vw, 64px)', margin: '18px 0 0', maxWidth: 760, textWrap: 'balance' as CSSProperties['textWrap'] }}>
-              Real teams. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Real results.</em>
+              Put the routine on autopilot. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Keep control of the rest.</em>
             </h2>
           </Reveal>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-          {quotes.map((t, i) => (
-            <Reveal key={i} delay={i * 90}>
-              <QuoteCard {...t} />
+          {outcomes.map((outcome, i) => (
+            <Reveal key={outcome.index} delay={i * 90}>
+              <OutcomeCard {...outcome} />
             </Reveal>
           ))}
         </div>
@@ -1175,7 +1194,7 @@ function FAQ() {
     { q: "How accurate are the answers?", a: "Every reply is grounded in your data — docs, knowledge base, CRM, product. Ayooda cites the source internally and abstains when it isn't confident, routing the ticket to a human instead of guessing." },
     { q: "What if Ayooda gets something wrong?", a: "It admits it, flags the ticket for review, and hands off with full context. You can label outcomes in the dashboard — Ayooda learns from your corrections automatically." },
     { q: "Which channels does it work on?", a: "Live chat, email, WhatsApp, Messenger, Instagram, SMS, Slack, in-app widgets — anywhere your customers already write to you." },
-    { q: "Will it replace my support team?", a: "No. It takes the repetitive 40–60% of volume off your queue so your team can focus on the hard, human-facing problems — where they actually add value." },
+    { q: "Will it replace my support team?", a: "No. It takes repetitive work off the queue so your team can focus on the hard, human-facing problems—where their judgment and care add the most value." },
     { q: "How long to get started?", a: "Most teams go live within an afternoon. If you have docs and a helpdesk, setup is a matter of minutes. No engineering required." },
   ]
   return (
@@ -1231,7 +1250,7 @@ function FinalCTA() {
             <Link href="/signup" className="btn btn-primary">Start free trial</Link>
             <a href={LANDING_LINKS.demo} className="btn btn-ghost landing-cta">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: 2 }}><path d="M2 1l9 5-9 5V1z" fill="currentColor" /></svg>
-              Watch live demo
+              Watch product demo
             </a>
           </div>
           <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', margin: 0 }}>
@@ -1272,7 +1291,7 @@ export function LandingPage() {
         <Features />
         <HowItWorks />
         <Integrations />
-        <Testimonials />
+        <OutcomePlaybook />
         <Pricing />
         <FAQ />
         <FinalCTA />

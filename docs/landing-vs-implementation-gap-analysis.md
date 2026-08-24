@@ -125,20 +125,20 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Reality:** Firebase Auth (Google + email only) — **no SSO/SAML/OIDC**. Secrets are encrypted and per-agent access control exists, but no SSO, no scoped API-key system, and no EU-region enforcement in code.
 - **Status:** 🔴 Missing (SSO/EU) · **Priority:** P2
 
-### 🟡 GAP-10 — Social proof
-- **Claim:** *"Trusted by modern support teams at 10,000+ companies"* · 3 named testimonials (AFS Foil, Emmatt, Spidervo) with specific 40–60% automation figures.
-- **Reality:** Code comment: *"logo grid hidden until real logos are ready"*. Testimonials are hardcoded with local images (`apps/web/public/testimonials/*.jpg`); `10,000+ companies` is unsubstantiated.
-- **Status:** 🟡 Risk · **Priority:** P1 (legal/trust exposure)
+### ✅ GAP-10 — Social proof claims reframed around shipped capabilities
+- **Was:** *"Trusted by modern support teams at 10,000+ companies"* plus three named testimonials with specific automation figures, none of which had supporting evidence in the repository.
+- **Now (2026-08-24):** the unverified company count, customer identities, portraits, quotes, and outcome percentages are no longer published. The same high-value landing-page space now sells demonstrable product capabilities: grounded answers, guarded actions, and context-rich hand-offs, followed by a three-card outcome playbook tied to shipped knowledge retrieval, workflows, escalation rules, and the shared inbox.
+- **Status:** ✅ Reframed (sales message retained; unsupported social proof removed) · **Priority:** P1 (resolved)
 
 ### ✅ GAP-11 — Landing-page CTAs now have real destinations
 - **Was:** "Watch 90-sec demo" / "Watch demo" were inert buttons; "Browse connectors" went directly to signup rather than a catalog; "Read the MCP docs" had no handler; and "Ask Ayooda →" promised an embedded live agent that did not exist.
 - **Now (2026-08-24):** both demo actions scroll to the existing scripted support-conversation demo; the integrations actions open new public `/connectors` and `/docs/mcp` resource pages; and the unsupported live-agent promise has been replaced with an honest "Test your own agent" signup path that leads into the shipped isolated sandbox flow. CTA targets live in a single tested `landing-links.ts` map so they cannot silently drift back to placeholders.
 - **Status:** ✅ Implemented · **Priority:** P3 (resolved)
 
-### 🟡 GAP-12 — "Resolve up to 60% end-to-end"
-- **Claim:** Hero *"Resolve up to 60% of your support tickets"* + demo of autonomous multi-step write resolutions (refund, notify, close ticket).
-- **Now (2026-08-23):** enabled write tools can execute provider-specific actions, including the demo's Shopify refund/notification and Zendesk resolution flow. The numeric "60%" outcome remains unsubstantiated and should be treated as marketing evidence still to be supplied.
-- **Status:** 🟡 Risk (capability ships; performance claim remains unverified) · **Priority:** P2
+### ✅ GAP-12 — End-to-end resolution promise separated from performance claims
+- **Was:** the hero and metadata promised a fixed automation outcome without product or customer evidence, while the scripted demo presented an exact resolution time as if it were live benchmark data.
+- **Now (2026-08-24):** the hero still makes the commercial promise—*"Resolve routine tickets. Keep your team focused."*—and the metadata still sells end-to-end resolution, but neither asserts a fixed percentage. The animated conversation is explicitly labeled as a representative product walkthrough. Enabled write tools continue to support provider-specific actions, including the illustrated order and ticket flows.
+- **Status:** ✅ Reframed (end-to-end capability retained; unsupported benchmark removed) · **Priority:** P2 (resolved)
 
 ---
 
@@ -147,7 +147,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | Order | Item | Status | Priority |
 |---|---|---|---|
 | 1 | **MCP support** (GAP-01) | ✅ Done | P0 |
-| 2 | **Landing-page honesty/reframe pass** — dead CTAs are fixed (GAP-11); unshipped channel/security and unverified social-proof claims still need reframing (GAP-04/GAP-09/GAP-10). | 🟠 (CTA portion done) | P0 |
+| 2 | **Landing-page honesty/reframe pass** — dead CTAs, unverified social proof, and unsupported performance benchmarks are reframed (GAP-10/GAP-11/GAP-12); unshipped channel/security claims still need qualification (GAP-04/GAP-09). | 🟠 (trust portion done) | P0 |
 | 3 | **Analytics: CSV export + aggregate CSAT** (closes GAP-05) | ✅ Done | P1 |
 | 4 | **Email channel** (closes GAP-04 highest-value piece) | ✅ Done | P1 |
 | 5 | **Visual workflow builder** (GAP-03) | ✅ Done | P1 |
@@ -178,7 +178,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - GAP-01 is now ✅ Implemented; the "Model Context Protocol support" claim on the landing page is backed by a real, working feature.
 
 ### Remaining honesty items (still open — next)
-GAP-04 (remaining channels: WhatsApp/Messenger/Instagram), GAP-08 (private-network endpoint connectivity), GAP-09 (SSO/EU), and GAP-10 (social proof) still need either implementation or a "coming soon" relabel. GAP-03, GAP-05, and GAP-11 are now resolved.
+GAP-04 (remaining channels: WhatsApp/Messenger/Instagram), GAP-08 (private-network endpoint connectivity), and GAP-09 (SSO/EU) still need either implementation or a "coming soon" relabel. GAP-03, GAP-05, GAP-10, GAP-11, and GAP-12 are now resolved.
 
 ---
 
