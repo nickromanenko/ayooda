@@ -345,6 +345,8 @@ export interface ToolAuth {
 /** The tool as returned by GET /tools — never carries the secret. */
 export interface ToolDef {
   id: string
+  bundleId?: string
+  templateId?: string
   name: string
   description: string
   method: ToolMethod
@@ -523,6 +525,14 @@ export interface ToolTemplate {
   auth: { type: ToolAuthType; headerName?: string } // no secret — owner-entered
   kind: ToolKind
   secretLabel: string
+}
+
+export interface ToolBundle {
+  id: string
+  label: string
+  category: string
+  description: string
+  templateIds: string[]
 }
 
 export const TOOL_TEMPLATES: ToolTemplate[] = [
@@ -810,6 +820,64 @@ export const TOOL_TEMPLATES: ToolTemplate[] = [
     secretLabel: 'Bearer token (or set auth to None for a public API)',
   },
 ]
+
+/** Provider-level installs. Every template in a bundle shares one setup and credential step. */
+export const TOOL_BUNDLES: ToolBundle[] = [
+  {
+    id: 'shopify', label: 'Shopify', category: 'E-commerce',
+    description: 'Order lookup, payment transactions, and customer-notifying refunds.',
+    templateIds: ['shopify_order_lookup', 'shopify_transactions_lookup', 'shopify_refund'],
+  },
+  {
+    id: 'stripe', label: 'Stripe', category: 'Payments',
+    description: 'Customer lookup and confirmed email updates.',
+    templateIds: ['stripe_customer_lookup', 'stripe_customer_update'],
+  },
+  {
+    id: 'hubspot', label: 'HubSpot', category: 'CRM',
+    description: 'Contact lookup and confirmed email updates.',
+    templateIds: ['hubspot_contact_lookup', 'hubspot_contact_update'],
+  },
+  {
+    id: 'zendesk', label: 'Zendesk', category: 'Support',
+    description: 'Ticket lookup plus public resolution and solve actions.',
+    templateIds: ['zendesk_ticket_lookup', 'zendesk_ticket_resolve'],
+  },
+  {
+    id: 'notion', label: 'Notion', category: 'Knowledge',
+    description: 'Search pages and databases shared with your integration.',
+    templateIds: ['notion_search'],
+  },
+  {
+    id: 'linear', label: 'Linear', category: 'Support',
+    description: 'Look up issues by identifier with status and priority context.',
+    templateIds: ['linear_issue_lookup'],
+  },
+  {
+    id: 'intercom', label: 'Intercom', category: 'CRM',
+    description: 'Find customer contacts and account context by email.',
+    templateIds: ['intercom_contact_lookup'],
+  },
+  {
+    id: 'zapier', label: 'Zapier', category: 'Automation',
+    description: 'Trigger a Catch Hook with structured customer-support events.',
+    templateIds: ['zapier_webhook_action'],
+  },
+]
+
+export function templatesForToolBundle(bundle: ToolBundle): ToolTemplate[] {
+  return bundle.templateIds
+    .map((id) => TOOL_TEMPLATES.find((template) => template.id === id))
+    .filter((template): template is ToolTemplate => !!template)
+}
+
+export function setupFieldsForToolBundle(bundle: ToolBundle): ToolTemplateSetupField[] {
+  const fields = new Map<string, ToolTemplateSetupField>()
+  for (const template of templatesForToolBundle(bundle)) {
+    for (const field of template.setupFields) if (!fields.has(field.key)) fields.set(field.key, field)
+  }
+  return [...fields.values()]
+}
 
 /** Substitute {{setup}} placeholders (URL + header values) from setupValues; leave {param} intact. */
 export function applyTemplate(

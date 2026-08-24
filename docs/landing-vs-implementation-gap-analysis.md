@@ -66,8 +66,9 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 ### 🟠 GAP-02 — "First-party connectors" and write actions
 - **Claim:** Shopify/Stripe/HubSpot/Notion/Zendesk/Linear/Intercom/Zapier shown as live connectors; demo runs `shopify.orders.refund`, `stripe.customer.update`, *"refunded · customer notified · ticket closed (4.1s)"*.
 - **Now (2026-08-23):** the tool gallery ships provider-aware API-token templates for all eight advertised brands. Shopify includes order/transaction lookup and refund-with-notification; Stripe and HubSpot include customer/contact updates; Zendesk includes public resolution + solve; Notion, Linear, and Intercom include lookups; Zapier includes a Catch Hook action. JSON and form-encoded request bodies are supported end-to-end, write tools remain disabled until explicitly enabled, and manual write tests require confirmation.
-- **Still missing:** OAuth installation, shared connector credentials, and one-click installation of a provider's related actions as a bundle. Setup is first-party in the dashboard, but still API-token based.
-- **Status:** 🟠 Partial (advertised actions ship; OAuth-style connector installs don't) · **Priority:** P0
+- **Now, phase 2 (2026-08-24):** the Tools dashboard groups all eight providers into connector cards with available/partial/installed status. One setup and credential step atomically installs every missing provider action, deterministic document ids make retries duplicate-safe, provider-specific setup is host/format validated, and write actions remain disabled for explicit review. Individual templates and fully custom tools remain available.
+- **Still missing:** OAuth installation and a separately managed shared connector-credential record. Bundle installation asks once but currently stores the encrypted credential with each installed action.
+- **Status:** 🟠 Partial (advertised actions and one-step provider bundles ship; OAuth-style credential lifecycle doesn't) · **Priority:** P0
 
 ### ✅ GAP-03 — Visual "Workflows" builder
 - **Claim:** *"Design complex automations, visually… drag-and-drop flows to model triage, escalation, and routing logic"* with a branching node graph.

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { TOOL_TEMPLATES, applyTemplate } from '@ayooda/shared'
+import { TOOL_BUNDLES, TOOL_TEMPLATES, applyTemplate } from '@ayooda/shared'
 import { validateToolInput } from './validate'
 
 const SAMPLE: Record<string, string> = {
@@ -51,5 +51,10 @@ describe('catalog validity', () => {
         'zendesk_ticket_lookup', 'zendesk_ticket_resolve',
       ],
     )
+  })
+  test('every provider action belongs to exactly one connector bundle', () => {
+    const bundled = TOOL_BUNDLES.flatMap((bundle) => bundle.templateIds)
+    expect(new Set(bundled).size).toBe(bundled.length)
+    expect(bundled.sort()).toEqual(TOOL_TEMPLATES.filter((template) => template.id !== 'generic_rest_get').map((template) => template.id).sort())
   })
 })

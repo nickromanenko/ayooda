@@ -1,16 +1,37 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
-import { Loader2, Trash2, Plus, Play } from 'lucide-react'
+import { CheckCircle2, CircleDashed, Loader2, PackagePlus, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
-import { TOOL_TEMPLATES, applyTemplate, type ToolDef, type ToolMethod, type ToolParamType, type ToolAuthType, type ToolKind, type ToolTemplate, type ToolBodyEncoding } from '@ayooda/shared'
+import {
+  TOOL_BUNDLES,
+  TOOL_TEMPLATES,
+  applyTemplate,
+  setupFieldsForToolBundle,
+  templatesForToolBundle,
+  type ToolBundle,
+  type ToolDef,
+  type ToolMethod,
+  type ToolParamType,
+  type ToolAuthType,
+  type ToolKind,
+  type ToolTemplate,
+  type ToolBodyEncoding,
+} from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
+import styles from './page.module.css'
 
 const row: React.CSSProperties = { display: 'flex', gap: 8, marginBottom: 8 }
 
 interface ParamRow { name: string; type: ToolParamType; description: string; required: boolean }
 interface HeaderRow { key: string; value: string }
+type BundleState = 'available' | 'partial' | 'installed'
+type PickerState =
+  | 'gallery'
+  | { kind: 'template'; template: ToolTemplate; setup: Record<string, string> }
+  | { kind: 'bundle'; bundle: ToolBundle; setup: Record<string, string>; secret: string }
+  | null
 interface FormState {
   id: string | null
   name: string; description: string; method: ToolMethod; urlTemplate: string
@@ -27,6 +48,23 @@ const emptyForm: FormState = {
   kind: 'read', writeEnabled: false, enabled: true,
 }
 
+function installedBundleTemplates(bundle: ToolBundle, tools: ToolDef[]): string[] {
+  const templates = templatesForToolBundle(bundle)
+  return templates
+    .filter((template) => tools.some((tool) => tool.templateId === template.id || tool.name === template.toolName))
+    .map((template) => template.id)
+}
+
+function bundleState(bundle: ToolBundle, tools: ToolDef[]): BundleState {
+  const installed = installedBundleTemplates(bundle, tools).length
+  if (installed === 0) return 'available'
+  return installed === bundle.templateIds.length ? 'installed' : 'partial'
+}
+
+function bundleSecretLabel(bundle: ToolBundle): string | null {
+  return templatesForToolBundle(bundle).find((template) => template.auth.type !== 'none')?.secretLabel ?? null
+}
+
 export default function AgentToolsPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = use(params)
 
@@ -39,7 +77,8 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
   const [testResult, setTestResult] = useState<string>('')
   const [testing, setTesting] = useState(false)
   const [busyId, setBusyId] = useState('')
-  const [picker, setPicker] = useState<'gallery' | { template: ToolTemplate; setup: Record<string, string> } | null>(null)
+  const [picker, setPicker] = useState<PickerState>(null)
+  const [notice, setNotice] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -49,11 +88,16 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
   }, [agentId])
   useEffect(() => { void load() }, [load])
 
-  function startCreate() { setForm({ ...emptyForm }); setError(''); setTestResult(''); setTestArgs('{}') }
+  function startCreate() { setForm({ ...emptyForm }); setError(''); setNotice(''); setTestResult(''); setTestArgs('{}') }
   function chooseTemplate(template: ToolTemplate) {
-    setPicker({ template, setup: Object.fromEntries(template.setupFields.map((f) => [f.key, ''])) })
+    setPicker({ kind: 'template', template, setup: Object.fromEntries(template.setupFields.map((f) => [f.key, ''])) })
+    setError(''); setNotice('')
   }
-  function applyPickedTemplate(p: { template: ToolTemplate; setup: Record<string, string> }) {
+  function chooseBundle(bundle: ToolBundle) {
+    setPicker({ kind: 'bundle', bundle, setup: Object.fromEntries(setupFieldsForToolBundle(bundle).map((field) => [field.key, ''])), secret: '' })
+    setError(''); setNotice('')
+  }
+  function applyPickedTemplate(p: Extract<PickerState, { kind: 'template' }>) {
     const a = applyTemplate(p.template, p.setup)
     setForm({
       id: null,
@@ -65,6 +109,24 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
     })
     setPicker(null); setError(''); setTestResult(''); setTestArgs('{}')
   }
+
+  async function installBundle(p: Extract<PickerState, { kind: 'bundle' }>) {
+    setSaving(true); setError(''); setNotice('')
+    try {
+      const res = await apiRequest(`/agents/${agentId}/tools/bundles`, {
+        method: 'POST',
+        body: JSON.stringify({ bundleId: p.bundle.id, setup: p.setup, ...(p.secret ? { secret: p.secret } : {}) }),
+      })
+      const data = await res.json().catch(() => ({})) as { error?: string; installed?: ToolDef[]; skippedTemplateIds?: string[] }
+      if (!res.ok) { setError(data.error ?? 'Could not install the connector.'); return }
+      const installed = data.installed?.length ?? 0
+      setPicker(null)
+      setNotice(installed
+        ? `${p.bundle.label} connected with ${installed} new action${installed === 1 ? '' : 's'}. Review write actions before enabling them.`
+        : `${p.bundle.label} is already fully installed.`)
+      await load()
+    } finally { setSaving(false) }
+  }
   function startEdit(t: ToolDef) {
     setForm({
       id: t.id, name: t.name, description: t.description, method: t.method, urlTemplate: t.urlTemplate,
@@ -73,7 +135,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
       authType: t.auth.type, headerName: t.auth.headerName ?? '', secret: '', hasSecret: t.hasSecret,
       kind: t.kind, writeEnabled: t.writeEnabled, enabled: t.enabled,
     })
-    setError(''); setTestResult(''); setTestArgs('{}')
+    setError(''); setNotice(''); setTestResult(''); setTestArgs('{}')
   }
 
   function payload(f: FormState) {
@@ -127,11 +189,13 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
         </p>
         {!form && !picker && (
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            <button type="button" onClick={() => setPicker('gallery')} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}>Start from a template</button>
-            <button type="button" onClick={startCreate} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}><Plus size={14} /> New tool</button>
+            <button type="button" onClick={() => { setPicker('gallery'); setError(''); setNotice('') }} className="btn btn-ghost" style={{ minHeight: 40, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}>Connect provider</button>
+            <button type="button" onClick={startCreate} className="btn btn-primary" style={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }}><Plus size={14} /> New tool</button>
           </div>
         )}
       </div>
+
+      {notice && <p role="status" className={styles.notice}>{notice}</p>}
 
       {!form && !picker && (
         <div style={card}>
@@ -156,25 +220,53 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
 
       {picker === 'gallery' && (
         <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <p style={label}>Choose a template</p>
-            <button type="button" onClick={() => setPicker(null)} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13 }}>Cancel</button>
+          <div className={styles.galleryHeader}>
+            <div>
+              <p style={label}>Connect a provider</p>
+              <p>Install a complete action set with one setup and credential step.</p>
+            </div>
+            <button type="button" onClick={() => setPicker(null)} className="btn btn-ghost" style={{ minHeight: 40, borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13 }}>Cancel</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+          <div className={styles.bundleGrid}>
+            {TOOL_BUNDLES.map((bundle) => {
+              const state = bundleState(bundle, tools)
+              const installed = installedBundleTemplates(bundle, tools).length
+              return (
+                <button key={bundle.id} type="button" disabled={state === 'installed'} onClick={() => chooseBundle(bundle)} className={styles.bundleCard}>
+                  <span className={styles.bundleCardTop}>
+                    <span className={styles.providerIcon}><PackagePlus size={16} /></span>
+                    <span className={`${styles.bundleStatus} ${state === 'installed' ? styles.bundleStatusInstalled : state === 'partial' ? styles.bundleStatusPartial : ''}`}>
+                      {state === 'installed' ? <CheckCircle2 size={12} /> : <CircleDashed size={12} />}
+                      {state === 'installed' ? 'Installed' : state === 'partial' ? 'Partial' : 'Available'}
+                    </span>
+                  </span>
+                  <strong>{bundle.label}</strong>
+                  <span className={styles.bundleDescription}>{bundle.description}</span>
+                  <span className={styles.bundleMeta}>{installed}/{bundle.templateIds.length} actions installed · {bundle.category}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className={styles.individualHeader}>
+            <p style={label}>Individual action templates</p>
+            <p>Use one action as a starting point for a custom setup.</p>
+          </div>
+          <div className={styles.templateGrid}>
             {TOOL_TEMPLATES.map((t) => (
-              <button key={t.id} type="button" onClick={() => chooseTemplate(t)} style={{ textAlign: 'left', background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 'var(--r-sm)', padding: 14, cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{t.label}</span>
-                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, background: 'var(--panel-2)', color: 'var(--ink-mute)' }}>{t.category}</span>
+              <button key={t.id} type="button" onClick={() => chooseTemplate(t)} className={styles.templateCard}>
+                <div className={styles.templateTitle}>
+                  <span>{t.label}</span>
+                  <span>{t.category}</span>
                 </div>
-                <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0 }}>{t.description}</p>
+                <p>{t.description}</p>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {picker && picker !== 'gallery' && (
+      {picker && picker !== 'gallery' && picker.kind === 'template' && (
         <div style={card}>
           <p style={label}>{picker.template.label}</p>
           <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginBottom: 16 }}>{picker.template.description}</p>
@@ -184,7 +276,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
               <input
                 placeholder={f.placeholder}
                 value={picker.setup[f.key] ?? ''}
-                onChange={(e) => setPicker({ template: picker.template, setup: { ...picker.setup, [f.key]: e.target.value } })}
+                onChange={(e) => setPicker({ ...picker, setup: { ...picker.setup, [f.key]: e.target.value } })}
                 style={input}
               />
               {f.help && <p style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 4 }}>{f.help}</p>}
@@ -197,14 +289,75 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
               onClick={() => applyPickedTemplate(picker)}
               disabled={picker.template.setupFields.some((f) => !picker.setup[f.key]?.trim())}
               className="btn btn-primary"
-              style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: picker.template.setupFields.some((f) => !picker.setup[f.key]?.trim()) ? 0.5 : 1 }}
+              style={{ minHeight: 40, borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: picker.template.setupFields.some((f) => !picker.setup[f.key]?.trim()) ? 0.5 : 1 }}
             >
               Continue
             </button>
-            <button type="button" onClick={() => setPicker('gallery')} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>Back</button>
+            <button type="button" onClick={() => setPicker('gallery')} className="btn btn-ghost" style={{ minHeight: 40, borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>Back</button>
           </div>
         </div>
       )}
+
+      {picker && picker !== 'gallery' && picker.kind === 'bundle' && (() => {
+        const fields = setupFieldsForToolBundle(picker.bundle)
+        const secretLabel = bundleSecretLabel(picker.bundle)
+        const installed = installedBundleTemplates(picker.bundle, tools).length
+        const incomplete = fields.some((field) => !picker.setup[field.key]?.trim()) || (!!secretLabel && !picker.secret.trim())
+        return (
+          <div style={card}>
+            <div className={styles.setupHeader}>
+              <span className={styles.providerIcon}><PackagePlus size={17} /></span>
+              <div>
+                <p style={label}>Connect {picker.bundle.label}</p>
+                <p>{picker.bundle.description}</p>
+              </div>
+            </div>
+
+            {installed > 0 && <p className={styles.partialNotice}>{installed} of {picker.bundle.templateIds.length} actions already exist. Only missing actions will be installed.</p>}
+
+            <div className={styles.actionPreview}>
+              {templatesForToolBundle(picker.bundle).map((template) => {
+                const exists = tools.some((tool) => tool.templateId === template.id || tool.name === template.toolName)
+                return (
+                  <div key={template.id}>
+                    <span className={exists ? styles.actionCheckInstalled : styles.actionCheck}><CheckCircle2 size={14} /></span>
+                    <span><strong>{template.label.replace(`${picker.bundle.label} — `, '')}</strong><small>{template.kind === 'write' ? 'Write · installed off' : 'Read · ready immediately'}</small></span>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className={styles.setupFields}>
+              {fields.map((field) => (
+                <label key={field.key}>
+                  <span>{field.label}</span>
+                  <input
+                    placeholder={field.placeholder}
+                    value={picker.setup[field.key] ?? ''}
+                    onChange={(event) => setPicker({ ...picker, setup: { ...picker.setup, [field.key]: event.target.value } })}
+                    style={input}
+                  />
+                  {field.help && <small>{field.help}</small>}
+                </label>
+              ))}
+              {secretLabel && (
+                <label>
+                  <span>{secretLabel}</span>
+                  <input type="password" autoComplete="off" placeholder="Enter credential" value={picker.secret} onChange={(event) => setPicker({ ...picker, secret: event.target.value })} style={input} />
+                  <small>Encrypted before storage and never returned by the API.</small>
+                </label>
+              )}
+            </div>
+
+            <div className={styles.safetyNote}><ShieldCheck size={16} /><span><strong>Safe by default</strong><small>Read actions are ready immediately. Write actions stay disabled until you review and enable each one.</small></span></div>
+            {error && <p style={{ ...errorText, marginTop: 12 }}>{error}</p>}
+            <div className={styles.setupActions}>
+              <button type="button" onClick={() => void installBundle(picker)} disabled={saving || incomplete} className="btn btn-primary">{saving ? <Loader2 size={14} className={styles.spinner} /> : <PackagePlus size={14} />} {installed ? 'Install missing actions' : `Install ${picker.bundle.templateIds.length} actions`}</button>
+              <button type="button" onClick={() => setPicker('gallery')} disabled={saving} className="btn btn-ghost">Back</button>
+            </div>
+          </div>
+        )
+      })()}
 
       {form && (
         <div style={card}>

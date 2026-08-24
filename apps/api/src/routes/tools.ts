@@ -5,6 +5,7 @@ import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { encryptSecret } from '../lib/crypto'
 import { validateToolInput, type ValidatedTool } from '../lib/tools/validate'
+import { planToolBundleInstall, prepareToolBundle, toolBundleDocumentId } from '../lib/tools/bundles'
 import { executeTool, type StoredTool } from '../lib/chat/tools'
 import type { ToolDef } from '@ayooda/shared'
 
@@ -15,6 +16,8 @@ tools.use('*', requireAgent)
 function toToolDef(id: string, d: DocumentData): ToolDef {
   return {
     id,
+    ...(d.bundleId ? { bundleId: d.bundleId } : {}),
+    ...(d.templateId ? { templateId: d.templateId } : {}),
     name: d.name,
     description: d.description,
     method: d.method,
@@ -27,6 +30,18 @@ function toToolDef(id: string, d: DocumentData): ToolDef {
     kind: d.kind,
     writeEnabled: !!d.writeEnabled,
     enabled: d.enabled !== false,
+  }
+}
+
+function toolDocument(v: ValidatedTool, metadata: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    name: v.name, description: v.description, method: v.method, urlTemplate: v.urlTemplate,
+    params: v.params, headers: v.headers,
+    ...(v.bodyTemplate ? { bodyTemplate: v.bodyTemplate, bodyEncoding: v.bodyEncoding ?? 'json' } : {}),
+    auth: buildAuth(v),
+    kind: v.kind, writeEnabled: v.writeEnabled, enabled: v.enabled,
+    ...metadata,
+    createdAt: new Date(), updatedAt: new Date(),
   }
 }
 
@@ -66,16 +81,38 @@ tools.post('/', async (c) => {
   const dup = await adminDb.collection(`workspaces/${ws}/agents/${agentId}/tools`).where('name', '==', v.name).limit(1).get()
   if (!dup.empty) return c.json({ error: 'A tool with that name already exists.' }, 409)
 
-  const doc = {
-    name: v.name, description: v.description, method: v.method, urlTemplate: v.urlTemplate,
-    params: v.params, headers: v.headers,
-    ...(v.bodyTemplate ? { bodyTemplate: v.bodyTemplate, bodyEncoding: v.bodyEncoding ?? 'json' } : {}),
-    auth: buildAuth(v),
-    kind: v.kind, writeEnabled: v.writeEnabled, enabled: v.enabled,
-    createdAt: new Date(), updatedAt: new Date(),
-  }
+  const doc = toolDocument(v)
   const ref = await adminDb.collection(`workspaces/${ws}/agents/${agentId}/tools`).add(doc)
   return c.json(toToolDef(ref.id, doc))
+})
+
+/** POST /tools/bundles — atomically install every missing action in a provider bundle. */
+tools.post('/bundles', async (c) => {
+  const ws = c.get('workspaceId')!
+  const agentId = c.get('agentId')!
+  const prepared = prepareToolBundle(await c.req.json().catch(() => null))
+  if (!prepared.ok) return c.json({ error: prepared.error }, 400)
+
+  const col = adminDb.collection(`workspaces/${ws}/agents/${agentId}/tools`)
+  const existing = await col.get()
+  const plan = planToolBundleInstall(prepared.tools, existing.docs.map((doc) => ({ id: doc.id, name: String(doc.data().name ?? '') })))
+  const batch = adminDb.batch()
+  const installed: ToolDef[] = []
+
+  for (const tool of plan.install) {
+    const id = toolBundleDocumentId(tool.templateId)
+    const doc = toolDocument(tool.value, { bundleId: prepared.bundle.id, templateId: tool.templateId })
+    batch.set(col.doc(id), doc)
+    installed.push(toToolDef(id, doc))
+  }
+
+  if (installed.length) await batch.commit()
+  return c.json({
+    bundleId: prepared.bundle.id,
+    status: installed.length ? 'installed' : 'already_installed',
+    installed,
+    skippedTemplateIds: plan.skippedTemplateIds,
+  })
 })
 
 /** PUT /tools/:id — update a tool (keeps the existing secret if none supplied). */
