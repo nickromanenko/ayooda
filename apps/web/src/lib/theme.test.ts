@@ -43,4 +43,10 @@ describe('site theme support', () => {
     assert.match(authLayout, /<ThemeToggle/)
     assert.match(onboardingLayout, /<ThemeToggle/)
   })
+
+  test('matches pill controls publicly and sidebar navigation in the dashboard', () => {
+    assert.match(globalStyles, /\.theme-toggle \{[\s\S]*?border-radius: 999px;[\s\S]*?background: transparent;/)
+    assert.match(globalStyles, /\.dashboard-theme-toggle \{[\s\S]*?height: 40px;[\s\S]*?border-radius: var\(--r-sm\);/)
+    assert.match(globalStyles, /\.dashboard-theme-toggle:hover \{[\s\S]*?background: var\(--panel-2\);/)
+  })
 })
