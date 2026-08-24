@@ -18,9 +18,20 @@ Health is intentionally conservative:
 | Not checked | The channel is connected but has no reliability data yet. |
 | Inactive | The channel document is disabled. |
 
+## Failure and recovery alerts
+
+Owners can enable alerts from the **Reliability alerts** panel. A policy chooses a threshold from 2–10 consecutive failures and one or both delivery destinations:
+
+- **Email** uses a selected connected Resend mailbox and defaults the recipient to the workspace owner's sign-in email.
+- **Slack** uses a selected connected Slack app and a Slack channel or conversation ID (`C…`, `G…`, or `D…`). The app must already be a member of that destination.
+
+Ayooda opens an incident when the threshold is reached and sends one failure alert. Later failures do not create alert noise. The first successful reliability event closes the incident and sends one recovery alert. Changing the threshold applies to subsequent events.
+
+Alert attempts are recorded on the channel summary as delivered, partially delivered, or failed. Alert delivery failures are not fed back into channel telemetry, which prevents recursive alert storms. They are also not retried automatically.
+
 ## Storage and security
 
-Summaries live at `workspaces/{workspaceId}/channelReliability/{channelId}`. Individual events live in the nested `events` collection and carry an `expiresAt` timestamp 30 days after creation; expired events are hidden from the dashboard. Firestore client access is denied, and provider errors are normalized, truncated, and stripped of common credential formats before storage.
+Summaries live at `workspaces/{workspaceId}/channelReliability/{channelId}`. Alert policies live at `workspaces/{workspaceId}/channelAlertSettings/default`. Individual events live in the nested `events` collection and carry an `expiresAt` timestamp 30 days after creation; expired events are hidden from the dashboard. Firestore client access is denied, and provider errors are normalized, truncated, and stripped of common credential formats before storage.
 
 ## Operational boundaries
 

@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from '../firebase-admin'
+import { dispatchChannelAlert, loadChannelAlertSettings, nextChannelIncidentState } from './alerts'
 
 export type ChannelReliabilityOutcome = 'success' | 'failure'
 export type ChannelReliabilityDirection = 'inbound' | 'outbound' | 'diagnostic'
@@ -49,9 +50,7 @@ export async function recordChannelReliability(input: ChannelReliabilityEventInp
   const stateRef = adminDb.doc(`workspaces/${input.workspaceId}/channelReliability/${input.channelId}`)
   const eventRef = stateRef.collection('events').doc()
   const detail = input.detail ? safeReliabilityDetail(input.detail) : null
-  const batch = adminDb.batch()
-
-  batch.set(eventRef, {
+  const event = {
     channelId: input.channelId,
     channelType: input.channelType,
     direction: input.direction,
@@ -61,8 +60,8 @@ export async function recordChannelReliability(input: ChannelReliabilityEventInp
     conversationId: input.conversationId ?? null,
     occurredAt: now,
     expiresAt: new Date(now.getTime() + EVENT_RETENTION_MS),
-  })
-  batch.set(stateRef, {
+  }
+  const stateUpdate = {
     channelId: input.channelId,
     channelType: input.channelType,
     lastEventAt: now,
@@ -74,10 +73,54 @@ export async function recordChannelReliability(input: ChannelReliabilityEventInp
     ...(input.outcome === 'success'
       ? { lastSuccessAt: now, successCount: FieldValue.increment(1), consecutiveFailures: 0 }
       : { lastFailureAt: now, failureCount: FieldValue.increment(1), consecutiveFailures: FieldValue.increment(1) }),
-  }, { merge: true })
+  }
 
   try {
-    await batch.commit()
+    const settings = await loadChannelAlertSettings(input.workspaceId).catch(() => null)
+    if (!settings?.enabled) {
+      const batch = adminDb.batch()
+      batch.set(eventRef, event)
+      batch.set(stateRef, stateUpdate, { merge: true })
+      await batch.commit()
+      return
+    }
+
+    const transition = await adminDb.runTransaction(async (transaction) => {
+      const stateSnap = await transaction.get(stateRef)
+      const state = stateSnap.data() ?? {}
+      const incident = nextChannelIncidentState({
+        outcome: input.outcome,
+        consecutiveFailures: Number(state.consecutiveFailures ?? 0),
+        incidentOpen: state.alertIncidentOpen === true,
+        threshold: settings.threshold,
+      })
+      transaction.set(eventRef, event)
+      transaction.set(stateRef, {
+        ...stateUpdate,
+        consecutiveFailures: incident.consecutiveFailures,
+        alertIncidentOpen: incident.incidentOpen,
+        ...(incident.alertKind ? { lastAlertKind: incident.alertKind, lastAlertAt: now } : {}),
+      }, { merge: true })
+      return incident
+    })
+
+    if (transition.alertKind) {
+      const result = await dispatchChannelAlert({
+        workspaceId: input.workspaceId,
+        channelId: input.channelId,
+        channelType: input.channelType,
+        kind: transition.alertKind,
+        threshold: settings.threshold,
+        consecutiveFailures: transition.consecutiveFailures,
+        detail,
+        settings,
+      })
+      await stateRef.set({
+        lastAlertDeliveryAt: new Date(),
+        lastAlertDeliveryStatus: result.failed === 0 ? 'delivered' : result.delivered > 0 ? 'partial' : 'failed',
+        lastAlertDeliveryDetail: result.detail,
+      }, { merge: true })
+    }
   } catch (error) {
     console.warn('[channel-reliability] event write failed:', safeReliabilityDetail(error))
   }

@@ -11,11 +11,16 @@ test('channel health is reachable and backed by reliability APIs', () => {
   assert.match(page, /apiRequest\('\/channels\/reliability'\)/)
   assert.match(page, /`\/channels\/\$\{channelId\}\/diagnose`/)
   assert.match(page, /Run all checks/)
+  assert.match(page, /apiRequest\('\/channels\/reliability\/alerts'\)/)
+  assert.match(page, /Reliability alerts/)
+  assert.match(page, /One alert per incident/)
 })
 
 test('channel health stays responsive and uses accessible control sizes', () => {
   assert.match(styles, /\.button \{[^}]*min-height: 40px;/)
   assert.match(styles, /\.checkButton \{[^}]*min-height: 40px;/)
+  assert.match(styles, /\.toggle \{[^}]*height: 40px;/)
+  assert.match(styles, /\.checkRow \{[^}]*min-height: 44px;/)
   const tabletRules = styles.match(/@media \(max-width: 840px\) \{([^\n]*)\}/)?.[1] ?? ''
   assert.match(tabletRules, /\.grid \{ grid-template-columns: 1fr;/)
 })

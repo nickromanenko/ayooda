@@ -8,6 +8,7 @@ import { assertValidApiKey } from '../lib/email/client'
 import { authTest } from '../lib/slack/client'
 import { assertTwilioNumber } from '../lib/sms/client'
 import { recordChannelReliability, reliabilityStatus, safeReliabilityDetail } from '../lib/channels/reliability'
+import { invalidateChannelAlertSettings, loadChannelAlertSettings, validateChannelAlertSettings } from '../lib/channels/alerts'
 
 const channels = new Hono<{ Variables: AuthVariables }>()
 
@@ -60,6 +61,19 @@ function iso(value: unknown): string | null {
   return null
 }
 
+async function alertTransports(workspaceId: string) {
+  const snap = await adminDb.collection(`workspaces/${workspaceId}/channels`).get()
+  const email = snap.docs.filter((doc) => doc.data().type === 'email' && doc.data().isActive !== false).map((doc) => ({
+    id: doc.id,
+    label: String(doc.data().config?.fromAddress ?? doc.data().config?.inboxAddress ?? 'Email channel'),
+  }))
+  const slack = snap.docs.filter((doc) => doc.data().type === 'slack' && doc.data().isActive !== false).map((doc) => ({
+    id: doc.id,
+    label: String(doc.data().slack?.teamName ?? doc.data().config?.teamName ?? 'Slack app'),
+  }))
+  return { email, slack }
+}
+
 /** GET /channels/reliability — workspace-wide health summaries and recent events. */
 channels.get('/reliability', async (c) => {
   const workspaceId = c.get('workspaceId')
@@ -102,6 +116,12 @@ channels.get('/reliability', async (c) => {
       lastFailureAt: iso(state.lastFailureAt),
       lastStage: state.lastStage ?? null,
       lastDetail: state.lastDetail ?? null,
+      alertIncidentOpen: state.alertIncidentOpen === true,
+      lastAlertKind: state.lastAlertKind ?? null,
+      lastAlertAt: iso(state.lastAlertAt),
+      lastAlertDeliveryAt: iso(state.lastAlertDeliveryAt),
+      lastAlertDeliveryStatus: state.lastAlertDeliveryStatus ?? null,
+      lastAlertDeliveryDetail: state.lastAlertDeliveryDetail ?? null,
       events: eventsSnap.docs.filter((eventDoc) => {
         const expiresAt = eventDoc.data().expiresAt
         const expiry = expiresAt?.toDate?.() ?? null
@@ -129,6 +149,54 @@ channels.get('/reliability', async (c) => {
     },
     channels: rows,
   })
+})
+
+/** GET /channels/reliability/alerts — alert policy plus usable delivery transports. */
+channels.get('/reliability/alerts', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const [settings, transports, userSnap] = await Promise.all([
+    loadChannelAlertSettings(workspaceId),
+    alertTransports(workspaceId),
+    adminDb.doc(`users/${c.get('uid')}`).get(),
+  ])
+  return c.json({
+    settings: {
+      ...settings,
+      email: {
+        ...settings.email,
+        address: settings.email.address || String(userSnap.data()?.email ?? ''),
+        transportChannelId: settings.email.transportChannelId || transports.email[0]?.id || '',
+      },
+      slack: {
+        ...settings.slack,
+        transportChannelId: settings.slack.transportChannelId || transports.slack[0]?.id || '',
+      },
+    },
+    transports,
+  })
+})
+
+/** PUT /channels/reliability/alerts — replace the owner-managed alert policy. */
+channels.put('/reliability/alerts', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const result = validateChannelAlertSettings(await c.req.json().catch(() => null))
+  if (!result.ok) return c.json({ error: result.error }, 400)
+
+  const transports = await alertTransports(workspaceId)
+  if (result.value.email.enabled && !transports.email.some((channel) => channel.id === result.value.email.transportChannelId)) {
+    return c.json({ error: 'The selected email channel is unavailable.' }, 400)
+  }
+  if (result.value.slack.enabled && !transports.slack.some((channel) => channel.id === result.value.slack.transportChannelId)) {
+    return c.json({ error: 'The selected Slack app is unavailable.' }, 400)
+  }
+
+  await adminDb.doc(`workspaces/${workspaceId}/channelAlertSettings/default`).set({
+    ...result.value,
+    updatedAt: new Date(),
+    updatedBy: c.get('uid'),
+  })
+  invalidateChannelAlertSettings(workspaceId)
+  return c.json({ settings: result.value })
 })
 
 /** POST /channels/:channelId/diagnose — live credential/provider connectivity check. */

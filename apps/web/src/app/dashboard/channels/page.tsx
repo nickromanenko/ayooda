@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, Bot, CheckCircle2, CircleAlert, Globe2, Loader2, Mail, MessageSquare, RefreshCw, Smartphone } from 'lucide-react'
+import { Activity, BellRing, Bot, CheckCircle2, CircleAlert, Globe2, Loader2, Mail, MessageSquare, RefreshCw, Save, Smartphone } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import styles from './page.module.css'
@@ -12,8 +12,17 @@ interface ChannelHealth {
   id: string; type: string; agentName: string; status: Status; successCount: number; failureCount: number; consecutiveFailures: number
   lastEventAt: string | null; lastInboundAt: string | null; lastOutboundAt: string | null; lastFailureAt: string | null
   lastStage: string | null; lastDetail: string | null; events: ReliabilityEvent[]
+  alertIncidentOpen: boolean; lastAlertKind: 'failure' | 'recovery' | null; lastAlertAt: string | null
+  lastAlertDeliveryAt: string | null; lastAlertDeliveryStatus: 'delivered' | 'partial' | 'failed' | null; lastAlertDeliveryDetail: string | null
 }
 interface ReliabilityResponse { summary: { total: number; healthy: number; failing: number; unchecked: number }; channels: ChannelHealth[] }
+interface AlertSettings {
+  enabled: boolean; threshold: number
+  email: { enabled: boolean; address: string; transportChannelId: string }
+  slack: { enabled: boolean; destination: string; transportChannelId: string }
+}
+interface AlertTransport { id: string; label: string }
+interface AlertSettingsResponse { settings: AlertSettings; transports: { email: AlertTransport[]; slack: AlertTransport[] } }
 
 const providerNames: Record<string, string> = { web_widget: 'Web widget', telegram: 'Telegram', email: 'Email', slack: 'Slack', sms: 'SMS' }
 const providerIcons = { web_widget: Globe2, telegram: Bot, email: Mail, slack: MessageSquare, sms: Smartphone }
@@ -37,6 +46,9 @@ export default function ChannelReliabilityPage() {
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
+  const [alerts, setAlerts] = useState<AlertSettingsResponse | null>(null)
+  const [savingAlerts, setSavingAlerts] = useState(false)
+  const [alertNotice, setAlertNotice] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -51,7 +63,39 @@ export default function ChannelReliabilityPage() {
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  const loadAlerts = useCallback(async () => {
+    try {
+      const response = await apiRequest('/channels/reliability/alerts')
+      const body = await response.json().catch(() => ({})) as AlertSettingsResponse & { error?: string }
+      if (!response.ok) throw new Error(body.error ?? 'Could not load alert settings.')
+      setAlerts(body)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not load alert settings.')
+    }
+  }, [])
+
+  useEffect(() => { void Promise.all([load(), loadAlerts()]) }, [load, loadAlerts])
+
+  function updateAlerts(update: (settings: AlertSettings) => AlertSettings) {
+    setAlertNotice('')
+    setAlerts((current) => current ? { ...current, settings: update(current.settings) } : current)
+  }
+
+  async function saveAlerts() {
+    if (!alerts) return
+    setSavingAlerts(true); setError(''); setAlertNotice('')
+    try {
+      const response = await apiRequest('/channels/reliability/alerts', { method: 'PUT', body: JSON.stringify(alerts.settings) })
+      const body = await response.json().catch(() => ({})) as { error?: string }
+      if (!response.ok) throw new Error(body.error ?? 'Could not save alert settings.')
+      setAlertNotice(alerts.settings.enabled ? 'Reliability alerts are active.' : 'Reliability alerts are paused.')
+      await loadAlerts()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save alert settings.')
+    } finally {
+      setSavingAlerts(false)
+    }
+  }
 
   async function check(channelId: string) {
     setChecking((current) => new Set(current).add(channelId)); setError('')
@@ -95,6 +139,57 @@ export default function ChannelReliabilityPage() {
         ))}
       </section>
 
+      {alerts && <section className={styles.alertPanel} aria-labelledby="alert-settings-title">
+        <div className={styles.alertHeader}>
+          <div className={styles.alertIdentity}>
+            <span className={styles.alertIcon}><BellRing size={18} strokeWidth={1.7} /></span>
+            <div><h2 id="alert-settings-title" className={styles.alertTitle}>Reliability alerts</h2><p className={styles.alertDescription}>Notify owners once when a channel reaches the failure threshold, then again when it recovers.</p></div>
+          </div>
+          <button
+            className={`${styles.toggle} ${alerts.settings.enabled ? styles.toggleOn : ''}`}
+            type="button" role="switch" aria-checked={alerts.settings.enabled}
+            aria-label="Enable reliability alerts"
+            onClick={() => updateAlerts((settings) => ({ ...settings, enabled: !settings.enabled }))}
+          ><span className={styles.toggleKnob} /></button>
+        </div>
+
+        <div className={styles.alertForm} aria-disabled={!alerts.settings.enabled}>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Alert after</span>
+            <select className={styles.select} value={alerts.settings.threshold} disabled={!alerts.settings.enabled} onChange={(event) => updateAlerts((settings) => ({ ...settings, threshold: Number(event.target.value) }))}>
+              {[2, 3, 4, 5, 6, 8, 10].map((threshold) => <option key={threshold} value={threshold}>{threshold} consecutive failures</option>)}
+            </select>
+          </label>
+
+          <div className={styles.destination}>
+            <label className={styles.checkRow}>
+              <input type="checkbox" checked={alerts.settings.email.enabled} disabled={!alerts.settings.enabled || alerts.transports.email.length === 0} onChange={(event) => updateAlerts((settings) => ({ ...settings, email: { ...settings.email, enabled: event.target.checked } }))} />
+              <span><strong>Email owner</strong><small>{alerts.transports.email.length ? 'Send through a connected Resend mailbox.' : 'Connect an email channel to enable this.'}</small></span>
+            </label>
+            {alerts.settings.email.enabled && <div className={styles.destinationFields}>
+              <label className={styles.field}><span className={styles.fieldLabel}>Recipient</span><input className={styles.input} type="email" value={alerts.settings.email.address} disabled={!alerts.settings.enabled} onChange={(event) => updateAlerts((settings) => ({ ...settings, email: { ...settings.email, address: event.target.value } }))} /></label>
+              <label className={styles.field}><span className={styles.fieldLabel}>Send with</span><select className={styles.select} value={alerts.settings.email.transportChannelId} disabled={!alerts.settings.enabled} onChange={(event) => updateAlerts((settings) => ({ ...settings, email: { ...settings.email, transportChannelId: event.target.value } }))}>{alerts.transports.email.map((channel) => <option key={channel.id} value={channel.id}>{channel.label}</option>)}</select></label>
+            </div>}
+          </div>
+
+          <div className={styles.destination}>
+            <label className={styles.checkRow}>
+              <input type="checkbox" checked={alerts.settings.slack.enabled} disabled={!alerts.settings.enabled || alerts.transports.slack.length === 0} onChange={(event) => updateAlerts((settings) => ({ ...settings, slack: { ...settings.slack, enabled: event.target.checked } }))} />
+              <span><strong>Slack channel</strong><small>{alerts.transports.slack.length ? 'Send through a connected Slack app.' : 'Connect a Slack channel to enable this.'}</small></span>
+            </label>
+            {alerts.settings.slack.enabled && <div className={styles.destinationFields}>
+              <label className={styles.field}><span className={styles.fieldLabel}>Channel ID</span><input className={styles.input} value={alerts.settings.slack.destination} disabled={!alerts.settings.enabled} placeholder="C0123456789" onChange={(event) => updateAlerts((settings) => ({ ...settings, slack: { ...settings.slack, destination: event.target.value } }))} /></label>
+              <label className={styles.field}><span className={styles.fieldLabel}>Send with</span><select className={styles.select} value={alerts.settings.slack.transportChannelId} disabled={!alerts.settings.enabled} onChange={(event) => updateAlerts((settings) => ({ ...settings, slack: { ...settings.slack, transportChannelId: event.target.value } }))}>{alerts.transports.slack.map((channel) => <option key={channel.id} value={channel.id}>{channel.label}</option>)}</select></label>
+            </div>}
+          </div>
+        </div>
+
+        <div className={styles.alertFooter}>
+          <p className={styles.alertHint}>{alertNotice || 'One alert per incident. Alert delivery failures are recorded but not retried automatically.'}</p>
+          <button className={styles.saveButton} type="button" disabled={savingAlerts} onClick={() => void saveAlerts()}>{savingAlerts ? <Loader2 size={14} className={styles.spin} /> : <Save size={14} />}{savingAlerts ? 'Saving…' : 'Save alerts'}</button>
+        </div>
+      </section>}
+
       {!data?.channels.length ? <div className={styles.empty}>No channels are connected yet. Deploy an agent to start monitoring delivery health.</div> : (
         <section className={styles.grid} aria-label="Connected channels">
           {data.channels.map((channel) => {
@@ -115,6 +210,10 @@ export default function ChannelReliabilityPage() {
                 </div>
 
                 {channel.status === 'failing' && channel.lastDetail && <p className={styles.failure}>{channel.lastDetail}</p>}
+                {channel.lastAlertAt && <p className={`${styles.alertDelivery} ${channel.lastAlertDeliveryStatus === 'failed' ? styles.alertDeliveryFailed : ''}`}>
+                  {channel.lastAlertKind === 'recovery' ? 'Recovery alert' : 'Failure alert'} {channel.lastAlertDeliveryStatus ?? 'queued'} {ago(channel.lastAlertDeliveryAt ?? channel.lastAlertAt)}
+                  {channel.lastAlertDeliveryDetail ? ` · ${channel.lastAlertDeliveryDetail}` : ''}
+                </p>}
                 <div className={styles.cardActions}>
                   <button className={styles.checkButton} type="button" onClick={() => void checkOne(channel.id)} disabled={busy}>
                     {busy ? <Loader2 size={14} className={styles.spin} /> : <RefreshCw size={14} />}{busy ? 'Checking…' : 'Run connection check'}
