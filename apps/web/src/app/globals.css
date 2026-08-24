@@ -127,6 +127,134 @@ a { color: inherit; text-decoration: none; }
 .btn-ghost { border-color: var(--line); color: var(--ink-dim); }
 .btn-ghost:hover { border-color: var(--line-2); color: var(--ink); }
 
+.landing-mobile-toggle,
+.landing-mobile-menu {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .landing-nav-links,
+  .landing-nav-actions {
+    display: none !important;
+  }
+
+  .landing-mobile-toggle {
+    all: unset;
+    display: grid;
+    place-items: center;
+    position: relative;
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
+    border-radius: 12px;
+    color: var(--ink);
+    background: var(--panel);
+    box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+    transition-property: scale, background-color, box-shadow;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .landing-mobile-toggle:hover {
+    background: var(--panel-2);
+    box-shadow: 0 0 0 1px var(--line-2), 0 3px 10px rgba(0, 0, 0, 0.22);
+  }
+
+  .landing-mobile-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .landing-mobile-toggle:active {
+    scale: 0.96;
+  }
+
+  .landing-menu-icon {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    opacity: 0;
+    scale: 0.25;
+    filter: blur(4px);
+    transition-property: opacity, scale, filter;
+    transition-duration: 300ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .landing-menu-icon[data-visible='true'] {
+    opacity: 1;
+    scale: 1;
+    filter: blur(0);
+  }
+
+  .landing-mobile-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: absolute;
+    top: calc(100% + 14px);
+    left: 0;
+    right: 0;
+    padding: 8px;
+    border-radius: 20px;
+    background: color-mix(in oklab, var(--panel) 96%, transparent);
+    box-shadow: 0 0 0 1px var(--line), 0 18px 50px rgba(0, 0, 0, 0.36);
+    backdrop-filter: blur(18px) saturate(130%);
+    -webkit-backdrop-filter: blur(18px) saturate(130%);
+    opacity: 0;
+    transform: translateY(-8px);
+    visibility: hidden;
+    pointer-events: none;
+    transition-property: opacity, transform, visibility;
+    transition-duration: 180ms;
+    transition-timing-function: ease-out;
+  }
+
+  .landing-mobile-menu[data-open='true'] {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .landing-mobile-menu > a {
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ink-dim);
+    font-size: 14px;
+    font-weight: 500;
+    transition-property: background-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .landing-mobile-menu > a:hover,
+  .landing-mobile-menu > a:focus-visible {
+    background: var(--bg-2);
+    color: var(--ink);
+    outline: none;
+  }
+
+  .landing-mobile-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+
+  .landing-mobile-actions .btn {
+    min-height: 44px;
+    justify-content: center;
+  }
+}
+
 .landing-cta {
   min-height: 44px;
   transition-property: transform, scale, background-color, border-color, color;

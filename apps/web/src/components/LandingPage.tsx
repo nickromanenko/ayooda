@@ -55,12 +55,21 @@ function Logo({ size = 22 }: { size?: number }) {
 
 function Nav() {
   const [scrolled, setScrolled] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [mobileOpen])
 
   const links = [
     ['Why', '#why'],
@@ -74,15 +83,15 @@ function Nav() {
     <header style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
       padding: '14px 0',
-      background: scrolled ? 'color-mix(in oklab, var(--bg) 82%, transparent)' : 'transparent',
-      backdropFilter: scrolled ? 'blur(14px) saturate(130%)' : 'none',
-      WebkitBackdropFilter: scrolled ? 'blur(14px) saturate(130%)' : 'none',
-      borderBottom: scrolled ? '1px solid var(--line)' : '1px solid transparent',
+      background: scrolled || mobileOpen ? 'color-mix(in oklab, var(--bg) 82%, transparent)' : 'transparent',
+      backdropFilter: scrolled || mobileOpen ? 'blur(14px) saturate(130%)' : 'none',
+      WebkitBackdropFilter: scrolled || mobileOpen ? 'blur(14px) saturate(130%)' : 'none',
+      borderBottom: scrolled || mobileOpen ? '1px solid var(--line)' : '1px solid transparent',
       transition: 'background .3s ease, border-color .3s ease',
     }}>
-      <div className="container" style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+      <div className="container" style={{ display: 'flex', alignItems: 'center', gap: 24, position: 'relative' }}>
         <a href="#top"><Logo /></a>
-        <nav style={{ display: 'flex', gap: 22, marginLeft: 16 }}>
+        <nav className="landing-nav-links" aria-label="Primary navigation" style={{ display: 'flex', gap: 22, marginLeft: 16 }}>
           {links.map(([label, href]) => (
             <a key={href} href={href} style={{ fontSize: 13.5, color: 'var(--ink-dim)', fontWeight: 450, transition: 'color .15s' }}
               onMouseEnter={e => (e.currentTarget.style.color = 'var(--ink)')}
@@ -90,10 +99,34 @@ function Nav() {
             >{label}</a>
           ))}
         </nav>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="landing-nav-actions" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <Link href="/login" className="btn btn-ghost" style={{ padding: '9px 14px', fontSize: 13 }}>Sign in</Link>
           <Link href="/signup" className="btn btn-primary" style={{ padding: '9px 14px', fontSize: 13 }}>Start free →</Link>
         </div>
+        <button
+          type="button"
+          className="landing-mobile-toggle"
+          aria-expanded={mobileOpen}
+          aria-controls="landing-mobile-menu"
+          aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          onClick={() => setMobileOpen(open => !open)}
+        >
+          <span className="landing-menu-icon" data-visible={!mobileOpen} aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          </span>
+          <span className="landing-menu-icon" data-visible={mobileOpen} aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4.5 4.5l9 9M13.5 4.5l-9 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          </span>
+        </button>
+        <nav id="landing-mobile-menu" className="landing-mobile-menu" data-open={mobileOpen} aria-label="Mobile navigation">
+          {links.map(([label, href]) => (
+            <a key={href} href={href} onClick={() => setMobileOpen(false)}>{label}<span aria-hidden>→</span></a>
+          ))}
+          <div className="landing-mobile-actions">
+            <Link href="/login" className="btn btn-ghost" onClick={() => setMobileOpen(false)}>Sign in</Link>
+            <Link href="/signup" className="btn btn-primary" onClick={() => setMobileOpen(false)}>Start free →</Link>
+          </div>
+        </nav>
       </div>
     </header>
   )
