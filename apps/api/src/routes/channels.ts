@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
+import { stripChannelSecrets } from '../lib/channels/sanitize'
 
 const channels = new Hono<{ Variables: AuthVariables }>()
 
@@ -30,7 +31,7 @@ channels.get('/', async (c) => {
   const agents = new Map(agentsSnap.docs.map((d) => [d.id, d.data()]))
 
   return c.json(snap.docs.map((d) => {
-    const { botTokenEnc, webhookSecret, ...safe } = d.data() as Record<string, unknown>
+    const safe = stripChannelSecrets(d.data() as Record<string, unknown>)
     const config = (safe.config ?? {}) as Record<string, unknown>
     const agent = typeof safe.agentId === 'string' ? agents.get(safe.agentId) : undefined
     return {

@@ -6,9 +6,11 @@ import { requireAgent } from '../middleware/agent'
 import { encryptSecret, decryptSecret } from '../lib/crypto'
 import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
 import { assertValidApiKey } from '../lib/email/client'
+import { authTest as testSlackBotToken } from '../lib/slack/client'
 import { validateWidgetAppearance } from '../lib/channels/validate'
 import { DEFAULT_WIDGET_COLOR, DEFAULT_WIDGET_POSITION, isEmailAddress } from '@ayooda/shared'
 import { canHideBranding } from '../lib/channels/branding'
+import { stripChannelSecrets } from '../lib/channels/sanitize'
 
 /**
  * Channels belong to the agent that answers on them. Each agent gets its own
@@ -29,7 +31,7 @@ const channelsCol = (workspaceId: string) =>
   adminDb.collection(`workspaces/${workspaceId}/channels`)
 
 /** This agent's channel of a given type, or null. */
-async function channelOfType(workspaceId: string, agentId: string, type: 'web_widget' | 'telegram' | 'email') {
+async function channelOfType(workspaceId: string, agentId: string, type: 'web_widget' | 'telegram' | 'email' | 'slack') {
   const snap = await channelsCol(workspaceId)
     .where('agentId', '==', agentId)
     .where('type', '==', type)
@@ -53,11 +55,6 @@ async function agentIdentity(workspaceId: string, agentId: string) {
   }
 }
 
-function strip(d: Record<string, unknown>) {
-  const { botTokenEnc, resendApiKeyEnc, webhookSecret, ...safe } = d
-  return safe
-}
-
 /** GET /agents/:agentId/channels — where this agent is deployed. */
 agentChannels.get('/', async (c) => {
   const workspaceId = c.get('workspaceId')
@@ -73,13 +70,16 @@ agentChannels.get('/', async (c) => {
   // need a composite index, and an agent has at most a handful of channels.
   const rows = snap.docs
     .map((d) => {
-      const safe = strip(d.data() as Record<string, unknown>)
+      const safe = stripChannelSecrets(d.data() as Record<string, unknown>)
       const config = (safe.config ?? {}) as Record<string, unknown>
       // Same rule as the workspace-wide list: the agent's identity is read live,
       // never from the channel's cached copy, so a rename shows up immediately.
       return {
         id: d.id,
         ...safe,
+        ...(safe.type === 'slack' && process.env.API_PUBLIC_URL
+          ? { webhookUrl: `${process.env.API_PUBLIC_URL}/slack/events/${d.id}` }
+          : {}),
         // Same shape as the skills catalogue: the row carries whether the plan
         // permits the option, so the UI can show it locked rather than hide it.
         brandingLocked: !canHide,
@@ -327,6 +327,74 @@ agentChannels.delete('/email', async (c) => {
   const agentId = c.get('agentId')!
 
   const mine = await channelOfType(workspaceId, agentId, 'email')
+  if (mine) await mine.ref.delete()
+  return c.json({ ok: true })
+})
+
+/** POST /agents/:agentId/channels/slack — connect an installed Slack bot to this agent. */
+agentChannels.post('/slack', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
+  const body = await c.req.json<{ botToken?: string; signingSecret?: string }>().catch(() => ({} as { botToken?: string; signingSecret?: string }))
+  const botToken = body.botToken?.trim()
+  const signingSecret = body.signingSecret?.trim()
+  if (!botToken?.startsWith('xoxb-') || botToken.length > 4_096) return c.json({ error: 'A valid Slack Bot User OAuth Token (xoxb-…) is required.' }, 400)
+  if (!signingSecret || signingSecret.length < 16 || signingSecret.length > 512) {
+    return c.json({ error: 'A valid Slack signing secret is required.' }, 400)
+  }
+  const apiBase = process.env.API_PUBLIC_URL
+  if (!apiBase) return c.json({ error: 'Server not configured for webhooks (API_PUBLIC_URL)' }, 500)
+
+  let identity
+  try { identity = await testSlackBotToken(botToken) } catch {
+    return c.json({ error: 'That Slack bot token could not be verified.' }, 400)
+  }
+
+  const mine = await channelOfType(workspaceId, agentId, 'slack')
+  // A Slack app has one Events API request URL, so the same installed bot cannot
+  // safely point at two agents — even if those agents live in different workspaces.
+  const claimed = await adminDb.collectionGroup('channels')
+    .where('slack.teamId', '==', identity.teamId)
+    .where('slack.botUserId', '==', identity.botUserId)
+    .limit(2)
+    .get()
+  const claimedByOther = claimed.docs.find((doc) => doc.ref.path !== mine?.ref.path)
+  if (claimedByOther) {
+    const claimedWorkspaceId = claimedByOther.ref.parent.parent?.id
+    if (claimedWorkspaceId === workspaceId) {
+      const other = await adminDb.doc(`workspaces/${workspaceId}/agents/${claimedByOther.data().agentId}`).get()
+      return c.json({ error: `This Slack app is already connected to ${(other.data()?.name as string | undefined) ?? 'another agent'}.` }, 409)
+    }
+    return c.json({ error: 'This Slack app is already connected to another Ayooda agent.' }, 409)
+  }
+
+  const channelRef = mine ? mine.ref : channelsCol(workspaceId).doc()
+  const channelId = channelRef.id
+  const slackIdentity = { teamId: identity.teamId, teamName: identity.teamName, botUserId: identity.botUserId }
+  await channelRef.set({
+    workspaceId,
+    id: channelId,
+    type: 'slack',
+    agentId,
+    slackBotTokenEnc: encryptSecret(botToken),
+    slackSigningSecretEnc: encryptSecret(signingSecret),
+    slack: slackIdentity,
+    config: slackIdentity,
+    isActive: true,
+    createdAt: mine?.data().createdAt ?? new Date(),
+  })
+
+  return c.json({
+    channelId,
+    teamName: identity.teamName,
+    botUserId: identity.botUserId,
+    webhookUrl: `${apiBase}/slack/events/${channelId}`,
+  })
+})
+
+/** DELETE /agents/:agentId/channels/slack — disconnect this agent's Slack app. */
+agentChannels.delete('/slack', async (c) => {
+  const mine = await channelOfType(c.get('workspaceId'), c.get('agentId')!, 'slack')
   if (mine) await mine.ref.delete()
   return c.json({ ok: true })
 })

@@ -182,6 +182,29 @@ conversations.post('/:id/messages', async (c) => {
     }
   }
 
+  // Slack threads stay attached to the exact channel/app that created the conversation.
+  if (conv.channelType === 'slack' && typeof conv.slackChannelId === 'string') {
+    try {
+      const channelId = typeof conv.channelId === 'string' ? conv.channelId : ''
+      const channelSnap = channelId
+        ? await adminDb.doc(`workspaces/${workspaceId}/channels/${channelId}`).get()
+        : null
+      const encrypted = channelSnap?.data()?.slackBotTokenEnc as string | undefined
+      if (encrypted) {
+        const { decryptSecret } = await import('../lib/crypto')
+        const { sendSlackMessage } = await import('../lib/slack/client')
+        await sendSlackMessage(
+          decryptSecret(encrypted),
+          conv.slackChannelId,
+          body.content.trim(),
+          typeof conv.slackThreadTs === 'string' ? conv.slackThreadTs : undefined,
+        )
+      }
+    } catch (err) {
+      console.warn('[conversations] Slack operator delivery failed:', err)
+    }
+  }
+
   return c.json({ messageId: messageRef.id }, 201)
 })
 

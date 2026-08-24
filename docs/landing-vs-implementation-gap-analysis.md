@@ -22,7 +22,7 @@
 
 ## Executive summary
 
-The landing page is a **marketing page that runs well ahead of the product**. The core loop is real and shipped — sign up → create agent → ingest knowledge (scrape + upload) → deploy a web widget, Telegram bot, or email mailbox → RAG chat with streaming, escalation, human takeover, and Stripe billing. Several headline claims are still aspirational. The most exposed ones (**Model Context Protocol** and the **email channel**) were **implemented after this analysis** (see GAP-01 and GAP-04).
+The landing page is a **marketing page that runs well ahead of the product**. The core loop is real and shipped — sign up → create agent → ingest knowledge (scrape + upload) → deploy a web widget, Telegram bot, email mailbox, or Slack app → RAG chat with streaming, escalation, human takeover, and Stripe billing. Several headline claims are still aspirational. The most exposed ones (**Model Context Protocol**, **email**, and **Slack**) were **implemented after this analysis** (see GAP-01 and GAP-04).
 
 ---
 
@@ -38,6 +38,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 | Web widget: script tag, Shadow DOM, color/position/welcome, branding hide (Core+) | ✅ | `apps/widget/src/index.ts`, `routes/agent-channels.ts` |
 | Telegram channel (bot token → webhook) | ✅ | `routes/agent-channels.ts`, `lib/telegram/*` |
 | Email channel (Resend: inbound webhook → conversation → agent auto-reply; operator replies via email) | ✅ | `routes/email.ts`, `lib/email/*`, `routes/agent-channels.ts`, `routes/conversations.ts` |
+| Slack channel (signed Events API → DMs/mention threads → agent or Inbox reply) | ✅ | `routes/slack.ts`, `lib/slack/*`, `routes/agent-channels.ts`, `routes/conversations.ts` |
 | Live inbox: realtime, status filters, takeover, operator reply, resolve | ✅ | `apps/web/src/app/dashboard/inbox/page.tsx`, `routes/conversations.ts` |
 | Visual workflows (branching graph with 5 conditions → response, resolve, human queue, teammate assignment, or agent routing; ordered-rules fallback) | ✅ | `routes/workflows.ts`, `lib/workflow/*`, `dashboard/agents/[agentId]/escalation/WorkflowGraphEditor.tsx` |
 | Skills: memory, scoring (1–5 + summary), web search | ✅ | `routes/skills.ts`, `lib/skills/*` |
@@ -79,12 +80,13 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - **Now, phase 2B (2026-08-24):** nodes can be dragged directly around the canvas with grid-snapped persisted positions. Labeled Yes, No, and Next output handles can be dragged onto condition or action nodes to create or rewire paths, with a live connection preview, connected-port states, drop-target emphasis, and immediate cycle prevention. Keyboard selection, auto-layout, and inspector connection selects remain available as accessible alternatives.
 - **Status:** ✅ Implemented · **Priority:** P1
 
-### 🟠 GAP-04 — Channels: "ten channels" — email now ships, 5 channels remain
+### 🟠 GAP-04 — Channels: "ten channels" — email and Slack now ship, 4 channels remain
 - **Claim:** FAQ *"Live chat, email, WhatsApp, Messenger, Instagram, SMS, Slack, in-app widgets"* · pricing *"Collaborative inbox for all customer emails"* · *"One agent. Ten channels."*
 - **Was:** `ChannelType` was only `'web_widget' | 'telegram'`. Deploy page said *"Email and Slack are on the roadmap."*
 - **Now (2026-08-22):** the **email channel ships** — `ChannelType` is `'web_widget' | 'telegram' | 'email'`. Inbound mail (Resend webhook, Svix-verified) is threaded into a conversation, the agent answers via RAG and auto-replies, and operator replies from the inbox send email too. See `routes/email.ts`, `lib/email/{client,parse,svix}.ts`, `routes/agent-channels.ts`, `routes/conversations.ts`, and the Deploy page's email panel.
-- **Still missing:** WhatsApp, Messenger, Instagram, SMS, Slack.
-- **Status:** 🟠 Partial (web widget + Telegram + email ship; 5 channels don't) · **Priority:** P1
+- **Now, Slack phase 1 (2026-08-24):** an agent can connect an installed Slack bot with an encrypted Bot User OAuth Token and Signing Secret. The signed Events API route rejects replayed/forged requests and bot echoes, handles `message.im` and `app_mention`, keeps channel replies in their originating thread, deduplicates Slack retries through expiring Firestore receipts, and routes generated, workflow, and human Inbox replies back through `chat.postMessage`. The Deploy page provides the generated request URL and exact scopes/event subscriptions.
+- **Still missing:** WhatsApp, Messenger, Instagram, SMS. Slack installation is manual-token based; multi-workspace Slack OAuth distribution is a later phase.
+- **Status:** 🟠 Partial (web widget + Telegram + email + Slack ship; 4 channels don't) · **Priority:** P1
 
 ### ✅ GAP-05 — Advertised analytics now ship
 - **Claim:** *"Resolution rate, CSAT, hand-off causes, confidence trends — all in real time, all exportable."* Hero *"resolution time 00:04.1"* / *"1.8s first reply"*.
@@ -173,7 +175,7 @@ The landing page is a **marketing page that runs well ahead of the product**. Th
 - GAP-01 is now ✅ Implemented; the "Model Context Protocol support" claim on the landing page is backed by a real, working feature.
 
 ### Remaining honesty items (still open — next)
-GAP-04 (remaining channels: WhatsApp/Messenger/Instagram/SMS/Slack), GAP-08 (private-network endpoint connectivity), GAP-09 (SSO/EU), GAP-10 (social proof), and GAP-11 (dead CTAs) still need either implementation or a "coming soon" relabel. GAP-03 and GAP-05 are now resolved.
+GAP-04 (remaining channels: WhatsApp/Messenger/Instagram/SMS), GAP-08 (private-network endpoint connectivity), GAP-09 (SSO/EU), GAP-10 (social proof), and GAP-11 (dead CTAs) still need either implementation or a "coming soon" relabel. GAP-03 and GAP-05 are now resolved.
 
 ---
 
@@ -196,7 +198,7 @@ GAP-04 (remaining channels: WhatsApp/Messenger/Instagram/SMS/Slack), GAP-08 (pri
 - `bun test` — **299 pass, 0 fail** (added `lib/email/{svix,parse}.test.ts`).
 
 ### Definition of done — met
-- GAP-04 is now 🟠 Partial (email + widget + Telegram ship; WhatsApp/Messenger/Instagram/SMS/Slack remain).
+- GAP-04 is now 🟠 Partial (email + widget + Telegram + Slack ship; WhatsApp/Messenger/Instagram/SMS remain).
 
 ### Caveat
 - No live end-to-end run against a real Resend mailbox was possible from here (no keys/domain in the repo); the connection path is verified by typecheck/build/bundling and unit-tested logic. Smoke-test against a real Resend inbound address before shipping.

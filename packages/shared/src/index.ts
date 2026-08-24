@@ -69,7 +69,7 @@ export type ConversationStatus = 'bot' | 'waiting' | 'human' | 'resolved'
 export type MessageRole = 'user' | 'assistant' | 'operator'
 
 // Channels
-export type ChannelType = 'web_widget' | 'telegram' | 'email'
+export type ChannelType = 'web_widget' | 'telegram' | 'email' | 'slack'
 
 // Email channel (Resend)
 export interface EmailChannelConfig {
@@ -77,6 +77,12 @@ export interface EmailChannelConfig {
   fromAddress: string
   /** The address that receives inbound mail. */
   inboxAddress: string
+}
+
+export interface SlackChannelConfig {
+  teamId: string
+  teamName: string
+  botUserId: string
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -169,14 +175,17 @@ export interface WidgetConfig {
 
 export interface ChannelDoc {
   type: ChannelType
-  config?: WidgetConfig | EmailChannelConfig
+  config?: WidgetConfig | EmailChannelConfig | SlackChannelConfig
   embedCode?: string
   isActive: boolean
   createdAt: Date
   botTokenEnc?: string
   resendApiKeyEnc?: string
+  slackBotTokenEnc?: string
+  slackSigningSecretEnc?: string
   webhookSecret?: string
   telegram?: { botUsername: string; botId: number }
+  slack?: SlackChannelConfig
 }
 
 export interface MessageMetadata {

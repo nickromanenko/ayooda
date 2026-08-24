@@ -1,7 +1,7 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
-import { Loader2, Copy, Check, Code, Send, Plus, Mail } from 'lucide-react'
+import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { label, errorText, input } from '@/components/dashboard/ui'
@@ -20,6 +20,8 @@ interface Channel {
   brandingLocked?: boolean
   config?: Partial<Appearance> & { agentName?: string; fromAddress?: string; inboxAddress?: string }
   telegram?: { botUsername: string; botId: number }
+  slack?: { teamId: string; teamName: string; botUserId: string }
+  webhookUrl?: string
 }
 
 const panel: React.CSSProperties = {
@@ -55,6 +57,11 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const [emailError, setEmailError] = useState('')
   const [emailBusy, setEmailBusy] = useState(false)
   const [emailWebhookUrl, setEmailWebhookUrl] = useState('')
+  const [slackForm, setSlackForm] = useState({ botToken: '', signingSecret: '' })
+  const [slackError, setSlackError] = useState('')
+  const [slackBusy, setSlackBusy] = useState(false)
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState('')
+  const [slackCopied, setSlackCopied] = useState(false)
 
   const fetchChannels = useCallback(async () => {
     const res = await apiRequest(base)
@@ -68,6 +75,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const widget = channels.find((c) => c.type === 'web_widget')
   const telegram = channels.find((c) => c.type === 'telegram')
   const email = channels.find((c) => c.type === 'email')
+  const slack = channels.find((c) => c.type === 'slack')
 
   async function createWidget() {
     setWidgetBusy(true)
@@ -154,6 +162,41 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
     } finally { setEmailBusy(false) }
   }
 
+  async function connectSlack() {
+    setSlackError(''); setSlackBusy(true); setSlackWebhookUrl('')
+    try {
+      const res = await apiRequest(`${base}/slack`, { method: 'POST', body: JSON.stringify(slackForm) })
+      const data = await res.json().catch(() => ({})) as { error?: string; webhookUrl?: string }
+      if (!res.ok) { setSlackError(data.error ?? 'Failed to connect Slack.'); return }
+      setSlackWebhookUrl(data.webhookUrl ?? '')
+      setSlackForm({ botToken: '', signingSecret: '' })
+      await fetchChannels()
+    } catch {
+      setSlackError('Failed to connect Slack.')
+    } finally { setSlackBusy(false) }
+  }
+
+  async function disconnectSlack() {
+    setSlackError(''); setSlackBusy(true); setSlackWebhookUrl(''); setSlackCopied(false)
+    try {
+      const res = await apiRequest(`${base}/slack`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        setSlackError(data.error ?? 'Failed to disconnect Slack.')
+        return
+      }
+      await fetchChannels()
+    } catch {
+      setSlackError('Failed to disconnect Slack.')
+    } finally { setSlackBusy(false) }
+  }
+
+  async function copySlackWebhook(url: string) {
+    await navigator.clipboard.writeText(url)
+    setSlackCopied(true)
+    setTimeout(() => setSlackCopied(false), 2_000)
+  }
+
   if (loading) {
     return <Loading />
   }
@@ -161,7 +204,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   return (
     <>
       <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 20 }}>
-        Where this agent reaches people. Each agent gets its own widget and its own bot.
+        Where this agent reaches people. Each connection keeps its own identity, credentials, and conversation history.
       </p>
 
       {/* Web widget */}
@@ -397,9 +440,109 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
         </div>
       </div>
 
+      {/* Slack */}
+      <div style={panel}>
+        <div style={head}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <div style={icon}><SlackIcon size={16} style={{ color: 'var(--accent)' }} /></div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0, textWrap: 'balance' }}>Slack</p>
+              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2, textWrap: 'pretty' }}>
+                {slack ? `Connected to ${slack.slack?.teamName}` : 'Not connected'}
+              </p>
+            </div>
+          </div>
+          <span style={pill(Boolean(slack))}>{slack ? 'Live' : 'Off'}</span>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          {slack ? (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 14, lineHeight: 1.55, textWrap: 'pretty' }}>
+                This agent answers direct messages and channel mentions in <strong style={{ color: 'var(--ink-dim)', fontWeight: 550 }}>{slack.slack?.teamName}</strong>. Channel answers stay inside the originating thread.
+              </p>
+              <div style={{ marginBottom: 16, padding: '14px 16px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', boxShadow: 'inset 0 0 0 1px var(--line)' }}>
+                <p style={{ ...label, marginBottom: 7 }}>Events API request URL</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <code style={{ flex: 1, minWidth: 0, color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11.5, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                    {slack.webhookUrl ?? slackWebhookUrl}
+                  </code>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void copySlackWebhook(slack.webhookUrl ?? slackWebhookUrl)}
+                    disabled={!slack.webhookUrl && !slackWebhookUrl}
+                    aria-label="Copy Slack Events API request URL"
+                    style={{ width: 40, height: 40, padding: 0, borderRadius: 10, justifyContent: 'center', flex: '0 0 auto' }}
+                  >
+                    {slackCopied ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => void disconnectSlack()} disabled={slackBusy} className="btn btn-ghost" style={{ minHeight: 40, padding: '8px 16px', fontSize: 12.5 }}>
+                  {slackBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                  Disconnect
+                </button>
+                <a href="https://api.slack.com/apps" target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ minHeight: 40, padding: '8px 14px 8px 16px', fontSize: 12.5 }}>
+                  Open Slack app settings <ExternalLink size={12} />
+                </a>
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 12, lineHeight: 1.55, textWrap: 'pretty' }}>
+                Install a Slack app with a bot user, then paste its Bot User OAuth Token and Signing Secret. Both secrets are encrypted and never returned.
+              </p>
+              <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+                <input
+                  type="password"
+                  placeholder="Bot User OAuth Token (xoxb-…)"
+                  value={slackForm.botToken}
+                  autoComplete="new-password"
+                  onChange={(event) => { setSlackForm({ ...slackForm, botToken: event.target.value }); setSlackError('') }}
+                  style={input}
+                />
+                <input
+                  type="password"
+                  placeholder="Signing Secret"
+                  value={slackForm.signingSecret}
+                  autoComplete="new-password"
+                  onChange={(event) => { setSlackForm({ ...slackForm, signingSecret: event.target.value }); setSlackError('') }}
+                  style={input}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void connectSlack()}
+                disabled={slackBusy || !slackForm.botToken.trim() || !slackForm.signingSecret.trim()}
+                className="btn btn-primary"
+                style={{ minHeight: 40, padding: '8px 16px', fontSize: 12.5, opacity: slackBusy || !slackForm.botToken.trim() || !slackForm.signingSecret.trim() ? 0.6 : 1 }}
+              >
+                {slackBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                Verify & connect
+              </button>
+              <div style={{ marginTop: 16, padding: '14px 16px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', boxShadow: 'inset 0 0 0 1px var(--line)' }}>
+                <p style={{ ...label, marginBottom: 8 }}>Slack app requirements</p>
+                <ol style={{ margin: 0, paddingLeft: 18, color: 'var(--ink-mute)', fontSize: 11.5, lineHeight: 1.65 }}>
+                  <li style={{ textWrap: 'pretty' }}>Bot scopes: <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}>chat:write</code>, <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}>app_mentions:read</code>, and <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}>im:history</code>.</li>
+                  <li style={{ textWrap: 'pretty' }}>After connecting, paste the generated request URL into Event Subscriptions.</li>
+                  <li style={{ textWrap: 'pretty' }}>Subscribe to <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}>app_mention</code> and <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}>message.im</code>, then reinstall the app.</li>
+                </ol>
+              </div>
+            </>
+          )}
+          {slackError && (
+            <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', ...errorText, marginTop: 10 }}>
+              {slackError}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div style={{ background: 'var(--panel)', border: '1px dashed var(--line-2)', borderRadius: 'var(--r-md)', padding: 20 }}>
         <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-mute)', margin: '0 0 4px' }}>More channels coming soon</p>
-        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: 0 }}>Slack and WhatsApp are on the roadmap.</p>
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: 0 }}>WhatsApp, Messenger, Instagram, and SMS are on the roadmap.</p>
       </div>
     </>
   )

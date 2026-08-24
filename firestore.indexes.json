@@ -87,6 +87,14 @@
         { "fieldPath": "agentId", "order": "ASCENDING" },
         { "fieldPath": "resolutionMs", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "channels",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "slack.teamId", "order": "ASCENDING" },
+        { "fieldPath": "slack.botUserId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
@@ -122,6 +130,16 @@
     },
     {
       "collectionGroup": "sandboxSessions",
+      "fieldPath": "expiresAt",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "slackEventReceipts",
       "fieldPath": "expiresAt",
       "indexes": [
         { "order": "ASCENDING", "queryScope": "COLLECTION" },

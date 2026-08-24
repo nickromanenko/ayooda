@@ -28,6 +28,7 @@ import widgetRoutes from './routes/widget'
 import billingRoutes from './routes/billing'
 import telegramRoutes from './routes/telegram'
 import emailRoutes from './routes/email'
+import slackRoutes from './routes/slack'
 import teamRoutes from './routes/team'
 import toolRoutes from './routes/tools'
 import agentRoutes from './routes/agents'
@@ -65,6 +66,7 @@ app.route('/agents/:agentId/sandbox', sandboxRoutes)
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)
 app.route('/email', emailRoutes)
+app.route('/slack', slackRoutes)
 app.route('/internal', internalRoutes)
 app.route('/copilot', copilotRoutes)
 app.route('/connector-oauth', connectorOAuthRoutes)

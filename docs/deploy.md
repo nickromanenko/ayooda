@@ -40,7 +40,7 @@ echo -n "$SWEEP_SECRET"                       | gcloud secrets create sweep-secr
 # echo -n "$LANGFUSE_SECRET_KEY" | gcloud secrets create langfuse-secret-key --data-file=-
 ```
 
-> **`API_KEY_ENCRYPTION_SECRET` must stay stable** — rotating it invalidates every stored encrypted value (agent Gateway keys, tool secrets, Telegram bot tokens). `stripe-webhook-secret` is filled in after §3. Generate `SWEEP_SECRET` with something like `openssl rand -hex 32` — it only needs to match the value configured on the Cloud Scheduler job in §4e.
+> **`API_KEY_ENCRYPTION_SECRET` must stay stable** — rotating it invalidates every stored encrypted value (agent Gateway keys, tool secrets, and Telegram/email/Slack channel credentials). `stripe-webhook-secret` is filled in after §3. Generate `SWEEP_SECRET` with something like `openssl rand -hex 32` — it only needs to match the value configured on the Cloud Scheduler job in §4e.
 
 ---
 
@@ -210,6 +210,7 @@ Because the deployment stays on **`ayooda-dev`**, existing vectors are preserved
 - [ ] Add a **Workflow** rule (e.g. "ask for a human") → a matching message moves the conversation to the inbox **Waiting** queue; take it over.
 - [ ] Create a **Tool** and run **Test** → a live response comes back.
 - [ ] (Optional) Connect **Telegram** and message the bot.
+- [ ] (Optional) Connect **Slack**, configure the generated Events API request URL, subscribe to `app_mention` and `message.im`, then test both a DM and a channel mention.
 
 ---
 
