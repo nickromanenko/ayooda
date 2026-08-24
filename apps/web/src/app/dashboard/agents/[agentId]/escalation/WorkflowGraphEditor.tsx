@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { GitBranch, LayoutGrid, Loader2, MessageSquareText, Plus, Power, Save, Trash2, Zap } from 'lucide-react'
 import type {
   TriggerType,
@@ -19,10 +20,13 @@ import { input, label } from '@/components/dashboard/ui'
 import styles from './WorkflowGraphEditor.module.css'
 
 const NODE_WIDTH = 220
-const NODE_HEIGHT = 96
+const NODE_HEIGHT = 112
+const GRID_SIZE = 10
 
 type ConditionNode = Extract<WorkflowGraphNode, { kind: 'condition' }>
 type ActionNode = Extract<WorkflowGraphNode, { kind: 'action' }>
+type DragState = { id: string; pointerId: number; clientX: number; clientY: number; x: number; y: number; moved: boolean }
+type ConnectingState = { from: string; branch: WorkflowGraphBranch; pointerId: number; x: number; y: number }
 
 const TRIGGER_LABELS: Record<TriggerType, string> = {
   ask_for_human: 'Visitor asks for a human',
@@ -121,6 +125,36 @@ function nextId(graph: WorkflowGraph, prefix: string): string {
   return `${prefix}_${index}`
 }
 
+function outputBranches(node: WorkflowGraphNode): Array<{ branch: WorkflowGraphBranch; label: string }> {
+  if (node.kind === 'start') return [{ branch: 'always', label: 'Next' }]
+  if (node.kind === 'condition') return [{ branch: 'yes', label: 'Yes' }, { branch: 'no', label: 'No' }]
+  if (node.action.type === 'reply' && node.action.continue) return [{ branch: 'always', label: 'Next' }]
+  return []
+}
+
+function outputOffset(node: WorkflowGraphNode, branch: WorkflowGraphBranch): number {
+  if (node.kind === 'condition') return branch === 'yes' ? 28 : 84
+  return NODE_HEIGHT / 2
+}
+
+function wouldCreateCycle(graph: WorkflowGraph, from: string, branch: WorkflowGraphBranch, to: string): boolean {
+  const outgoing = new Map<string, string[]>()
+  graph.edges
+    .filter((edge) => !(edge.from === from && edge.branch === branch))
+    .forEach((edge) => outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge.to]))
+  outgoing.set(from, [...(outgoing.get(from) ?? []), to])
+  const seen = new Set<string>()
+  const pending = [to]
+  while (pending.length) {
+    const current = pending.pop()!
+    if (current === from) return true
+    if (seen.has(current)) continue
+    seen.add(current)
+    pending.push(...(outgoing.get(current) ?? []))
+  }
+  return false
+}
+
 export default function WorkflowGraphEditor({ agentId, targets }: { agentId: string; targets: WorkflowTargets }) {
   const base = `/agents/${agentId}/workflows/graph`
   const [graph, setGraph] = useState<WorkflowGraph | null>(null)
@@ -131,6 +165,10 @@ export default function WorkflowGraphEditor({ agentId, targets }: { agentId: str
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [draggingId, setDraggingId] = useState('')
+  const [connecting, setConnecting] = useState<ConnectingState | null>(null)
+  const dragRef = useRef<DragState | null>(null)
+  const canvasRef = useRef<HTMLDivElement | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -174,6 +212,83 @@ export default function WorkflowGraphEditor({ agentId, targets }: { agentId: str
       return { ...current, edges }
     })
     setNotice('')
+  }
+
+  function startNodeDrag(event: ReactPointerEvent<HTMLButtonElement>, node: WorkflowGraphNode) {
+    if (event.button !== 0) return
+    event.preventDefault()
+    setSelectedId(node.id)
+    dragRef.current = {
+      id: node.id,
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      x: node.position.x,
+      y: node.position.y,
+      moved: false,
+    }
+    setDraggingId(node.id)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function moveNode(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const deltaX = event.clientX - drag.clientX
+    const deltaY = event.clientY - drag.clientY
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < 3) return
+    drag.moved = true
+    const x = Math.max(0, Math.min(10_000, Math.round((drag.x + deltaX) / GRID_SIZE) * GRID_SIZE))
+    const y = Math.max(0, Math.min(10_000, Math.round((drag.y + deltaY) / GRID_SIZE) * GRID_SIZE))
+    setGraph((current) => current ? {
+      ...current,
+      nodes: current.nodes.map((node) => node.id === drag.id ? { ...node, position: { x, y } } : node),
+    } : current)
+  }
+
+  function finishNodeDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    dragRef.current = null
+    setDraggingId('')
+    if (drag.moved) setNotice('Node position updated. Save the graph to publish this layout.')
+  }
+
+  function startConnection(event: ReactPointerEvent<HTMLButtonElement>, from: string, branch: WorkflowGraphBranch) {
+    if (event.button !== 0 || !canvasRef.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = canvasRef.current.getBoundingClientRect()
+    setSelectedId(from)
+    setConnecting({ from, branch, pointerId: event.pointerId, x: event.clientX - rect.left, y: event.clientY - rect.top })
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function moveConnection(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!connecting || connecting.pointerId !== event.pointerId || !canvasRef.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = canvasRef.current.getBoundingClientRect()
+    setConnecting({ ...connecting, x: event.clientX - rect.left, y: event.clientY - rect.top })
+  }
+
+  function finishConnection(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!connecting || connecting.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-workflow-node-id]')
+    const targetId = target?.dataset.workflowNodeId ?? ''
+    if (targetId && targetId !== connecting.from && nodeById.get(targetId)?.kind !== 'start' && wouldCreateCycle(activeGraph, connecting.from, connecting.branch, targetId)) {
+      setNotice('Connection blocked because it would create a workflow cycle.')
+    } else if (targetId && targetId !== connecting.from && nodeById.get(targetId)?.kind !== 'start') {
+      setConnection(connecting.from, connecting.branch, targetId)
+      setNotice(`${connecting.branch === 'always' ? 'Next' : connecting.branch === 'yes' ? 'Yes' : 'No'} now connects to ${nodeById.get(targetId)?.name}. Save to publish.`)
+    } else {
+      setNotice('Connection unchanged. Drop the handle on another condition or action node.')
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    setConnecting(null)
   }
 
   function addNode(kind: 'condition' | 'action') {
@@ -257,11 +372,12 @@ export default function WorkflowGraphEditor({ agentId, targets }: { agentId: str
 
       {!persisted && <p className={styles.previewNotice}>Preview only — customer conversations still use the ordered rules until you activate this graph.</p>}
       {error && <p role="alert" className={styles.error}>{error}</p>}
-      {notice && <p className={styles.notice}>{notice}</p>}
+      {notice && <p role="status" className={styles.notice}>{notice}</p>}
+      <p className={styles.canvasGuide}>Drag nodes to arrange them · drag a labeled output handle onto another node to connect it</p>
 
       <div className={styles.workspace}>
         <div className={styles.canvasScroller}>
-          <div className={styles.canvas} style={{ width: canvasWidth, height: canvasHeight }}>
+          <div ref={canvasRef} className={`${styles.canvas} ${connecting ? styles.canvasConnecting : ''}`} style={{ width: canvasWidth, height: canvasHeight }}>
             <svg className={styles.edges} width={canvasWidth} height={canvasHeight} aria-hidden="true">
               <defs>
                 <marker id="workflow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -272,9 +388,8 @@ export default function WorkflowGraphEditor({ agentId, targets }: { agentId: str
                 const from = nodeById.get(edge.from)
                 const to = nodeById.get(edge.to)
                 if (!from || !to) return null
-                const offset = edge.branch === 'yes' ? -18 : edge.branch === 'no' ? 18 : 0
                 const x1 = from.position.x + NODE_WIDTH
-                const y1 = from.position.y + NODE_HEIGHT / 2 + offset
+                const y1 = from.position.y + outputOffset(from, edge.branch)
                 const x2 = to.position.x
                 const y2 = to.position.y + NODE_HEIGHT / 2
                 const bend = Math.max(55, Math.abs(x2 - x1) * 0.45)
@@ -285,24 +400,64 @@ export default function WorkflowGraphEditor({ agentId, targets }: { agentId: str
                   </g>
                 )
               })}
+              {connecting && (() => {
+                const from = nodeById.get(connecting.from)
+                if (!from) return null
+                const x1 = from.position.x + NODE_WIDTH
+                const y1 = from.position.y + outputOffset(from, connecting.branch)
+                const bend = Math.max(55, Math.abs(connecting.x - x1) * 0.45)
+                return <path className={styles.edgePreview} d={`M ${x1} ${y1} C ${x1 + bend} ${y1}, ${connecting.x - bend} ${connecting.y}, ${connecting.x} ${connecting.y}`} markerEnd="url(#workflow-arrow)" />
+              })()}
             </svg>
 
             {graph.nodes.map((node) => (
-              <button
-                type="button"
+              <div
                 key={node.id}
-                className={`${styles.node} ${node.kind === 'condition' ? styles.nodeCondition : node.kind === 'action' ? styles.nodeAction : ''} ${node.id === selected.id ? styles.nodeSelected : ''}`}
+                data-workflow-node-id={node.id}
+                className={`${styles.nodeShell} ${node.kind === 'start' ? styles.nodeStart : node.kind === 'condition' ? styles.nodeCondition : styles.nodeAction} ${node.id === draggingId ? styles.nodeDragging : ''}`}
                 style={{ left: node.position.x, top: node.position.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
-                onClick={() => setSelectedId(node.id)}
-                aria-pressed={node.id === selected.id}
               >
-                <span className={styles.nodeIcon}>{node.kind === 'start' ? <Zap size={15} /> : node.kind === 'condition' ? <GitBranch size={15} /> : <MessageSquareText size={15} />}</span>
-                <span className={styles.nodeCopy}>
-                  <small>{node.kind}</small>
-                  <strong>{node.name}</strong>
-                  <span>{node.kind === 'start' ? 'Entry point' : node.kind === 'condition' ? triggerSummary(node.trigger) : actionSummary(node.action, targets)}</span>
-                </span>
-              </button>
+                {node.kind !== 'start' && <span className={`${styles.inputHandle} ${graph.edges.some((edge) => edge.to === node.id) ? styles.inputHandleConnected : ''}`} aria-hidden="true" />}
+                <button
+                  type="button"
+                  className={`${styles.node} ${node.id === selected.id ? styles.nodeSelected : ''}`}
+                  onPointerDown={(event) => startNodeDrag(event, node)}
+                  onPointerMove={moveNode}
+                  onPointerUp={finishNodeDrag}
+                  onPointerCancel={finishNodeDrag}
+                  onClick={() => setSelectedId(node.id)}
+                  aria-pressed={node.id === selected.id}
+                  aria-label={`${node.name}, ${node.kind} node. Drag to reposition.`}
+                >
+                  <span className={styles.nodeIcon}>{node.kind === 'start' ? <Zap size={15} /> : node.kind === 'condition' ? <GitBranch size={15} /> : <MessageSquareText size={15} />}</span>
+                  <span className={styles.nodeCopy}>
+                    <small>{node.kind}</small>
+                    <strong>{node.name}</strong>
+                    <span>{node.kind === 'start' ? 'Entry point' : node.kind === 'condition' ? triggerSummary(node.trigger) : actionSummary(node.action, targets)}</span>
+                  </span>
+                </button>
+                {outputBranches(node).map(({ branch, label: branchLabel }) => (
+                  <button
+                    type="button"
+                    key={branch}
+                    className={`${styles.outputHandle} ${branch === 'yes' ? styles.outputHandleYes : branch === 'no' ? styles.outputHandleNo : styles.outputHandleAlways} ${graph.edges.some((edge) => edge.from === node.id && edge.branch === branch) ? styles.outputHandleConnected : ''}`}
+                    onPointerDown={(event) => startConnection(event, node.id, branch)}
+                    onPointerMove={moveConnection}
+                    onPointerUp={finishConnection}
+                    onPointerCancel={() => setConnecting(null)}
+                    onClick={(event) => {
+                      if (event.detail !== 0) return
+                      event.stopPropagation()
+                      setSelectedId(node.id)
+                      setNotice(`Use the ${branchLabel} selector in Connections for keyboard editing.`)
+                    }}
+                    aria-label={`Connect ${branchLabel} from ${node.name}; Connections inspector available for keyboard editing`}
+                    title={`Drag ${branchLabel} to another node`}
+                  >
+                    <span>{branchLabel}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </div>

@@ -5,7 +5,8 @@
 .loading,
 .error,
 .notice,
-.previewNotice {
+.previewNotice,
+.canvasGuide {
   font-size: 12px;
   line-height: 1.5;
   text-wrap: pretty;
@@ -119,7 +120,7 @@
 .toolButton:active,
 .deleteButton:active,
 .returnButton:active,
-.node:active {
+.outputHandle:active {
   scale: 0.96;
 }
 
@@ -129,6 +130,13 @@
   margin: 10px 2px 0;
   padding: 8px 11px;
   border-radius: 10px;
+}
+
+.canvasGuide {
+  margin: 10px 2px -2px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
 }
 
 .previewNotice {
@@ -188,6 +196,14 @@
   stroke-width: 1.5;
 }
 
+.edgePreview {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  opacity: 0.9;
+}
+
 .edgeYes {
   stroke: rgba(52, 211, 153, 0.72);
 }
@@ -205,8 +221,14 @@
   text-transform: uppercase;
 }
 
-.node {
+.nodeShell {
   position: absolute;
+}
+
+.node {
+  position: relative;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -216,11 +238,13 @@
   background: var(--panel);
   color: var(--ink);
   text-align: left;
-  cursor: pointer;
+  cursor: grab;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 7px 18px rgba(0, 0, 0, 0.16);
   transition-property: box-shadow, background-color, scale;
   transition-duration: 150ms;
   transition-timing-function: ease-out;
+  touch-action: none;
+  user-select: none;
 }
 
 .node:hover,
@@ -233,6 +257,117 @@
 .nodeSelected {
   background: linear-gradient(145deg, rgba(124, 92, 255, 0.16), var(--panel));
   box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.72), 0 0 0 5px rgba(124, 92, 255, 0.1), 0 12px 28px rgba(0, 0, 0, 0.2);
+}
+
+.nodeDragging {
+  z-index: 3;
+}
+
+.nodeDragging .node {
+  scale: 1;
+  cursor: grabbing;
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.76), 0 18px 38px rgba(0, 0, 0, 0.28);
+}
+
+.canvasConnecting .nodeShell:not(.nodeStart) .node {
+  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.42), 0 0 0 4px rgba(124, 92, 255, 0.06), 0 7px 18px rgba(0, 0, 0, 0.16);
+}
+
+.inputHandle {
+  position: absolute;
+  top: 50px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg-2);
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.58), 0 2px 7px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.inputHandleConnected {
+  background: rgba(124, 92, 255, 0.72);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px rgba(124, 92, 255, 0.58);
+}
+
+.outputHandle {
+  position: absolute;
+  right: -9px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg-2);
+  color: var(--ink-faint);
+  cursor: crosshair;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.66), 0 2px 7px rgba(0, 0, 0, 0.24);
+  transition-property: background-color, box-shadow, color, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+  touch-action: none;
+}
+
+.outputHandle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+}
+
+.outputHandle > span {
+  position: absolute;
+  top: 50%;
+  right: 17px;
+  width: 34px;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 650;
+  line-height: 1;
+  text-align: right;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.outputHandleAlways {
+  top: 47px;
+}
+
+.outputHandleYes {
+  top: 19px;
+  color: var(--mint);
+}
+
+.outputHandleNo {
+  top: 75px;
+  color: #fca5a5;
+}
+
+.outputHandle:hover,
+.outputHandle:focus-visible,
+.outputHandleConnected {
+  outline: none;
+  background: var(--accent);
+  color: var(--ink);
+  box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px rgba(124, 92, 255, 0.46), 0 4px 12px rgba(0, 0, 0, 0.26);
+}
+
+.outputHandleYes:hover,
+.outputHandleYes:focus-visible,
+.outputHandleYes.outputHandleConnected {
+  background: var(--mint);
+  box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px rgba(52, 211, 153, 0.34), 0 4px 12px rgba(0, 0, 0, 0.26);
+}
+
+.outputHandleNo:hover,
+.outputHandleNo:focus-visible,
+.outputHandleNo.outputHandleConnected {
+  background: #f87171;
+  box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px rgba(248, 113, 113, 0.3), 0 4px 12px rgba(0, 0, 0, 0.26);
 }
 
 .nodeIcon {
@@ -481,6 +616,7 @@
   .toolButton,
   .deleteButton,
   .returnButton,
+  .outputHandle,
   .node {
     transition-duration: 0.01ms;
   }
