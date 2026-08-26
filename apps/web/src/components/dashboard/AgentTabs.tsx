@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import type { AgentDoc } from '@ayooda/shared'
@@ -31,6 +31,7 @@ export default function AgentTabs({ agentId }: { agentId: string }) {
   const pathname = usePathname()
   const [agent, setAgent] = useState<AgentDoc | null>(null)
   const [missing, setMissing] = useState(false)
+  const activeTabRef = useRef<HTMLAnchorElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -50,16 +51,21 @@ export default function AgentTabs({ agentId }: { agentId: string }) {
     return slug ? pathname.startsWith(href) : pathname === base
   }
 
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' })
+  }, [pathname])
+
   return (
     <div style={{ marginBottom: 24 }}>
       <Link
         href="/dashboard/agents"
+        className="agent-back-link"
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--ink-mute)', textDecoration: 'none', marginBottom: 14 }}
       >
         <ArrowLeft size={13} /> All agents
       </Link>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+      <div className="agent-heading" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
         {agent ? (
           <>
             <AgentAvatar name={agent.name} photoURL={agent.photoURL} seed={agent.id} size={40} />
@@ -82,13 +88,16 @@ export default function AgentTabs({ agentId }: { agentId: string }) {
         )}
       </div>
 
-      <nav style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--line)', overflowX: 'auto' }}>
+      <nav className="agent-tabs-nav" aria-label="Agent settings" style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--line)', overflowX: 'auto', scrollBehavior: 'smooth' }}>
         {TABS.map((t) => {
           const on = active(t.slug)
           return (
             <Link
+              ref={on ? activeTabRef : undefined}
               key={t.slug || 'info'}
               href={t.slug ? `${base}/${t.slug}` : base}
+              className="agent-tab-link"
+              aria-current={on ? 'page' : undefined}
               style={{
                 padding: '9px 14px',
                 fontSize: 13.5,

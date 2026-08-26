@@ -126,7 +126,7 @@ export function StepIdentity({ onDone }: { onDone: (data: IdentityData) => void 
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
                   padding: '12px 14px', borderRadius: 'var(--r-sm)', textAlign: 'left',
-                  cursor: 'pointer', transition: 'all .15s',
+                  cursor: 'pointer', transition: 'background-color .15s, border-color .15s, scale .15s',
                   border: `1px solid ${tone === t.value ? 'var(--accent)' : 'var(--line)'}`,
                   background: tone === t.value ? 'var(--accent-soft)' : 'var(--bg-2)',
                   color: 'var(--ink)',
@@ -149,7 +149,7 @@ export function StepIdentity({ onDone }: { onDone: (data: IdentityData) => void 
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
                   padding: '12px 14px', borderRadius: 'var(--r-sm)', textAlign: 'left',
-                  cursor: 'pointer', transition: 'all .15s',
+                  cursor: 'pointer', transition: 'background-color .15s, border-color .15s, scale .15s',
                   border: `1px solid ${llmModel === m.id ? 'var(--accent)' : 'var(--line)'}`,
                   background: llmModel === m.id ? 'var(--accent-soft)' : 'var(--bg-2)',
                   color: 'var(--ink)',

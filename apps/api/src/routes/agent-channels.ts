@@ -79,6 +79,7 @@ agentChannels.get('/', async (c) => {
       return {
         id: d.id,
         ...safe,
+        lastSeenAt: (safe.lastSeenAt as { toDate?: () => Date } | undefined)?.toDate?.().toISOString() ?? null,
         ...((safe.type === 'slack' || safe.type === 'sms') && process.env.API_PUBLIC_URL
           ? { webhookUrl: `${process.env.API_PUBLIC_URL.replace(/\/$/, '')}/${safe.type === 'slack' ? 'slack/events' : 'sms/webhook'}/${d.id}` }
           : {}),
@@ -136,6 +137,7 @@ agentChannels.post('/web-widget', async (c) => {
       widgetPosition: DEFAULT_WIDGET_POSITION,
       welcomeMessage: `Hi there! How can ${agentName} help you today?`,
       showBranding: true,
+      allowedDomains: [],
       agentName,
       agentPhotoURL,
     },
@@ -176,6 +178,7 @@ agentChannels.put('/web-widget', async (c) => {
     'config.widgetPosition': result.value.widgetPosition,
     'config.welcomeMessage': result.value.welcomeMessage,
     'config.showBranding': result.value.showBranding,
+    'config.allowedDomains': result.value.allowedDomains,
   })
   return c.json(result.value)
 })

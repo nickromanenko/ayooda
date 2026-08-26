@@ -1,0 +1,169 @@
+.desktopSidebar { display: flex; }
+.mobileHeader, .mobileBackdrop, .mobileDrawer { display: none; }
+
+@media (max-width: 760px) {
+  .desktopSidebar { display: none !important; }
+
+  .mobileHeader {
+    position: relative;
+    z-index: 42;
+    display: flex;
+    min-height: 64px;
+    flex: 0 0 64px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: color-mix(in oklab, var(--panel) 94%, transparent);
+    box-shadow: 0 1px 0 var(--line);
+    backdrop-filter: blur(18px) saturate(130%);
+    -webkit-backdrop-filter: blur(18px) saturate(130%);
+  }
+
+  .mobileLogo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+  }
+
+  .menuButton, .closeButton {
+    all: unset;
+    box-sizing: border-box;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border-radius: 12px;
+    color: var(--ink);
+    background: var(--bg-2);
+    box-shadow: var(--shadow-control);
+    cursor: pointer;
+    transition-property: scale, background-color, box-shadow;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  .menuButton:active, .closeButton:active { scale: .96; }
+  .menuButton:focus-visible, .closeButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .mobileBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 48;
+    display: block;
+    border: 0;
+    background: rgba(0, 0, 0, .52);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition-property: opacity, visibility;
+    transition-duration: 180ms;
+    transition-timing-function: ease-out;
+  }
+
+  .mobileBackdrop[data-open='true'] {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .mobileDrawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 49;
+    display: flex;
+    width: min(88vw, 340px);
+    flex-direction: column;
+    padding: 12px;
+    background: var(--panel);
+    box-shadow: -20px 0 60px rgba(0, 0, 0, .4);
+    transform: translateX(102%);
+    visibility: hidden;
+    pointer-events: none;
+    transition-property: transform, visibility;
+    transition-duration: 220ms;
+    transition-timing-function: cubic-bezier(.2, 0, 0, 1);
+  }
+
+  .mobileDrawer[data-open='true'] {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .drawerHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    padding: 0 2px 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .mobileNav {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 0;
+    overflow-y: auto;
+  }
+
+  .mobileNavLink {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    border-radius: 12px;
+    color: var(--ink-mute);
+    font-size: 14px;
+  }
+
+  .mobileNavLink[data-active='true'] {
+    color: var(--ink);
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  .mobileFooter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+
+  .mobileAccount {
+    min-width: 0;
+    padding: 8px 12px;
+    color: var(--ink-mute);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobileAction {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    border-radius: 12px;
+    color: var(--ink-mute);
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .mobileAction:active { scale: .96; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menuButton, .closeButton, .mobileBackdrop, .mobileDrawer, .mobileAction { transition: none; }
+}

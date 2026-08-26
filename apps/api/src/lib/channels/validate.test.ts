@@ -86,4 +86,22 @@ describe('validateWidgetAppearance', () => {
       if (r.ok) expect(r.value.showBranding).toBe(true)
     })
   })
+
+  describe('allowedDomains', () => {
+    test('normalizes and deduplicates hostnames', () => {
+      const r = validateWidgetAppearance({ ...base, allowedDomains: [' Example.com ', '*.example.com', 'example.com'] })
+      expect(r.ok).toBe(true)
+      if (r.ok) expect(r.value.allowedDomains).toEqual(['example.com', '*.example.com'])
+    })
+
+    test('allows existing clients to omit domains', () => {
+      const r = validateWidgetAppearance(base)
+      expect(r.ok).toBe(true)
+      if (r.ok) expect(r.value.allowedDomains).toEqual([])
+    })
+
+    test('rejects URLs and paths', () => {
+      expect(validateWidgetAppearance({ ...base, allowedDomains: ['https://example.com/path'] }).ok).toBe(false)
+    })
+  })
 })

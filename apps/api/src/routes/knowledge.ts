@@ -5,6 +5,7 @@ import { requireAgent } from '../middleware/agent'
 import { triggerIngestion } from '../lib/scraper'
 import { namespaceFor } from '../lib/pinecone'
 import {
+  deleteDocumentVectors,
   isKnowledgeSyncInterval,
   knowledgeSyncLeaseUntil,
   nextKnowledgeSyncAt,
@@ -244,7 +245,7 @@ knowledge.delete('/:id', async (c) => {
 
   // Delete Pinecone vectors (best-effort — don't block on failure)
   try {
-    await namespaceFor(c.get('agentNamespace')!).deleteMany({ docId })
+    await deleteDocumentVectors(namespaceFor(c.get('agentNamespace')!), docId)
   } catch (err) {
     console.warn(`[knowledge] Pinecone delete failed for doc ${docId}:`, err)
   }

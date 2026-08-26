@@ -1,6 +1,6 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -16,9 +16,12 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Menu,
+  X,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
+import styles from './Sidebar.module.css'
 
 // Knowledge, tools, escalation rules and deployment all configure one agent, so
 // they are reached through that agent's tabs rather than as siblings here.
@@ -64,6 +67,16 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsedSnapshot, getCollapsedServerSnapshot)
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [mobileOpen])
 
   function toggleCollapsed() {
     setCollapsedPersisted(!getCollapsedSnapshot())
@@ -127,8 +140,54 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
 
   const accountName = user?.displayName ?? user?.email ?? 'Account'
 
+  const mobileLink = (item: { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean }) => {
+    const active = isActive(item)
+    return (
+      <Link key={item.href} href={item.href} className={styles.mobileNavLink} data-active={active} aria-current={active ? 'page' : undefined} onClick={() => setMobileOpen(false)}>
+        <item.icon size={18} strokeWidth={active ? 2 : 1.5} />
+        {item.label}
+      </Link>
+    )
+  }
+
   return (
-    <aside style={{
+    <>
+    <header className={styles.mobileHeader}>
+      <Link href="/dashboard" className={styles.mobileLogo} aria-label="Ayooda dashboard">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
+          <circle cx="12" cy="12" r="4" fill="var(--accent)" />
+          <path d="M2.5 12h6M15.5 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        Ayooda
+      </Link>
+      <button type="button" className={styles.menuButton} aria-label="Open dashboard navigation" aria-expanded={mobileOpen} aria-controls="dashboard-mobile-drawer" onClick={() => setMobileOpen(true)}>
+        <Menu size={20} />
+      </button>
+    </header>
+
+    <button type="button" className={styles.mobileBackdrop} data-open={mobileOpen} aria-label="Close dashboard navigation" tabIndex={mobileOpen ? 0 : -1} onClick={() => setMobileOpen(false)} />
+    <aside id="dashboard-mobile-drawer" className={styles.mobileDrawer} data-open={mobileOpen} aria-hidden={!mobileOpen}>
+      <div className={styles.drawerHeader}>
+        <span className={styles.mobileLogo}>Menu</span>
+        <button type="button" className={styles.closeButton} aria-label="Close dashboard navigation" onClick={() => setMobileOpen(false)}>
+          <X size={20} />
+        </button>
+      </div>
+      <nav className={styles.mobileNav} aria-label="Dashboard navigation">
+        {visibleNav.map(mobileLink)}
+        {visibleBottom.map(mobileLink)}
+      </nav>
+      <div className={styles.mobileFooter}>
+        <ThemeToggle className="dashboard-theme-toggle" showLabel />
+        <div className={styles.mobileAccount} title={accountName}>{accountName}</div>
+        <button type="button" className={styles.mobileAction} onClick={() => void signOut()}>
+          <LogOut size={18} /> Sign out
+        </button>
+      </div>
+    </aside>
+
+    <aside className={styles.desktopSidebar} style={{
       width: collapsed ? 64 : 220, flexShrink: 0,
       display: 'flex', flexDirection: 'column',
       background: 'var(--panel)',
@@ -232,5 +291,6 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
         </button>
       </div>
     </aside>
+    </>
   )
 }

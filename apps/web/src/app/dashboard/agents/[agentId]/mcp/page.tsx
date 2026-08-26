@@ -105,7 +105,7 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
+      <div className="dashboard-page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
         <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: 0 }}>
           Connect this agent to a Model Context Protocol server — it will discover that server&apos;s tools and call them during conversations.
         </p>
@@ -174,7 +174,7 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
           <div style={{ marginBottom: 12 }}>
             <input placeholder="Server name (e.g. Shopify MCP)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input} />
           </div>
-          <div style={{ ...row }}>
+          <div className="responsive-form-row" style={{ ...row }}>
             <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as McpTransportType })} style={{ ...input, width: 170 }}>
               <option value="streamable-http">Streamable HTTP</option>
               <option value="sse">HTTP + SSE</option>
@@ -184,7 +184,7 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
 
           <p style={{ ...label, marginTop: 16 }}>Headers</p>
           {form.headers.map((h, i) => (
-            <div key={i} style={row}>
+            <div key={i} className="responsive-form-row" style={row}>
               <input placeholder="Header" value={h.key} onChange={(e) => { const headers = [...form.headers]; headers[i] = { ...h, key: e.target.value }; setForm({ ...form, headers }) }} style={{ ...input, width: 200 }} />
               <input placeholder="value" value={h.value} onChange={(e) => { const headers = [...form.headers]; headers[i] = { ...h, value: e.target.value }; setForm({ ...form, headers }) }} style={input} />
               <button type="button" onClick={() => setForm({ ...form, headers: form.headers.filter((_, j) => j !== i) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)' }}><Trash2 size={14} /></button>
@@ -193,7 +193,7 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
           <button type="button" onClick={() => setForm({ ...form, headers: [...form.headers, { key: '', value: '' }] })} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13 }}>+ Header</button>
 
           <p style={{ ...label, marginTop: 16 }}>Authentication</p>
-          <div style={row}>
+          <div className="responsive-form-row" style={row}>
             <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as McpServerAuthType })} style={{ ...input, width: 160 }}>
               <option value="none">None</option>
               <option value="bearer">Bearer token</option>

@@ -72,12 +72,12 @@ export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDon
           <button
             type="button" onClick={() => void handleCopy()}
             style={{
-              position: 'absolute', top: 12, right: 12,
-              padding: '6px', borderRadius: 8, cursor: 'pointer',
+              position: 'absolute', top: 8, right: 8,
+              width: 40, height: 40, padding: 0, borderRadius: 8, cursor: 'pointer',
               background: copied ? 'var(--mint)' : 'var(--panel-2)',
               border: '1px solid var(--line)',
               color: copied ? '#081a10' : 'var(--ink-dim)',
-              display: 'flex', transition: 'all .15s',
+              display: 'grid', placeItems: 'center', transition: 'background-color .15s, color .15s',
             }}
           >
             {copied ? <Check size={13} /> : <Copy size={13} />}

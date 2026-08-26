@@ -1,6 +1,6 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import type { ToolMethod, ToolParam, ToolBodyEncoding } from '@ayooda/shared'
-import { streamText as aiStreamText, stepCountIs, tool, type ToolSet } from 'ai'
+import { smoothStream, streamText as aiStreamText, stepCountIs, tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import type { ChatParams, ChatChunk, ChatResult, ChatMessage } from '../llm/chat'
 import { decryptSecret } from '../crypto'
@@ -242,7 +242,14 @@ export async function loadTools(workspaceId: string, agentId: string): Promise<S
 
 type StreamResult = { textStream: AsyncIterable<string>; usage: Promise<{ inputTokens?: number; outputTokens?: number }> }
 interface RunDeps {
-  streamText?: (opts: { model: unknown; system: string; messages: ChatMessage[]; tools?: ToolSet; stopWhen?: unknown }) => StreamResult
+  streamText?: (opts: {
+    model: unknown
+    system: string
+    messages: ChatMessage[]
+    tools?: ToolSet
+    stopWhen?: unknown
+    experimental_transform?: unknown
+  }) => StreamResult
   execute?: (t: StoredTool, args: Record<string, unknown>) => Promise<ToolResult>
 }
 
@@ -283,6 +290,10 @@ export async function* runAgentTurn(
     messages: chatParams.messages,
     tools: Object.keys(toolSet).length ? toolSet : undefined,
     stopWhen: stepCountIs(MAX_ROUNDS),
+    // Gemini and some OpenAI-compatible providers emit very large text deltas.
+    // Smooth them into word-sized chunks so every SSE consumer gets visibly
+    // progressive output instead of a typing indicator followed by a full reply.
+    experimental_transform: smoothStream({ delayInMs: 8, chunking: 'word' }),
   })
   for await (const delta of result.textStream) yield { text: delta }
   const u = await result.usage

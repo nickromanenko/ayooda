@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore'
-import { Loader2, MessageSquare, User, Bot, Send } from 'lucide-react'
+import { ArrowLeft, Loader2, MessageSquare, User, Bot, Send } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { useWorkspace } from '@/hooks/useWorkspace'
+import styles from './page.module.css'
 
 interface Conversation {
   id: string
@@ -150,9 +151,9 @@ export default function InboxPage() {
     .filter((c) => agentFilter === 'all' || c.agentId === agentFilter)
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 48px)', margin: -24, overflow: 'hidden' }}>
+    <div className={styles.root} style={{ display: 'flex', height: 'calc(100vh - 48px)', margin: -24, overflow: 'hidden' }}>
       {/* Conversation list */}
-      <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
+      <div className={styles.list} data-thread-open={Boolean(selectedId)} style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
           <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>Inbox</h1>
           <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
@@ -257,10 +258,13 @@ export default function InboxPage() {
 
       {/* Message thread */}
       {selectedId && selectedConv ? (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-2)' }}>
+        <div className={styles.thread} data-open="true" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-2)' }}>
           {/* Thread header */}
-          <div style={{ background: 'var(--panel)', borderBottom: '1px solid var(--line)', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-            <div>
+          <div className={styles.threadHeader} style={{ background: 'var(--panel)', borderBottom: '1px solid var(--line)', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <button type="button" className={styles.backButton} aria-label="Back to conversations" onClick={() => setSelectedId(null)}>
+              <ArrowLeft size={18} />
+            </button>
+            <div className={styles.threadIdentity}>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>
                 Visitor {selectedConv.visitorId.slice(0, 8)}…
               </p>
@@ -272,7 +276,7 @@ export default function InboxPage() {
                 <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>Escalated: {selectedConv.escalationReason}</p>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className={styles.threadActions} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {(selectedConv.status === 'bot' || selectedConv.status === 'waiting') && (
                 <button
                   type="button"
@@ -310,10 +314,11 @@ export default function InboxPage() {
           )}
 
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className={styles.messages} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {messages.map((msg) => (
               <div
                 key={msg.id}
+                className={styles.message}
                 style={{
                   display: 'flex', gap: 8, maxWidth: '75%',
                   flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
@@ -354,6 +359,7 @@ export default function InboxPage() {
           {selectedConv.status === 'human' && (
             <form
               onSubmit={(e) => void handleSendReply(e)}
+              className={styles.reply}
               style={{ background: 'var(--panel)', borderTop: '1px solid var(--line)', padding: '12px 16px', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}
             >
               <textarea
@@ -399,7 +405,7 @@ export default function InboxPage() {
           )}
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-mute)', background: 'var(--bg-2)' }}>
+        <div className={styles.emptyThread} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-mute)', background: 'var(--bg-2)' }}>
           <div style={{ textAlign: 'center' }}>
             <MessageSquare size={36} style={{ margin: '0 auto 12px', opacity: 0.2 }} />
             <p style={{ fontSize: 13, margin: 0 }}>Select a conversation to view messages</p>

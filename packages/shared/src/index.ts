@@ -10,6 +10,15 @@ export {
   nextKnowledgeSyncAt,
 } from './knowledge-sync'
 export type { KnowledgeSyncIntervalHours } from './knowledge-sync'
+export { deleteDocumentVectors, documentVectorPrefix } from './pinecone-vectors'
+export type { PrefixVectorIndex } from './pinecone-vectors'
+export {
+  isWidgetHexColor,
+  normalizeWidgetHexColor,
+  widgetAccessibleAccent,
+  widgetContrastRatio,
+  widgetForeground,
+} from './widget-color'
 
 // LLM Providers (Claude, OpenAI, Gemini)
 export type LLMProvider = 'gemini' | 'claude' | 'openai'
@@ -1021,6 +1030,8 @@ export interface WidgetAppearance {
   welcomeMessage: string
   /** Show the "Powered by Ayooda" line. Always true below MIN_BRANDING_TIER. */
   showBranding: boolean
+  /** Empty means any website. Entries are hostnames or wildcard subdomains. */
+  allowedDomains: string[]
 }
 
 // ---------------------------------------------------------------------------

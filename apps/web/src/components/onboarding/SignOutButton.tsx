@@ -11,10 +11,10 @@ export function SignOutButton() {
       onClick={() => void signOut()}
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+        minHeight: 44, padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
         background: 'none', border: '1px solid var(--line)',
         color: 'var(--ink-mute)', fontSize: 12, fontFamily: 'var(--font-sans)',
-        transition: 'all .15s',
+        transition: 'border-color .15s, color .15s, scale .15s',
       }}
       onMouseEnter={e => {
         e.currentTarget.style.borderColor = 'var(--line-2)'

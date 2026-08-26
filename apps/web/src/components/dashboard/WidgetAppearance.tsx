@@ -2,12 +2,16 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Check, Loader2, Lock } from 'lucide-react'
+import { Check, Loader2, Lock, MessageCircle, Monitor, Send, Smartphone, X } from 'lucide-react'
 import {
   WIDGET_POSITIONS,
   MAX_WELCOME_MESSAGE_CHARS,
   type WidgetAppearance as Appearance,
   type WidgetPosition,
+  isWidgetHexColor,
+  normalizeWidgetHexColor,
+  widgetAccessibleAccent,
+  widgetForeground,
 } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { label, input, errorText } from './ui'
@@ -15,31 +19,43 @@ import { label, input, errorText } from './ui'
 /** A scaled-down mock of the real widget, so a colour choice can be judged
  *  against the header, the launcher and a visitor bubble at once — the three
  *  places buildCSS() actually applies it. */
-function Preview({ appearance, agentName }: { appearance: Appearance; agentName: string }) {
+function Preview({ appearance, agentName, agentPhotoURL }: { appearance: Appearance; agentName: string; agentPhotoURL: string | null }) {
+  const [mobile, setMobile] = useState(false)
+  const [open, setOpen] = useState(true)
   const left = appearance.widgetPosition === 'bottom-left'
+  const foreground = isWidgetHexColor(appearance.widgetColor) ? widgetForeground(appearance.widgetColor) : '#ffffff'
+  const accent = isWidgetHexColor(appearance.widgetColor) ? widgetAccessibleAccent(appearance.widgetColor) : '#6366f1'
   return (
     <div
-      aria-hidden
       style={{
-        position: 'relative', height: 232, borderRadius: 'var(--r-sm)',
+        position: 'relative', height: 316, borderRadius: 'var(--r-sm)',
         border: '1px solid var(--line-2)', background: 'var(--bg-2)',
         overflow: 'hidden', padding: 12,
         display: 'flex', flexDirection: 'column',
         alignItems: left ? 'flex-start' : 'flex-end', justifyContent: 'flex-end', gap: 8,
       }}
     >
+      <div style={{ position: 'absolute', left: 10, top: 10, display: 'flex', gap: 4 }}>
+        <button type="button" aria-label="Desktop preview" onClick={() => setMobile(false)} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', color: !mobile ? 'var(--accent)' : 'var(--ink-mute)' }}><Monitor size={14} /></button>
+        <button type="button" aria-label="Mobile preview" onClick={() => setMobile(true)} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, display: 'grid', placeItems: 'center', color: mobile ? 'var(--accent)' : 'var(--ink-mute)' }}><Smartphone size={14} /></button>
+      </div>
       {/* Panel */}
-      <div style={{ width: 190, background: '#fff', borderRadius: 10, overflow: 'hidden', boxShadow: '0 6px 20px rgba(0,0,0,0.18)' }}>
-        <div style={{ background: appearance.widgetColor, color: '#fff', padding: '7px 9px', display: 'flex', alignItems: 'center', gap: 6 }}>
+      {open && <div style={{ width: mobile ? '100%' : 224, background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 6px 20px rgba(0,0,0,0.18)' }}>
+        <div style={{ background: isWidgetHexColor(appearance.widgetColor) ? appearance.widgetColor : '#6366f1', color: foreground, padding: '9px 10px', display: 'flex', alignItems: 'center', gap: 7 }}>
           <span style={{
-            width: 18, height: 18, borderRadius: 50, background: 'rgba(255,255,255,0.25)',
+            width: 22, height: 22, borderRadius: 50, background: 'rgba(255,255,255,0.25)',
             display: 'grid', placeItems: 'center', fontSize: 9, fontWeight: 600, flexShrink: 0,
+            overflow: 'hidden', boxShadow: '0 0 0 3px rgba(255,255,255,0.22), 0 2px 6px rgba(0,0,0,0.16)',
           }}>
-            {agentName.charAt(0).toUpperCase()}
+            {agentPhotoURL
+              // eslint-disable-next-line @next/next/no-img-element -- external agent identity URL
+              ? <img src={agentPhotoURL} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : agentName.charAt(0).toUpperCase()}
           </span>
           <span style={{ fontSize: 10, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agentName}</span>
+          <X size={13} style={{ marginLeft: 'auto' }} />
         </div>
-        <div style={{ padding: 9, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ minHeight: 116, padding: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
           <span style={{
             alignSelf: 'flex-start', maxWidth: '85%', background: '#f4f4f5', color: '#18181b',
             fontSize: 9.5, lineHeight: 1.4, padding: '5px 7px', borderRadius: 8, borderBottomLeftRadius: 2,
@@ -47,34 +63,39 @@ function Preview({ appearance, agentName }: { appearance: Appearance; agentName:
             {appearance.welcomeMessage || 'Your welcome message appears here.'}
           </span>
           <span style={{
-            alignSelf: 'flex-end', background: appearance.widgetColor, color: '#fff',
+            alignSelf: 'flex-end', background: isWidgetHexColor(appearance.widgetColor) ? appearance.widgetColor : '#6366f1', color: foreground,
             fontSize: 9.5, padding: '5px 7px', borderRadius: 8, borderBottomRightRadius: 2,
           }}>
             Hi — I need help
           </span>
+        </div>
+        <div style={{ margin: '0 8px 7px', minHeight: 44, border: '1px solid #d4d4d8', borderRadius: 10, padding: '8px 38px 8px 9px', color: '#a1a1aa', fontSize: 9.5, position: 'relative' }}>
+          Type a message…
+          <Send size={15} style={{ position: 'absolute', right: 10, bottom: 9, color: accent }} />
         </div>
         {appearance.showBranding && (
           <p style={{ textAlign: 'center', fontSize: 8, color: '#a1a1aa', margin: 0, padding: '0 0 6px' }}>
             Powered by Ayooda
           </p>
         )}
-      </div>
+      </div>}
       {/* Launcher */}
-      <div style={{
-        width: 30, height: 30, borderRadius: 50, background: appearance.widgetColor,
+      <button type="button" aria-label={open ? 'Close preview' : 'Open preview'} onClick={() => setOpen((value) => !value)} style={{
+        border: 0, width: 40, height: 40, borderRadius: 50, background: isWidgetHexColor(appearance.widgetColor) ? appearance.widgetColor : '#6366f1', color: foreground,
         boxShadow: '0 3px 10px rgba(0,0,0,0.2)', display: 'grid', placeItems: 'center', flexShrink: 0,
       }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" /></svg>
-      </div>
+        {open ? <X size={18} /> : <MessageCircle size={18} fill="currentColor" />}
+      </button>
     </div>
   )
 }
 
 export default function WidgetAppearance({
-  agentId, agentName, initial, brandingLocked, onSaved,
+  agentId, agentName, agentPhotoURL, initial, brandingLocked, onSaved,
 }: {
   agentId: string
   agentName: string
+  agentPhotoURL: string | null
   initial: Appearance
   /** True when the plan does not allow hiding the "Powered by Ayooda" line. */
   brandingLocked: boolean
@@ -89,10 +110,12 @@ export default function WidgetAppearance({
     draft.widgetColor !== initial.widgetColor ||
     draft.widgetPosition !== initial.widgetPosition ||
     draft.welcomeMessage !== initial.welcomeMessage ||
-    draft.showBranding !== initial.showBranding
+    draft.showBranding !== initial.showBranding ||
+    draft.allowedDomains.join('\n') !== initial.allowedDomains.join('\n')
 
   const tooLong = draft.welcomeMessage.length > MAX_WELCOME_MESSAGE_CHARS
-  const canSave = dirty && !tooLong && draft.welcomeMessage.trim().length > 0
+  const validColor = isWidgetHexColor(draft.widgetColor)
+  const canSave = dirty && validColor && !tooLong && draft.welcomeMessage.trim().length > 0
 
   async function save() {
     setSaving(true); setError(''); setSaved(false)
@@ -118,16 +141,18 @@ export default function WidgetAppearance({
           <label htmlFor="w-color" style={{ fontSize: 12.5, color: 'var(--ink-mute)', display: 'block', marginBottom: 6 }}>Colour</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 14 }}>
             <input
-              id="w-color" type="color" value={draft.widgetColor}
+              id="w-color" type="color" value={normalizeWidgetHexColor(draft.widgetColor) ?? '#6366f1'}
               onChange={(e) => setDraft({ ...draft, widgetColor: e.target.value })}
               style={{ width: 38, height: 34, padding: 2, borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', background: 'var(--bg-2)', cursor: 'pointer' }}
             />
             <input
               aria-label="Colour hex value" value={draft.widgetColor}
               onChange={(e) => setDraft({ ...draft, widgetColor: e.target.value })}
+              aria-invalid={!validColor}
               style={{ ...input, fontFamily: 'var(--font-mono)', fontSize: 13, width: 110, padding: '8px 10px' }}
             />
           </div>
+          {!validColor && <p style={{ ...errorText, margin: '-9px 0 14px' }}>Use a hex colour such as #6366f1.</p>}
 
           <label htmlFor="w-pos" style={{ fontSize: 12.5, color: 'var(--ink-mute)', display: 'block', marginBottom: 6 }}>Position</label>
           <select
@@ -177,11 +202,27 @@ export default function WidgetAppearance({
               )}
             </p>
           </div>
+          <p style={{ fontSize: 11.5, color: 'var(--ink-faint)', margin: '14px 0 0' }}>
+            The name and photo come from the agent&apos;s <Link href={`/dashboard/agents/${agentId}`} style={{ color: 'var(--accent)' }}>Info settings</Link>.
+          </p>
+
+          <details style={{ marginTop: 16, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>Advanced security</summary>
+            <label htmlFor="w-domains" style={{ fontSize: 12, color: 'var(--ink-mute)', display: 'block', margin: '12px 0 6px' }}>Allowed domains</label>
+            <textarea
+              id="w-domains"
+              value={draft.allowedDomains.join('\n')}
+              onChange={(event) => setDraft({ ...draft, allowedDomains: event.target.value.split('\n').map((domain) => domain.trim()).filter(Boolean) })}
+              placeholder={'example.com\n*.example.com'}
+              style={{ ...input, minHeight: 72, resize: 'vertical', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '8px 10px' }}
+            />
+            <p style={{ fontSize: 11, color: 'var(--ink-faint)', margin: '5px 0 0', lineHeight: 1.5 }}>One hostname per line. Leave empty to allow the widget on any site.</p>
+          </details>
         </div>
 
         <div>
           <p style={{ fontSize: 12.5, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 6 }}>Preview</p>
-          <Preview appearance={draft} agentName={agentName} />
+          <Preview appearance={draft} agentName={agentName} agentPhotoURL={agentPhotoURL} />
         </div>
       </div>
 

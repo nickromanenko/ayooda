@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore'
-import { Loader2, Send, Plus, Trash2, MessagesSquare, FileText, Bot, User } from 'lucide-react'
+import { ArrowLeft, Loader2, Send, Plus, Trash2, MessagesSquare, FileText, Bot, User } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { apiRequest } from '@/lib/api'
 import { readSSE } from '@/lib/sse'
@@ -13,6 +13,7 @@ import { useAuth } from '@/components/providers/AuthProvider'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import { label, input as inputStyle } from '@/components/dashboard/ui'
 import type { CopilotThreadDoc } from '@ayooda/shared'
+import styles from './page.module.css'
 
 // GET /copilot/threads sends Firestore Timestamps through a plain JSON response
 // (no client SDK in the loop to reconstruct a real Timestamp), so they arrive as
@@ -79,6 +80,7 @@ function CopilotPageInner() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
+  const [mobileComposeOpen, setMobileComposeOpen] = useState(() => Boolean(searchParams.get('agent')))
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const workspaceId = workspace?.id
@@ -148,12 +150,14 @@ function CopilotPageInner() {
     setActiveThreadId(null)
     setMessages([])
     setError('')
+    setMobileComposeOpen(true)
   }
 
   function selectThread(t: ThreadRow) {
     setActiveThreadId(t.id)
     setPendingAgentId(t.agentId)
     setError('')
+    setMobileComposeOpen(true)
   }
 
   async function removeThread(id: string) {
@@ -227,9 +231,9 @@ function CopilotPageInner() {
   }
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 48px)', margin: -24, overflow: 'hidden' }}>
+    <div className={styles.root} style={{ display: 'flex', height: 'calc(100vh - 48px)', margin: -24, overflow: 'hidden' }}>
       {/* Thread list */}
-      <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
+      <div className={styles.list} data-compose-open={mobileComposeOpen} style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
           <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>Copilot</h1>
           <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>Chat with your team&apos;s agents</p>
@@ -246,7 +250,7 @@ function CopilotPageInner() {
             onClick={startNewThread}
             disabled={!pendingAgentId}
             className="btn btn-primary"
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 12px', fontSize: 12.5, opacity: pendingAgentId ? 1 : 0.5 }}
+            style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 12px', fontSize: 12.5, opacity: pendingAgentId ? 1 : 0.5 }}
           >
             <Plus size={13} /> New thread
           </button>
@@ -285,7 +289,7 @@ function CopilotPageInner() {
                     aria-label="Delete thread"
                     onClick={(e) => { e.stopPropagation(); void removeThread(t.id) }}
                     disabled={busyId === t.id}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-faint)', padding: 4, flexShrink: 0 }}
+                    style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', background: 'none', border: 'none', borderRadius: 10, cursor: 'pointer', color: 'var(--ink-faint)', padding: 0, flexShrink: 0 }}
                   >
                     {busyId === t.id ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={13} />}
                   </button>
@@ -298,18 +302,22 @@ function CopilotPageInner() {
 
       {/* Conversation */}
       {canCompose ? (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-2)' }}>
-          <div style={{ background: 'var(--panel)', borderBottom: '1px solid var(--line)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <div className={styles.conversation} data-open={mobileComposeOpen} style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-2)' }}>
+          <div className={styles.conversationHeader} style={{ background: 'var(--panel)', borderBottom: '1px solid var(--line)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <button type="button" className={styles.backButton} aria-label="Back to Copilot threads" onClick={() => setMobileComposeOpen(false)}>
+              <ArrowLeft size={18} />
+            </button>
             {activeAgent && <AgentAvatar name={activeAgent.name} photoURL={activeAgent.photoURL} seed={activeAgent.id} size={24} />}
             <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>{activeAgent?.name ?? 'New thread'}</p>
           </div>
 
           {error && <p style={{ fontSize: 12, color: 'var(--danger)', margin: '12px 20px 0' }}>{error}</p>}
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className={styles.messages} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {messages.map((msg) => (
               <div
                 key={msg.id}
+                className={styles.message}
                 style={{
                   display: 'flex', flexDirection: 'column', gap: 4, maxWidth: '75%',
                   alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
@@ -363,6 +371,7 @@ function CopilotPageInner() {
           </div>
 
           <form
+            className={styles.composer}
             onSubmit={(e) => { e.preventDefault(); void send() }}
             style={{ background: 'var(--panel)', borderTop: '1px solid var(--line)', padding: '12px 16px', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}
           >
@@ -397,7 +406,7 @@ function CopilotPageInner() {
           </form>
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-mute)', background: 'var(--bg-2)' }}>
+        <div className={styles.emptyConversation} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-mute)', background: 'var(--bg-2)' }}>
           <div style={{ textAlign: 'center' }}>
             <MessagesSquare size={36} style={{ margin: '0 auto 12px', opacity: 0.2 }} />
             <p style={{ fontSize: 13, margin: 0 }}>Select a thread or choose an agent to start one</p>

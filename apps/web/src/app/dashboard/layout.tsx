@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin'
 import { Sidebar } from '@/components/dashboard/Sidebar'
+import styles from './layout.module.css'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies()
@@ -33,10 +34,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
       .get()).empty
 
     return (
-      <div style={{ display: 'flex', height: '100%' }}>
+      <div className={styles.shell}>
         <Sidebar role={role} hasAgentAccess={hasAgentAccess} />
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <main style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-2)', padding: 24 }}>{children}</main>
+        <div className={styles.content}>
+          <main className={styles.main}>{children}</main>
         </div>
       </div>
     )

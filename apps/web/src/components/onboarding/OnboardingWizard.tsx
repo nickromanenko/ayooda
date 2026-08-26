@@ -49,7 +49,7 @@ export function OnboardingWizard() {
                   background: done || active ? 'var(--accent)' : 'var(--panel-2)',
                   color: done || active ? '#1a0e08' : 'var(--ink-mute)',
                   boxShadow: active ? '0 0 0 4px var(--accent-soft)' : 'none',
-                  transition: 'all .2s',
+                  transition: 'background-color .2s, color .2s, box-shadow .2s',
                 }}>
                   {done ? <Check size={14} strokeWidth={2.5} /> : num}
                 </div>

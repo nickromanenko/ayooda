@@ -18,6 +18,7 @@ import { getStorage } from 'firebase-admin/storage'
 import { Pinecone } from '@pinecone-database/pinecone'
 import { GoogleGenerativeAI, type EmbedContentRequest } from '@google/generative-ai'
 import {
+  deleteDocumentVectors,
   isKnowledgeSyncInterval,
   knowledgeSyncRetryAt,
   nextKnowledgeSyncAt,
@@ -311,7 +312,8 @@ async function main() {
     // keeps serving the previous index for almost the entire job instead of going dark.
     console.log(`[scraper] Replacing Pinecone vectors…`)
     const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! })
-    await pinecone.index(process.env.PINECONE_INDEX!).namespace(namespace).deleteMany({ docId })
+    const vectorNamespace = pinecone.index(process.env.PINECONE_INDEX!).namespace(namespace)
+    await deleteDocumentVectors(vectorNamespace, docId)
     await upsertVectors(pinecone, namespace, workspaceId, agentId, docId, source, allChunks, embeddings)
 
     // Mark as indexed and schedule the next refresh from completion time. Reading the

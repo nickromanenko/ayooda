@@ -22,7 +22,7 @@
 
 ## Executive summary
 
-The core product loop is real and shipped — sign up → create an agent → ingest knowledge → deploy a web widget, Telegram bot, email mailbox, Slack app, or Twilio SMS number → RAG chat with workflows, escalation, human takeover, analytics, and Stripe billing. Nine of the twelve original gaps are now resolved. Three landing claims remain broader than the implementation: the three unshipped Meta channels (GAP-04), upstream knowledge syncing beyond webpages (GAP-06), and managed private-network model endpoints (GAP-08).
+The core product loop is real and shipped — sign up → create an agent → ingest knowledge → deploy a web widget, Telegram bot, email mailbox, Slack app, or Twilio SMS number → RAG chat with workflows, escalation, human takeover, analytics, and Stripe billing. All twelve original marketing gaps are now resolved or accurately scoped on the public site. Three product opportunities remain intentionally unadvertised: Meta channels (GAP-04), upstream knowledge connectors beyond scheduled webpages (GAP-06), and managed private-network model endpoints (GAP-08).
 
 ---
 
@@ -84,14 +84,14 @@ The core product loop is real and shipped — sign up → create an agent → in
 - **Now, phase 2B (2026-08-24):** nodes can be dragged directly around the canvas with grid-snapped persisted positions. Labeled Yes, No, and Next output handles can be dragged onto condition or action nodes to create or rewire paths, with a live connection preview, connected-port states, drop-target emphasis, and immediate cycle prevention. Keyboard selection, auto-layout, and inspector connection selects remain available as accessible alternatives.
 - **Status:** ✅ Implemented · **Priority:** P1 (resolved)
 
-### 🟠 GAP-04 — Channels: "ten channels" — email, Slack, and SMS now ship, 3 channels remain
-- **Claim:** FAQ *"Live chat, email, WhatsApp, Messenger, Instagram, SMS, Slack, in-app widgets"* · pricing *"Collaborative inbox for all customer emails"* · *"One agent. Ten channels."*
+### ✅ GAP-04 — Channel marketing aligned; five channels ship
+- **Current claim:** *"One agent. Five channels."* The FAQ names the web widget, Telegram, email, Slack, and Twilio SMS.
 - **Was:** `ChannelType` was only `'web_widget' | 'telegram'`. Deploy page said *"Email and Slack are on the roadmap."*
 - **Now (2026-08-22):** the **email channel ships** — `ChannelType` is `'web_widget' | 'telegram' | 'email'`. Inbound mail (Resend webhook, Svix-verified) is threaded into a conversation, the agent answers via RAG and auto-replies, and operator replies from the inbox send email too. See `routes/email.ts`, `lib/email/{client,parse,svix}.ts`, `routes/agent-channels.ts`, `routes/conversations.ts`, and the Deploy page's email panel.
 - **Now, Slack phase 1 (2026-08-24):** an agent can connect an installed Slack bot with an encrypted Bot User OAuth Token and Signing Secret. The signed Events API route rejects replayed/forged requests and bot echoes, handles `message.im` and `app_mention`, keeps channel replies in their originating thread, deduplicates Slack retries through expiring Firestore receipts, and routes generated, workflow, and human Inbox replies back through `chat.postMessage`. The Deploy page provides the generated request URL and exact scopes/event subscriptions.
 - **Now, SMS phase 1 (2026-08-24):** an agent can connect an SMS-capable Twilio number using live-verified credentials. The Auth Token is encrypted, inbound form webhooks are checked with Twilio's official signature validator against the exact generated URL, Message SID receipts prevent duplicate replies, and text messages flow through the same RAG/workflow, takeover, and Inbox operator-reply paths. Media-only MMS is intentionally outside phase 1.
 - **Still missing:** WhatsApp, Messenger, Instagram. Slack installation is manual-token based; multi-workspace Slack OAuth distribution is a later phase.
-- **Status:** 🟠 Partial (web widget + Telegram + email + Slack + SMS ship; 3 channels don't) · **Priority:** P1
+- **Status:** ✅ Marketing aligned. WhatsApp, Messenger, and Instagram remain product opportunities and are not advertised as available. · **Priority:** P1 product roadmap
 
 ### ✅ GAP-05 — Advertised analytics now ship
 - **Claim:** *"Resolution rate, CSAT, hand-off causes, confidence trends — all in real time, all exportable."* Hero *"resolution time 00:04.1"* / *"1.8s first reply"*.
@@ -102,11 +102,11 @@ The core product loop is real and shipped — sign up → create an agent → in
 - **Now (2026-08-23):** every response records a normalized **knowledge confidence** from its strongest retrieval match. Per-agent atomic counters and daily buckets power a 30-day trend, average, and low-confidence rate; conversation-level values are included in CSV exports. The dashboard explicitly distinguishes retrieval support from guaranteed answer correctness.
 - **Status:** ✅ Implemented. The hero's exact "1.8s / 00:04.1" values remain illustrative rather than live workspace data. · **Priority:** P1 (resolved)
 
-### 🟠 GAP-06 — Auto-syncing knowledge ships for webpages only
-- **Claim:** *"Ayooda auto-syncs with helpdesk articles, docs, and product changes — no more stale answers."*
+### ✅ GAP-06 — Knowledge-sync marketing aligned
+- **Current claim:** Website sources can refresh daily, weekly, or monthly or sync on demand; uploaded documents can be replaced when they change.
 - **Was:** Ingestion was manual (paste URL / upload) and re-index required `POST /:id/reindex`.
 - **Now (2026-08-23):** webpage sources can be refreshed daily, weekly, or monthly from the Knowledge dashboard. The existing internal sweep claims due sources transactionally, launches re-ingestion, prevents duplicate jobs with a one-hour recovery lease, and retries failures with bounded backoff. The dashboard exposes next/last sync state, errors, and a manual **Sync now** action. Uploaded files remain manual because their stored content is immutable; replacing a file requires a new upload.
-- **Status:** 🟠 Partial. Scheduled webpage refresh ships, but the broader claim implies live upstream helpdesk/doc/product integrations that are not implemented. Uploaded files also remain manual. · **Priority:** P2
+- **Status:** ✅ Marketing aligned. Live upstream helpdesk/doc/product connectors remain a product opportunity and are not advertised as shipped. · **Priority:** P2 product roadmap
 
 ### ✅ GAP-07 — "Test before you ship" sandbox now ships
 - **Claim:** *"Use the sandbox — real chat widget, fake traffic — to stress-test every flow."*
@@ -114,14 +114,14 @@ The core product loop is real and shipped — sign up → create an agent → in
 - **Now (2026-08-23):** every agent has a dedicated **Test** tab with a widget-style chat preview, staged knowledge/uncertainty/hand-off scenarios, live retrieval sources and confidence, real escalation-rule evaluation, session reset, and an explicit opt-in for connected tools. Test traffic is stored under per-user `sandboxSessions`, excluded from the inbox, customer analytics, scoring, confidence trends, and conversation quotas, and automatically purged after seven days.
 - **Status:** ✅ Implemented · **Priority:** P2 (resolved)
 
-### 🟠 GAP-08 — Bring-your-own LLM / custom endpoint
-- **Claim:** *"Claude, GPT, Llama, or your own model"* · *"Custom endpoint: your.company.internal"* · *"Llama 3.3 70B · Meta self-hosted"*.
+### ✅ GAP-08 — Model and custom-endpoint marketing aligned
+- **Current claim:** Choose from the live AI Gateway catalog or connect a public OpenAI-compatible HTTPS endpoint. The model illustration labels Llama through AI Gateway and the custom endpoint as public HTTPS-compatible.
 - **Was:** 6 fixed models used one platform Gateway key. The runtime could decrypt an agent key, but no API or dashboard flow could ever set one.
 - **Now (2026-08-23):** workspace owners can add, replace, or remove a per-agent Vercel AI Gateway key from the agent's Security tab. Keys are verified against the authenticated, non-generative credit endpoint before being encrypted with AES-256-GCM; API responses expose only masked status. Customer chat, Copilot, scoring, and memory automatically prefer the agent key and return to the platform fallback when it is removed.
 - **Now, phase 2 (2026-08-23):** the agent editor discovers the live Gateway catalog, filters it to language models, and provides search, provider filtering, context size, and per-token pricing. Dynamic selections—including the catalog's Meta Llama models—are verified server-side before storage. The six original models remain recommended defaults and a five-minute server cache plus graceful fallback keeps editing available during Gateway catalog outages.
 - **Now, phase 3 (2026-08-24):** owners can connect each agent to a public HTTPS OpenAI-compatible endpoint with a provider API key or explicit keyless mode. Ayooda verifies the configured model through the endpoint's non-generative `/models` response, encrypts the secret, and routes customer chat, Copilot, scoring, and memory through the custom model. Runtime requests are confined to the verified base URL, reject redirects, and re-check DNS to block private-address SSRF; removing the endpoint immediately restores AI Gateway.
-- **Still missing:** the literal `your.company.internal` example requires deployment-level private networking/VPC support. The hosted product intentionally accepts only publicly resolvable HTTPS endpoints; a self-hosted Ayooda API can be adapted to reach private inference infrastructure within its own trusted network.
-- **Status:** 🟠 Partial (Gateway BYOK, dynamic model/Llama selection, and public OpenAI-compatible/self-hosted endpoints ship; managed private-network connectivity does not) · **Priority:** P2
+- **Still missing:** private internal-hostname access requires deployment-level networking/VPC support. The hosted product intentionally accepts only publicly resolvable HTTPS endpoints; a self-hosted Ayooda API can be adapted to reach private inference infrastructure within its own trusted network.
+- **Status:** ✅ Marketing aligned. Managed private-network connectivity remains a deployment-level product opportunity and is not advertised as shipped. · **Priority:** P2 product roadmap
 
 ### ✅ GAP-09 — Security/trust claims grounded in shipped controls
 - **Was:** the landing page claimed *"Enterprise-grade encryption, scoped API keys, SSO"*, *"GDPR-compliant"*, and *"Europe-hosted"* without SSO/SAML/OIDC, scoped API keys, formal compliance evidence, or code-enforced EU residency.
@@ -146,14 +146,14 @@ The core product loop is real and shipped — sign up → create an agent → in
 
 ---
 
-## 3. Current gap priorities
+## 3. Remaining product opportunities (not public-site gaps)
 
 | Order | Item | Status | Priority |
 |---|---|---|---|
-| 1 | **WhatsApp, Messenger, and Instagram channels** (GAP-04) | 🟠 Five channels ship; three advertised Meta channels remain | P1 |
-| 2 | **Upstream knowledge connectors/sync** (GAP-06) | 🟠 Scheduled webpages ship; uploaded files and upstream helpdesk/doc systems remain manual | P2 |
-| 3 | **Managed private-network model connectivity** (GAP-08) | 🟠 Public OpenAI-compatible endpoints ship; hosted VPC/private DNS connectivity does not | P2 |
-| — | **GAP-01/02/03/05/07/09/10/11/12** | ✅ Resolved | — |
+| 1 | **WhatsApp, Messenger, and Instagram channels** (GAP-04) | Five channels ship; Meta channels remain future work | P1 |
+| 2 | **Upstream knowledge connectors/sync** (GAP-06) | Scheduled webpages ship; upstream systems remain future work | P2 |
+| 3 | **Managed private-network model connectivity** (GAP-08) | Public HTTPS endpoints ship; hosted VPC/private DNS remains future work | P2 |
+| — | **All twelve public-site gaps** | ✅ Claims now match the release | — |
 
 ---
 

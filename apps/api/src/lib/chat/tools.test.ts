@@ -160,12 +160,18 @@ describe('runAgentTurn', () => {
 
   test('passes no tools when the workspace has none', async () => {
     let seenTools: unknown = 'unset'
+    let seenTransform: unknown
     const gen = runAgentTurn(
       { model: 'm', systemPrompt: 's', messages: [], apiKey: 'k' }, [], fakeTrace,
-      { streamText: (o) => { seenTools = o.tools; return fakeStream(['x'], {}) } },
+      { streamText: (o) => {
+        seenTools = o.tools
+        seenTransform = o.experimental_transform
+        return fakeStream(['x'], {})
+      } },
     )
     while (!(await gen.next()).done) { /* drain */ }
     expect(seenTools).toBeUndefined()
+    expect(seenTransform).toBeFunction()
   })
 
   test('a customer tool wins a name collision with a skill tool of the same name', async () => {

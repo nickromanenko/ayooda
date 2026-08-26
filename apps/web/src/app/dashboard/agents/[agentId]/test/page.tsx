@@ -19,6 +19,7 @@ import type { AgentDoc } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { readSSE } from '@/lib/sse'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
+import MarkdownMessage from '@/components/dashboard/MarkdownMessage'
 import { Loading } from '@/components/dashboard/Loading'
 import styles from './page.module.css'
 
@@ -27,7 +28,6 @@ type SandboxMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
-  sources?: Source[]
   escalated?: boolean
 }
 type SandboxStatus = 'ready' | 'waiting' | 'assigned' | 'resolved'
@@ -51,6 +51,16 @@ const SCENARIOS = [
   { label: 'Uncertain question', icon: MessageCircleQuestion, prompt: 'Tell me about a policy that is not covered in your documentation.' },
   { label: 'Human hand-off', icon: UserRoundCheck, prompt: 'I need to speak with a human support agent.' },
 ] as const
+
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    const fallback = window.setTimeout(resolve, 50)
+    window.requestAnimationFrame(() => {
+      window.clearTimeout(fallback)
+      resolve()
+    })
+  })
+}
 
 export default function AgentSandboxPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = use(params)
@@ -119,7 +129,11 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
     try {
       const res = await apiRequest(`/agents/${agentId}/sandbox/chat`, {
         method: 'POST',
-        body: JSON.stringify({ message: text, sessionId, allowTools }),
+        body: JSON.stringify({
+          message: text,
+          ...(sessionId ? { sessionId } : {}),
+          allowTools,
+        }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { error?: string }
@@ -133,10 +147,11 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
       let resultSources: Source[] = []
       let escalated = false
       await readSSE(res, {
-        onEvent: (event, data) => {
+        onEvent: async (event, data) => {
           if (event === 'chunk') {
             buffer += (JSON.parse(data) as { text: string }).text
             setPending(buffer)
+            await waitForPaint()
           } else if (event === 'done') {
             const result = JSON.parse(data) as {
               sessionId: string
@@ -154,7 +169,7 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
               setStreaming(false)
               setMessages((current) => [...current, {
                 id: crypto.randomUUID(), role: 'assistant', content: buffer,
-                sources: resultSources, escalated,
+                escalated,
               }])
               setPending('')
             } else if (result.silent) {
@@ -176,6 +191,17 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
   function chooseScenario(prompt: string) {
     setInput(prompt)
     inputRef.current?.focus()
+  }
+
+  function assistantAvatar() {
+    if (agent?.photoURL) {
+      return (
+        <span className={styles.agentMessageAvatar}>
+          <AgentAvatar name={agent.name} photoURL={agent.photoURL} seed={agent.id} size={25} />
+        </span>
+      )
+    }
+    return <span className={styles.messageAvatar}><Bot size={13} /></span>
   }
 
   const confidence = lastSources.length
@@ -276,14 +302,11 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
               ) : (
                 messages.map((message) => (
                   <div key={message.id} className={`${styles.messageRow} ${message.role === 'user' ? styles.messageRowUser : ''}`}>
-                    {message.role === 'assistant' && <span className={styles.messageAvatar}><Bot size={13} /></span>}
+                    {message.role === 'assistant' && assistantAvatar()}
                     <div className={`${styles.bubble} ${message.role === 'user' ? styles.userBubble : styles.assistantBubble} ${message.escalated ? styles.escalatedBubble : ''}`}>
-                      {message.content}
-                      {!!message.sources?.length && (
-                        <span className={styles.sourceList}>
-                          {message.sources.map((source) => <span key={source.docId} className={styles.sourceChip}>{source.source}</span>)}
-                        </span>
-                      )}
+                      {message.role === 'assistant'
+                        ? <MarkdownMessage content={message.content} className={styles.markdown} />
+                        : message.content}
                     </div>
                     {message.role === 'user' && <span className={styles.messageAvatar}><User size={13} /></span>}
                   </div>
@@ -292,9 +315,9 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
 
               {streaming && (
                 <div className={styles.messageRow}>
-                  <span className={styles.messageAvatar}><Bot size={13} /></span>
+                  {assistantAvatar()}
                   <div className={`${styles.bubble} ${styles.assistantBubble}`}>
-                    {pending || (
+                    {pending ? <MarkdownMessage content={pending} className={styles.markdown} /> : (
                       <span className={styles.typing} aria-label="Agent is typing">
                         <span className={styles.typingDot} /><span className={styles.typingDot} /><span className={styles.typingDot} />
                       </span>

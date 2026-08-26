@@ -19,6 +19,9 @@ describe('sandbox request validation', () => {
     expect(validateSandboxChatBody({ message: ' hello ' })).toEqual({
       ok: true, value: { message: 'hello', allowTools: false },
     })
+    expect(validateSandboxChatBody({ message: 'hi', sessionId: null, allowTools: false })).toEqual({
+      ok: true, value: { message: 'hi', allowTools: false },
+    })
     expect(validateSandboxChatBody({ message: 'hi', sessionId: 'abc_123', allowTools: true })).toEqual({
       ok: true, value: { message: 'hi', sessionId: 'abc_123', allowTools: true },
     })

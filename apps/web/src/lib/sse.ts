@@ -5,7 +5,7 @@
  */
 export async function readSSE(
   res: Response,
-  handlers: { onEvent: (event: string, data: string) => void },
+  handlers: { onEvent: (event: string, data: string) => void | Promise<void> },
 ): Promise<void> {
   if (!res.body) return
   const reader = res.body.getReader()
@@ -27,7 +27,7 @@ export async function readSSE(
         if (line.startsWith('event:')) event = line.slice(6).trim()
         else if (line.startsWith('data:')) data += line.slice(5).trim()
       }
-      if (data) handlers.onEvent(event, data)
+      if (data) await handlers.onEvent(event, data)
     }
   }
 }

@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo, CSSProperties, ReactNode, ComponentType } from 'react'
 import Link from 'next/link'
-import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier, SiWhatsapp, SiGmail, SiAirtable, SiGraphql, SiModelcontextprotocol } from 'react-icons/si'
-import { Sparkles, Zap, Rocket, Webhook, Braces, Database, Boxes, Network } from 'lucide-react'
+import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier, SiGmail, SiAirtable, SiGraphql, SiModelcontextprotocol } from 'react-icons/si'
+import { Sparkles, Zap, Rocket, Webhook, Braces, Database, Boxes, Network, Send } from 'lucide-react'
 import { LANDING_LINKS } from '@/lib/landing-links'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
@@ -103,7 +103,7 @@ function Nav() {
         <div className="landing-nav-actions" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <ThemeToggle />
           <Link href="/login" className="btn btn-ghost" style={{ padding: '9px 14px', fontSize: 13 }}>Sign in</Link>
-          <Link href="/signup" className="btn btn-primary" style={{ padding: '9px 14px', fontSize: 13 }}>Start free →</Link>
+          <Link href="/signup" className="btn btn-primary landing-cta" style={{ padding: '9px 14px', fontSize: 13 }}>Start free →</Link>
         </div>
         <button
           type="button"
@@ -127,7 +127,7 @@ function Nav() {
           <ThemeToggle showLabel className="landing-mobile-theme" />
           <div className="landing-mobile-actions">
             <Link href="/login" className="btn btn-ghost" onClick={() => setMobileOpen(false)}>Sign in</Link>
-            <Link href="/signup" className="btn btn-primary" onClick={() => setMobileOpen(false)}>Start free →</Link>
+            <Link href="/signup" className="btn btn-primary landing-cta" onClick={() => setMobileOpen(false)}>Start free →</Link>
           </div>
         </nav>
       </div>
@@ -297,7 +297,7 @@ function ChatDemo() {
 
 function Hero() {
   return (
-    <section id="top" style={{ position: 'relative', paddingTop: 140, paddingBottom: 80, overflow: 'hidden' }}>
+    <section id="top" className="landing-hero" style={{ position: 'relative', paddingTop: 140, paddingBottom: 80, overflow: 'hidden' }}>
       <div aria-hidden style={{
         position: 'absolute', top: -200, left: '50%', transform: 'translateX(-50%)',
         width: 1100, height: 1100, borderRadius: '50%',
@@ -346,7 +346,7 @@ function Hero() {
 
         <Reveal delay={340}>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-            <Link href="/signup" className="btn btn-primary">Start free trial</Link>
+            <Link href="/signup" className="btn btn-primary landing-cta">Start free trial</Link>
             <a href={LANDING_LINKS.demo} className="btn btn-ghost landing-cta">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: 2 }}><path d="M2 1l9 5-9 5V1z" fill="currentColor" /></svg>
               Watch product demo
@@ -446,14 +446,14 @@ function Why() {
     { title: 'Built for the real world.', body: "AI doesn’t live in sandboxes. Ayooda handles messy, real customer conversations, with real data behind them, and doesn’t flinch when things get complicated.", glyph: 'world' },
     { title: 'Engineered for the long run.', body: 'Not a trend. Ayooda is modular, fast, and architected to evolve alongside your support stack for the next decade.', glyph: 'long' },
     { title: 'Transparent by design.', body: 'Every decision, route, and retrieval is visible and editable. You always know what your agent is doing — and why.', glyph: 'eye' },
-    { title: 'Grounded in your truth.', body: 'Every answer comes from your data — docs, helpdesk, CRM, product. No hallucinations. No guesses.', glyph: 'root' },
+    { title: 'Grounded in your truth.', body: 'Ayooda retrieves context from your indexed websites and documents, surfaces confidence, and can hand uncertain conversations to your team.', glyph: 'root' },
     { title: 'Autonomy with accountability.', body: 'Ayooda resolves routine tickets end-to-end and knows when to loop in a human, with full context attached.', glyph: 'balance' },
   ]
   return (
-    <section id="why" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
+    <section id="why" className="landing-section" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
       <div className="container">
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 80, alignItems: 'start' }}>
-          <div style={{ position: 'sticky', top: 120 }}>
+        <div className="landing-two-column" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 80, alignItems: 'start' }}>
+          <div className="landing-sticky" style={{ position: 'sticky', top: 120 }}>
             <Reveal>
               <div className="eyebrow" style={{ marginBottom: 18 }}>
                 <span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Why Ayooda
@@ -521,7 +521,7 @@ function TrustBadge({ badge, h, b }: { badge: string; h: string; b: string }) {
 function SolutionsBand() {
   const cards = [
     { h: 'Multi-turn context.', b: 'Unlike scripted bots, Ayooda threads conversations across sessions — remembers your customer, the product, and the past ticket.' },
-    { h: 'Deep integrations.', b: 'Connects to your CRM, helpdesk, docs, and product data — live, not cached.' },
+    { h: 'Deep integrations.', b: 'Connect provider bundles, custom REST actions, and MCP servers to bring useful customer and product context into each turn.' },
     { h: 'Smart escalation.', b: 'Knows its limits. Routes to the right human with a compact summary of context.' },
   ]
   const trust = [
@@ -530,11 +530,11 @@ function SolutionsBand() {
     { badge: 'verified', h: 'Inbound traffic is verified.', b: 'Slack, SMS, and email webhooks are signature-checked before customer messages enter a workflow.' },
   ]
   return (
-    <section style={{ padding: '100px 0' }}>
+    <section className="landing-section" style={{ padding: '100px 0' }}>
       <div className="container">
         <Reveal>
           <h2 className="display" style={{ fontSize: 'clamp(40px, 5vw, 72px)', margin: 0, textAlign: 'center', textWrap: 'balance' as CSSProperties['textWrap'] }}>
-            One agent. Ten channels.<br />
+            One agent. Five channels.<br />
             <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>A thousand possibilities.</em>
           </h2>
         </Reveal>
@@ -584,7 +584,7 @@ function FeatureMock({ kind }: { kind: string }) {
     return (
       <div style={wrap}>
         <div className="pill" style={{ marginBottom: 18 }}><span className="dot" />MCP connections · live</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <div className="landing-tool-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           {tools.map(({ name, Icon, color }, i) => (
             <div key={name} style={{ padding: '12px 14px', border: '1px solid var(--line)', borderRadius: 12, background: 'var(--bg-2)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, animation: `fade-up .5s ${i * 0.06}s backwards ease` }}>
               <Icon size={20} color={color} style={{ flexShrink: 0 }} />{name}
@@ -620,8 +620,8 @@ function FeatureMock({ kind }: { kind: string }) {
     const models = [
       { n: 'Claude Sonnet 4.5', a: 'Anthropic', active: true },
       { n: 'GPT-5', a: 'OpenAI', active: false },
-      { n: 'Llama 3.3 70B', a: 'Meta · self-hosted', active: false },
-      { n: 'Custom endpoint', a: 'your.company.internal', active: false },
+      { n: 'Llama 3.3 70B', a: 'Meta · AI Gateway', active: false },
+      { n: 'Custom endpoint', a: 'OpenAI-compatible HTTPS', active: false },
     ]
     return (
       <div style={wrap}>
@@ -733,16 +733,16 @@ function Features() {
   const tabs = [
     { key: 'integrate', label: 'Integrate', h: 'Resolve complex tickets with real context.', b: 'Ayooda connects to your tools through the Model Context Protocol — live data, live actions, real resolutions, not just redirections.' },
     { key: 'activate', label: 'Activate', h: 'Launch AI support without writing code.', b: 'Anyone on your team can train and deploy Ayooda in minutes. No developers, no long onboarding, no surprises.' },
-    { key: 'configure', label: 'Configure', h: 'Pick the brain that fits your business.', b: 'Claude, GPT, Llama, or your own model — Ayooda swaps backends instantly. You stay in control of data, tone, and spend.' },
+    { key: 'configure', label: 'Configure', h: 'Pick the brain that fits your business.', b: 'Choose from the live AI Gateway catalog or connect a public OpenAI-compatible HTTPS endpoint. You stay in control of data, tone, and spend.' },
     { key: 'workflow', label: 'Workflows', h: 'Design complex automations, visually.', b: 'Drag-and-drop flows to model triage, escalation, and routing logic. Every branch is auditable and testable.' },
-    { key: 'analytics', label: 'Analytics', h: 'Learn from every single conversation.', b: 'Resolution rate, CSAT, hand-off causes, confidence trends — all in real time, all exportable.' },
-    { key: 'train', label: 'Train', h: 'Your knowledge, always up to date.', b: 'Ayooda auto-syncs with helpdesk articles, docs, and product changes — no more stale answers.' },
+    { key: 'analytics', label: 'Analytics', h: 'Learn from every single conversation.', b: 'See resolution rate, CSAT, hand-off causes, confidence trends, timing, and exportable conversation data.' },
+    { key: 'train', label: 'Train', h: 'Keep your website knowledge fresh.', b: 'Schedule daily, weekly, or monthly refreshes for website sources, sync on demand, and replace uploaded documents whenever they change.' },
   ]
   const [active, setActive] = useState(0)
   const tab = tabs[active]
 
   return (
-    <section id="features" style={{ padding: '100px 0' }}>
+    <section id="features" className="landing-section" style={{ padding: '100px 0' }}>
       <div className="container">
         <Reveal>
           <div className="eyebrow" style={{ marginBottom: 18 }}><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Features</div>
@@ -752,10 +752,10 @@ function Features() {
             Everything you need. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Nothing you don&apos;t.</em>
           </h2>
         </Reveal>
-        <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 48, marginTop: 56 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '1px solid var(--line)' }}>
+        <div className="landing-feature-layout" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 48, marginTop: 56 }}>
+          <div className="landing-feature-tabs" style={{ display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '1px solid var(--line)' }}>
             {tabs.map((t, i) => (
-              <button key={t.key} onClick={() => setActive(i)} style={{
+              <button className="landing-feature-tab" data-active={i === active} key={t.key} onClick={() => setActive(i)} style={{
                 appearance: 'none', background: 'none', border: 'none',
                 textAlign: 'left', cursor: 'pointer',
                 padding: '16px 20px',
@@ -763,12 +763,12 @@ function Features() {
                 fontSize: 16, fontWeight: i === active ? 500 : 400,
                 borderLeft: `2px solid ${i === active ? 'var(--accent)' : 'transparent'}`,
                 marginLeft: -1,
-                transition: 'all .2s',
+                transition: 'color .2s, background-color .2s, border-color .2s',
                 fontFamily: 'var(--font-sans)',
               }}>{t.label}</button>
             ))}
           </div>
-          <div style={{ minHeight: 520 }}>
+          <div className="landing-feature-content" style={{ minHeight: 520 }}>
             <div key={tab.key} style={{ animation: 'fade-up .5s ease' }}>
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, maxWidth: 620, textWrap: 'balance' as CSSProperties['textWrap'] }}>
                 {tab.h}
@@ -831,7 +831,7 @@ function HowItWorks() {
     { n: '04', h: 'Let it run.', b: 'Watch Ayooda handle conversations in real time. Review, tweak, and keep improving.' },
   ]
   return (
-    <section id="how" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
+    <section id="how" className="landing-section" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
       <div className="container">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 56 }}>
           <Reveal><div className="eyebrow"><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}How it works</div></Reveal>
@@ -908,9 +908,9 @@ function OrbitRing({ radius, items, duration, reverse, size = 50, fontSize = 11,
 
 function Integrations() {
   return (
-    <section id="integrations" style={{ padding: '100px 0', overflow: 'hidden' }}>
+    <section id="integrations" className="landing-section" style={{ padding: '100px 0', overflow: 'hidden' }}>
       <div className="container">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 60, alignItems: 'center' }}>
+        <div className="landing-integrations" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 60, alignItems: 'center' }}>
           <div>
             <Reveal><div className="eyebrow" style={{ marginBottom: 16 }}><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Integrations</div></Reveal>
             <Reveal delay={80}>
@@ -930,7 +930,7 @@ function Integrations() {
               </div>
             </Reveal>
           </div>
-          <div style={{ position: 'relative', height: 520 }}>
+          <div className="landing-orbit" style={{ position: 'relative', height: 520 }}>
             <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
               <div style={{
                 width: 92, height: 92, borderRadius: 50,
@@ -942,7 +942,7 @@ function Integrations() {
                 zIndex: 3, position: 'relative',
               }}>Ayooda</div>
               <OrbitRing radius={130} duration={40} size={52} items={[
-                { label: 'WhatsApp', Icon: SiWhatsapp, color: '#25D366' },
+                { label: 'Telegram', Icon: Send, color: '#2AABEE' },
                 { label: 'Gmail', Icon: SiGmail, color: '#EA4335' },
                 { label: 'Intercom', Icon: SiIntercom, color: '#3B82F6' },
                 { label: 'Zendesk', Icon: SiZendesk, color: 'var(--brand-neutral)' },
@@ -1009,7 +1009,7 @@ function OutcomePlaybook() {
     { index: '03', title: 'Hand off the exceptions, already organized.', body: 'When confidence drops or a rule calls for a person, route the conversation with its context, summary, and hand-off reason intact.', proof: 'Escalation rules + shared inbox' },
   ]
   return (
-    <section id="outcomes" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
+    <section id="outcomes" className="landing-section" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
       <div className="container">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 56 }}>
           <Reveal><div className="eyebrow"><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Outcome playbook</div></Reveal>
@@ -1120,7 +1120,7 @@ function PlanCard({ plan, active }: { plan: typeof PLANS[number]; active?: boole
           </li>
         ))}
       </ul>
-      <Link href="/signup" className={plan.featured ? 'btn btn-primary' : 'btn btn-ghost'} style={{ marginTop: 22, justifyContent: 'center' }}>
+      <Link href="/signup" className={`${plan.featured ? 'btn btn-primary' : 'btn btn-ghost'} landing-cta`} style={{ marginTop: 22, justifyContent: 'center' }}>
         Start free trial
       </Link>
     </div>
@@ -1134,7 +1134,7 @@ function Pricing() {
   const payg = getPayAsYouGo(convos)
 
   return (
-    <section id="pricing" style={{ padding: '100px 0' }}>
+    <section id="pricing" className="landing-section" style={{ padding: '100px 0' }}>
       <div className="container">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 56 }}>
           <Reveal><div className="eyebrow"><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Pricing</div></Reveal>
@@ -1157,7 +1157,7 @@ function Pricing() {
           ))}
         </div>
         <Reveal>
-          <div style={{ padding: '26px 28px', borderRadius: 'var(--r-lg)', border: '1px solid var(--line)', background: 'var(--panel)', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 40, alignItems: 'center' }}>
+          <div className="landing-pricing-estimate" style={{ padding: '26px 28px', borderRadius: 'var(--r-lg)', border: '1px solid var(--line)', background: 'var(--panel)', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 40, alignItems: 'center' }}>
             <div>
               <div className="eyebrow" style={{ marginBottom: 10 }}>Estimate your bill</div>
               <h4 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 500, margin: '0 0 20px', letterSpacing: '-0.01em' }}>
@@ -1226,17 +1226,17 @@ function FAQItem({ q, a, defaultOpen }: { q: string; a: string; defaultOpen?: bo
 
 function FAQ() {
   const faqs = [
-    { q: "What exactly is Ayooda?", a: "Ayooda is an AI support agent that answers customer questions, takes actions in your tools, and escalates to humans when it should. It plugs into your existing helpdesk rather than replacing it." },
-    { q: "How accurate are the answers?", a: "Every reply is grounded in your data — docs, knowledge base, CRM, product. Ayooda cites the source internally and abstains when it isn't confident, routing the ticket to a human instead of guessing." },
-    { q: "What if Ayooda gets something wrong?", a: "It admits it, flags the ticket for review, and hands off with full context. You can label outcomes in the dashboard — Ayooda learns from your corrections automatically." },
-    { q: "Which channels does it work on?", a: "Live chat, email, WhatsApp, Messenger, Instagram, SMS, Slack, in-app widgets — anywhere your customers already write to you." },
+    { q: "What exactly is Ayooda?", a: "Ayooda is an AI support agent that answers customer questions, takes guarded actions in connected tools, and follows your workflows for hand-offs and routing." },
+    { q: "How accurate are the answers?", a: "Ayooda retrieves relevant context from your indexed websites and documents and records retrieval confidence. You can configure low-confidence workflows to route uncertain conversations to a human." },
+    { q: "What if Ayooda gets something wrong?", a: "Your team can take over in the shared inbox, review the conversation context, and refine the agent's knowledge, instructions, or workflows before the next interaction." },
+    { q: "Which channels does it work on?", a: "Ayooda currently supports the web widget, Telegram, email, Slack, and Twilio SMS. Every channel feeds the same inbox and agent workflows." },
     { q: "Will it replace my support team?", a: "No. It takes repetitive work off the queue so your team can focus on the hard, human-facing problems—where their judgment and care add the most value." },
-    { q: "How long to get started?", a: "Most teams go live within an afternoon. If you have docs and a helpdesk, setup is a matter of minutes. No engineering required." },
+    { q: "How long to get started?", a: "You can create an agent, add a website or documents, and test it during the guided setup. Going live then depends on the channel you choose and its provider configuration." },
   ]
   return (
-    <section id="faq" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
+    <section id="faq" className="landing-section" style={{ padding: '100px 0', background: 'var(--bg-2)' }}>
       <div className="container">
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 80 }}>
+        <div className="landing-faq-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 80 }}>
           <div>
             <Reveal><div className="eyebrow" style={{ marginBottom: 16 }}><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}FAQ</div></Reveal>
             <Reveal delay={80}>
@@ -1267,7 +1267,7 @@ function FAQ() {
 
 function FinalCTA() {
   return (
-    <section style={{ padding: '120px 0', position: 'relative', overflow: 'hidden' }}>
+    <section className="landing-final-cta" style={{ padding: '120px 0', position: 'relative', overflow: 'hidden' }}>
       <div aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 70% 60% at 50% 50%, var(--accent-soft), transparent 70%)' }} />
       <div aria-hidden className="grid-bg" style={{ position: 'absolute', inset: 0, maskImage: 'radial-gradient(ellipse 60% 50% at 50% 50%, #000 40%, transparent 90%)', WebkitMaskImage: 'radial-gradient(ellipse 60% 50% at 50% 50%, #000 40%, transparent 90%)', opacity: 0.5, pointerEvents: 'none' }} />
       <div className="container" style={{ position: 'relative', textAlign: 'center' }}>
@@ -1282,8 +1282,8 @@ function FinalCTA() {
           </p>
         </Reveal>
         <Reveal delay={200}>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-            <Link href="/signup" className="btn btn-primary">Start free trial</Link>
+          <div className="landing-footer-cta" style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+            <Link href="/signup" className="btn btn-primary landing-cta">Start free trial</Link>
             <a href={LANDING_LINKS.demo} className="btn btn-ghost landing-cta">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ marginLeft: 2 }}><path d="M2 1l9 5-9 5V1z" fill="currentColor" /></svg>
               Watch product demo
@@ -1304,7 +1304,7 @@ function Footer() {
   return (
     <footer style={{ padding: '32px 0', borderTop: '1px solid var(--line)' }}>
       <div className="container">
-        <div style={{ display: 'flex', gap: 16, justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
+        <div className="landing-footer-row" style={{ display: 'flex', gap: 16, justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
           <span>© 2026 Ayooda · All rights reserved</span>
           <span>Made for the humans behind the inbox.</span>
         </div>

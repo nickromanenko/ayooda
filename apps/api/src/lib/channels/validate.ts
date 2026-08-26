@@ -35,6 +35,14 @@ export function validateWidgetAppearance(
   // Defaults to showing the line: an older client that omits the field, or a
   // malformed value, must never be read as permission to hide attribution.
   const showBranding = a.showBranding !== false
+  const rawDomains = Array.isArray(a.allowedDomains) ? a.allowedDomains : []
+  if (rawDomains.length > 20) return fail('Add no more than 20 allowed domains.')
+  const allowedDomains = [...new Set(rawDomains.map((value) => typeof value === 'string' ? value.trim().toLowerCase() : ''))]
+    .filter(Boolean)
+  const hostname = /^(?:\*\.)?(?:localhost|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63})$/
+  if (allowedDomains.some((domain) => !hostname.test(domain))) {
+    return fail('Use hostnames such as example.com or *.example.com, without paths.')
+  }
 
   return {
     ok: true,
@@ -43,6 +51,7 @@ export function validateWidgetAppearance(
       widgetPosition: position,
       welcomeMessage: welcome,
       showBranding,
+      allowedDomains,
     },
   }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
-import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink, Smartphone } from 'lucide-react'
+import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink, Smartphone, X } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import { Loading } from '@/components/dashboard/Loading'
@@ -18,8 +18,10 @@ interface Channel {
   type: string
   embedCode?: string
   isActive: boolean
+  lastSeenAt?: string | null
+  lastSeenOrigin?: string | null
   brandingLocked?: boolean
-  config?: Partial<Appearance> & { agentName?: string; fromAddress?: string; inboxAddress?: string; accountSid?: string; fromNumber?: string }
+  config?: Partial<Appearance> & { agentName?: string; agentPhotoURL?: string | null; fromAddress?: string; inboxAddress?: string; accountSid?: string; fromNumber?: string }
   telegram?: { botUsername: string; botId: number }
   slack?: { teamId: string; teamName: string; botUserId: string }
   twilio?: { accountSid: string; fromNumber: string }
@@ -52,6 +54,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [widgetBusy, setWidgetBusy] = useState(false)
+  const [confirmWidgetRemoval, setConfirmWidgetRemoval] = useState(false)
   const [botToken, setBotToken] = useState('')
   const [telegramError, setTelegramError] = useState('')
   const [telegramBusy, setTelegramBusy] = useState(false)
@@ -99,7 +102,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
     try {
       await apiRequest(`${base}/web-widget`, { method: 'DELETE' })
       await fetchChannels()
-    } finally { setWidgetBusy(false) }
+    } finally { setWidgetBusy(false); setConfirmWidgetRemoval(false) }
   }
 
   function applyAppearance(next: Appearance) {
@@ -267,7 +270,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
               </p>
             </div>
           </div>
-          <span style={pill(Boolean(widget?.isActive))}>{widget ? 'Live' : 'Off'}</span>
+          <span style={pill(Boolean(widget?.lastSeenAt))}>{widget ? (widget.lastSeenAt ? 'Installed' : 'Configured') : 'Off'}</span>
         </div>
 
         <div style={{ padding: 20 }}>
@@ -282,13 +285,17 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
             </>
           ) : (
             <>
+              <div style={{ marginBottom: 16, padding: '11px 13px', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--bg-2)' }}>
+                <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>
+                  {widget.lastSeenAt ? `Installation detected${widget.lastSeenOrigin ? ` on ${widget.lastSeenOrigin}` : ''}.` : 'Waiting to detect the first page load.'}
+                </p>
+                <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-mute)' }}>
+                  {widget.lastSeenAt ? `Last seen ${new Date(widget.lastSeenAt).toLocaleString()}` : 'Install the code below, then reload your website.'}
+                </p>
+              </div>
               <p style={label}>Embed code</p>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 12 }}>
-                Paste this into the{' '}
-                <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent)' }}>&lt;head&gt;</code>
-                {' '}or before{' '}
-                <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent)' }}>&lt;/body&gt;</code>
-                {' '}of every page on your website.
+                Add this once to your site-wide layout or app shell. For a traditional multi-page site, include it on every page.
               </p>
               <div style={{ position: 'relative' }}>
                 <pre style={{
@@ -304,54 +311,100 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
                   onClick={() => void copyEmbed(widget.embedCode ?? '')}
                   aria-label="Copy embed code"
                   style={{
-                    position: 'absolute', top: 10, right: 10,
-                    padding: 6, borderRadius: 8, cursor: 'pointer',
+                    position: 'absolute', top: 7, right: 7,
+                    width: 40, height: 40, padding: 0, borderRadius: 8, cursor: 'pointer',
                     background: copied ? 'var(--mint)' : 'var(--panel-2)',
                     border: '1px solid var(--line)',
                     color: copied ? '#081a10' : 'var(--ink-dim)',
-                    display: 'flex', transition: 'all .15s',
+                    display: 'grid', placeItems: 'center', transition: 'background-color .15s, color .15s',
                   }}
                 >
                   {copied ? <Check size={13} /> : <Copy size={13} />}
                 </button>
               </div>
 
-              <div style={{ marginTop: 20, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <p style={{ ...label, marginBottom: 0 }}>How to install</p>
-                {[
-                  'Copy the script tag above',
-                  "Paste it into your website's HTML — inside <head> or before </body>",
-                  'The widget will appear automatically on every page',
-                ].map((step, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <span style={{
-                      flexShrink: 0, width: 20, height: 20, borderRadius: 50,
-                      background: 'var(--accent-soft)', border: '1px solid rgba(245,165,36,0.25)',
-                      color: 'var(--accent)', fontSize: 10, fontWeight: 700,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: 'var(--font-mono)',
-                    }}>{i + 1}</span>
-                    <p style={{ fontSize: 12.5, color: 'var(--ink-dim)', margin: 0, lineHeight: 1.5 }}>{step}</p>
+              <details style={{ marginTop: 20, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
+                <summary style={{ padding: '14px 16px', cursor: 'pointer', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600 }}>
+                  Installation guides
+                  <span style={{ marginLeft: 8, color: 'var(--ink-mute)', fontSize: 11, fontWeight: 400 }}>HTML · Next.js · Angular</span>
+                </summary>
+                <div style={{ borderTop: '1px solid var(--line)', padding: '4px 16px 16px' }}>
+                  <div style={{ paddingTop: 14 }}>
+                    <p style={{ ...label, marginBottom: 5 }}>HTML or multi-page website</p>
+                    <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, lineHeight: 1.6 }}>
+                      Paste the script inside <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>&lt;head&gt;</code> or before <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>&lt;/body&gt;</code> on every page where the widget should appear.
+                    </p>
                   </div>
-                ))}
-              </div>
+
+                  <div style={{ paddingTop: 16 }}>
+                    <p style={{ ...label, marginBottom: 5 }}>Next.js</p>
+                    <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 8px', lineHeight: 1.6 }}>
+                      Add this once to <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>app/layout.tsx</code>. Next.js keeps it loaded during client-side navigation.
+                    </p>
+                    <pre style={{ background: 'var(--bg)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', fontSize: 11, borderRadius: 8, padding: 12, border: '1px solid var(--line-2)', overflowX: 'auto', lineHeight: 1.55, margin: 0 }}>{`import Script from 'next/script'
+
+<Script
+  src="https://cdn.ayooda.live/widget.js"
+  data-agent-id="${widget.id}"
+  strategy="afterInteractive"
+/>`}</pre>
+                    <p style={{ fontSize: 11, color: 'var(--ink-mute)', margin: '7px 0 0', lineHeight: 1.5 }}>
+                      Using the Pages Router? Put the same <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>Script</code> component in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>pages/_app.tsx</code>.
+                    </p>
+                  </div>
+
+                  <div style={{ paddingTop: 16 }}>
+                    <p style={{ ...label, marginBottom: 5 }}>Angular</p>
+                    <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, lineHeight: 1.6 }}>
+                      Paste the script once before <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>&lt;/body&gt;</code> in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>src/index.html</code>. It stays mounted across Angular Router navigation.
+                    </p>
+                  </div>
+
+                  <p style={{ fontSize: 11, color: 'var(--ink-mute)', margin: '16px 0 0', paddingTop: 12, borderTop: '1px solid var(--line)', lineHeight: 1.55 }}>
+                    For any single-page app, install the widget only once in the root layout—do not add it to individual routes.
+                  </p>
+                </div>
+              </details>
 
               <WidgetAppearance
                 agentId={agentId}
                 agentName={widget.config?.agentName ?? 'Support Agent'}
+                agentPhotoURL={widget.config?.agentPhotoURL ?? null}
                 brandingLocked={widget.brandingLocked !== false}
                 initial={{
                   widgetColor: widget.config?.widgetColor ?? DEFAULT_WIDGET_COLOR,
                   widgetPosition: widget.config?.widgetPosition ?? DEFAULT_WIDGET_POSITION,
                   welcomeMessage: widget.config?.welcomeMessage ?? '',
                   showBranding: widget.config?.showBranding !== false,
+                  allowedDomains: widget.config?.allowedDomains ?? [],
                 }}
                 onSaved={applyAppearance}
               />
 
-              <button type="button" onClick={() => void removeWidget()} disabled={widgetBusy} className="btn btn-ghost" style={{ marginTop: 20, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: 'var(--danger)' }}>
-                {widgetBusy ? 'Removing…' : 'Remove widget'}
+              <button type="button" onClick={() => setConfirmWidgetRemoval(true)} disabled={widgetBusy} className="btn btn-ghost" style={{ marginTop: 20, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: 'var(--danger)' }}>
+                Remove widget
               </button>
+
+              {confirmWidgetRemoval && (
+                <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmWidgetRemoval(false) }} style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: 20, background: 'rgba(0,0,0,.5)' }}>
+                  <div role="alertdialog" aria-modal="true" aria-labelledby="remove-widget-title" aria-describedby="remove-widget-description" style={{ width: 'min(420px, 100%)', padding: 20, borderRadius: 'var(--r-md)', border: '1px solid var(--line-2)', background: 'var(--panel)', boxShadow: '0 18px 50px rgba(0,0,0,.35)' }}>
+                    <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <h2 id="remove-widget-title" style={{ margin: 0, fontSize: 17, color: 'var(--ink)' }}>Remove website widget?</h2>
+                        <p id="remove-widget-description" style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: 1.55, color: 'var(--ink-mute)' }}>The existing embed code will stop working immediately. Conversation history is not deleted.</p>
+                      </div>
+                      <button type="button" aria-label="Close" onClick={() => setConfirmWidgetRemoval(false)} className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', flexShrink: 0 }}><X size={16} /></button>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+                      <button type="button" autoFocus onClick={() => setConfirmWidgetRemoval(false)} className="btn btn-ghost">Cancel</button>
+                      <button type="button" onClick={() => void removeWidget()} disabled={widgetBusy} className="btn" style={{ background: 'var(--danger)', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {widgetBusy && <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />}
+                        {widgetBusy ? 'Removing…' : 'Remove widget'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

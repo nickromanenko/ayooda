@@ -434,7 +434,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
           <div style={{ marginBottom: 12 }}>
             <textarea placeholder="Description — tell the agent when to use this tool" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ ...input, minHeight: 60, resize: 'vertical' }} />
           </div>
-          <div style={{ ...row }}>
+          <div className="responsive-form-row" style={{ ...row }}>
             <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value as ToolMethod })} style={{ ...input, width: 120 }}>
               {(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as ToolMethod[]).map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -443,7 +443,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
 
           <p style={{ ...label, marginTop: 16 }}>Parameters</p>
           {form.params.map((p, i) => (
-            <div key={i} style={row}>
+            <div key={i} className="responsive-form-row" style={row}>
               <input placeholder="name" value={p.name} onChange={(e) => { const params = [...form.params]; params[i] = { ...p, name: e.target.value }; setForm({ ...form, params }) }} style={{ ...input, width: 140 }} />
               <select value={p.type} onChange={(e) => { const params = [...form.params]; params[i] = { ...p, type: e.target.value as ToolParamType }; setForm({ ...form, params }) }} style={{ ...input, width: 110 }}>
                 {(['string', 'number', 'boolean'] as ToolParamType[]).map((t) => <option key={t} value={t}>{t}</option>)}
@@ -459,7 +459,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
 
           <p style={{ ...label, marginTop: 16 }}>Headers</p>
           {form.headers.map((h, i) => (
-            <div key={i} style={row}>
+            <div key={i} className="responsive-form-row" style={row}>
               <input placeholder="Header" value={h.key} onChange={(e) => { const headers = [...form.headers]; headers[i] = { ...h, key: e.target.value }; setForm({ ...form, headers }) }} style={{ ...input, width: 200 }} />
               <input placeholder="value" value={h.value} onChange={(e) => { const headers = [...form.headers]; headers[i] = { ...h, value: e.target.value }; setForm({ ...form, headers }) }} style={input} />
               <button type="button" onClick={() => setForm({ ...form, headers: form.headers.filter((_, j) => j !== i) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)' }}><Trash2 size={14} /></button>
@@ -473,7 +473,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 8px' }}>
                 Optional JSON template. Use parameter placeholders such as <code style={{ fontFamily: 'var(--font-mono)' }}>{'{email}'}</code>. Leave blank to send unused parameters automatically.
               </p>
-              <div style={{ ...row, alignItems: 'flex-start' }}>
+              <div className="responsive-form-row" style={{ ...row, alignItems: 'flex-start' }}>
                 <select value={form.bodyEncoding} onChange={(e) => setForm({ ...form, bodyEncoding: e.target.value as ToolBodyEncoding })} style={{ ...input, width: 160 }}>
                   <option value="json">JSON</option>
                   <option value="form">Form encoded</option>
@@ -490,7 +490,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
           )}
 
           <p style={{ ...label, marginTop: 16 }}>Authentication</p>
-          <div style={row}>
+          <div className="responsive-form-row" style={row}>
             <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as ToolAuthType })} style={{ ...input, width: 160 }}>
               <option value="none">None</option>
               <option value="bearer">Bearer token</option>
@@ -501,7 +501,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
           </div>
 
           <p style={{ ...label, marginTop: 16 }}>Access</p>
-          <div style={row}>
+          <div className="responsive-form-row" style={row}>
             <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as ToolKind })} style={{ ...input, width: 160 }}>
               <option value="read">Read (lookup)</option>
               <option value="write">Write (changes data)</option>

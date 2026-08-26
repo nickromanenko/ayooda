@@ -46,6 +46,22 @@ async function findChannel(channelId: string) {
   return snap.docs[0]
 }
 
+function requestHostname(c: { req: { header: (name: string) => string | undefined } }): string | null {
+  const value = c.req.header('origin') ?? c.req.header('referer')
+  if (!value) return null
+  try { return new URL(value).hostname.toLowerCase() } catch { return null }
+}
+
+function domainAllowed(c: { req: { header: (name: string) => string | undefined } }, data: { config?: { allowedDomains?: unknown } }): boolean {
+  const allowed = Array.isArray(data.config?.allowedDomains) ? data.config.allowedDomains as string[] : []
+  if (allowed.length === 0) return true
+  const host = requestHostname(c)
+  if (!host) return false
+  return allowed.some((domain) => domain.startsWith('*.')
+    ? host.endsWith(domain.slice(1)) && host !== domain.slice(2)
+    : host === domain)
+}
+
 // ---------------------------------------------------------------------------
 // GET /widget/config/:channelId
 // ---------------------------------------------------------------------------
@@ -56,6 +72,19 @@ widget.get('/config/:channelId', async (c) => {
   if (!channelDoc) return c.json({ error: 'Channel not found' }, 404)
 
   const data = channelDoc.data()
+  if (!domainAllowed(c, data)) return c.json({ error: 'This widget is not allowed on this domain.' }, 403)
+  const originHeader = c.req.header('origin') ?? c.req.header('referer')
+  let lastSeenOrigin: string | null = null
+  if (originHeader) {
+    try { lastSeenOrigin = new URL(originHeader).hostname } catch { /* malformed headers are ignored */ }
+  }
+
+  // This is also the installation heartbeat shown in Deploy. It records only
+  // the host, never a customer page path or query string.
+  void channelDoc.ref.update({
+    lastSeenAt: new Date(),
+    ...(lastSeenOrigin ? { lastSeenOrigin } : {}),
+  }).catch((err) => console.warn('[widget] installation heartbeat failed:', err))
 
   // The channel carries a cached copy of the agent's name and photo, refreshed
   // only when a channel is reassigned to a different agent. Renaming an agent or
@@ -102,6 +131,7 @@ widget.get('/config/:channelId', async (c) => {
     widgetPosition: data.config.widgetPosition,
     welcomeMessage: data.config.welcomeMessage,
     showBranding,
+    allowedDomains: Array.isArray(data.config.allowedDomains) ? data.config.allowedDomains : [],
   })
 })
 
@@ -144,6 +174,7 @@ widget.post('/chat', async (c) => {
   // 1. Look up channel → get workspaceId + agent config
   const channelDoc = await findChannel(channelId)
   if (!channelDoc) return c.json({ error: 'Channel not found' }, 404)
+  if (!domainAllowed(c, channelDoc.data())) return c.json({ error: 'This widget is not allowed on this domain.' }, 403)
 
   const workspaceId: string = channelDoc.data().workspaceId
 
@@ -209,6 +240,35 @@ widget.post('/chat', async (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// GET /widget/conversations/:conversationId/messages
+// ---------------------------------------------------------------------------
+
+widget.get('/conversations/:conversationId/messages', async (c) => {
+  const conversationId = c.req.param('conversationId')
+  const channelId = c.req.query('channelId')
+  const visitorId = c.req.query('visitorId')
+  if (!channelId || !visitorId) return c.json({ error: 'channelId and visitorId are required' }, 400)
+
+  const channelDoc = await findChannel(channelId)
+  if (!channelDoc) return c.json({ error: 'Not found' }, 404)
+  if (!domainAllowed(c, channelDoc.data())) return c.json({ error: 'Not found' }, 404)
+
+  const workspaceId: string = channelDoc.data().workspaceId
+  const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
+  const convSnap = await convRef.get()
+  if (!convSnap.exists || convSnap.data()!.visitorId !== visitorId) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+
+  const snapshot = await convRef.collection('messages').orderBy('createdAt', 'desc').limit(50).get()
+  const messages = snapshot.docs.reverse().map((doc) => {
+    const data = doc.data()
+    return { id: doc.id, role: data.role, content: data.content }
+  })
+  return c.json({ messages, status: convSnap.data()!.status ?? 'bot' })
+})
+
+// ---------------------------------------------------------------------------
 // GET /widget/conversations/:conversationId/events
 // ---------------------------------------------------------------------------
 
@@ -231,6 +291,7 @@ widget.get('/conversations/:conversationId/events', async (c) => {
 
   const channelDoc = await findChannel(channelId)
   if (!channelDoc) return c.json({ error: 'Not found' }, 404)
+  if (!domainAllowed(c, channelDoc.data())) return c.json({ error: 'Not found' }, 404)
 
   const workspaceId: string = channelDoc.data().workspaceId
   const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
@@ -241,7 +302,6 @@ widget.get('/conversations/:conversationId/events', async (c) => {
     return c.json({ error: 'Not found' }, 404)
   }
 
-  const connectedAt = new Date()
   let lastStatus: string = convSnap.data()!.status
 
   return streamSSE(c, async (stream) => {
@@ -272,8 +332,8 @@ widget.get('/conversations/:conversationId/events', async (c) => {
 
     unsubMessages = convRef
       .collection('messages')
-      .where('createdAt', '>', connectedAt)
       .orderBy('createdAt', 'asc')
+      .limitToLast(100)
       .onSnapshot(
         (snap) => {
           for (const change of snap.docChanges()) {

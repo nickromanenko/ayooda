@@ -28,7 +28,7 @@ export function validateSandboxChatBody(raw: unknown):
   if (message.length > SANDBOX_MESSAGE_MAX) {
     return { ok: false, error: `message must be ${SANDBOX_MESSAGE_MAX.toLocaleString()} characters or fewer.` }
   }
-  if (body.sessionId !== undefined && !isSandboxSessionId(body.sessionId)) {
+  if (body.sessionId !== undefined && body.sessionId !== null && !isSandboxSessionId(body.sessionId)) {
     return { ok: false, error: 'Invalid sessionId.' }
   }
   if (body.allowTools !== undefined && typeof body.allowTools !== 'boolean') {

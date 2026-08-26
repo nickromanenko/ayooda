@@ -39,3 +39,21 @@ test('public landing copy does not promise unimplemented enterprise controls or 
   assert.match(landingSource, /AES-256-GCM/)
   assert.match(landingSource, /signature-checked/i)
 })
+
+test('public landing copy keeps launch claims inside the currently shipped product', () => {
+  const unsupportedCapabilityClaims = [
+    /One agent\. Ten channels/i,
+    /\bWhatsApp\b|\bMessenger\b|\bInstagram\b/i,
+    /learns from your corrections automatically/i,
+    /No hallucinations|No guesses/i,
+    /auto-syncs with helpdesk articles, docs, and product changes/i,
+    /your\.company\.internal|Meta · self-hosted/i,
+  ]
+
+  for (const claim of unsupportedCapabilityClaims) {
+    assert.doesNotMatch(publicMarketingCopy, claim)
+  }
+
+  assert.match(landingSource, /One agent\. Five channels/i)
+  assert.match(landingSource, /web widget, Telegram, email, Slack, and Twilio SMS/i)
+})

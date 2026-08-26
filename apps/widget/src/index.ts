@@ -9,6 +9,10 @@
  */
 
 import { extractSSEMessages } from './sse'
+import { escapeHtmlAttribute, safeAgentPhotoURL } from './identity'
+import { renderMarkdown } from './markdown'
+import { MessageBuffer, type FeedMessage } from './message-buffer'
+import { widgetAccessibleAccent, widgetForeground } from '@ayooda/shared'
 
 // ---------------------------------------------------------------------------
 // Bootstrap — read attributes synchronously before any async work
@@ -43,10 +47,15 @@ interface WidgetConfig {
 
 interface ChatDone {
   conversationId: string
-  messageId: string
+  messageId?: string
   sources: Array<{ docId: string; source: string; score: number }>
   status?: 'bot' | 'waiting' | 'human' | 'resolved'
   workflowAction?: string
+}
+
+interface ConversationHistory {
+  messages: FeedMessage[]
+  status: 'bot' | 'waiting' | 'human' | 'resolved'
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +82,12 @@ function getConversationId(): string {
   return id
 }
 
+function createConversationId(): string {
+  const id = crypto.randomUUID()
+  sessionStorage.setItem(`ayooda_conv_${CHANNEL_ID}`, id)
+  return id
+}
+
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
@@ -80,6 +95,15 @@ function getConversationId(): string {
 async function fetchConfig(): Promise<WidgetConfig> {
   const res = await fetch(`${API_BASE}/widget/config/${CHANNEL_ID}`)
   if (!res.ok) throw new Error('Failed to load widget config')
+  return res.json()
+}
+
+async function fetchHistory(conversationId: string, visitorId: string): Promise<ConversationHistory | null> {
+  const url = `${API_BASE}/widget/conversations/${conversationId}/messages` +
+    `?channelId=${encodeURIComponent(CHANNEL_ID)}&visitorId=${encodeURIComponent(visitorId)}`
+  const res = await fetch(url)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('Failed to load conversation history')
   return res.json()
 }
 
@@ -104,8 +128,12 @@ async function sendMessageStream(
       body: JSON.stringify({ channelId: CHANNEL_ID, conversationId, message, visitorId }),
       signal: controller.signal,
     })
-    if (!res.ok || !res.body || !res.headers.get('content-type')?.includes('text/event-stream')) {
-      throw new Error('Failed to send message')
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(payload.error ?? `Request failed (${res.status})`)
+    }
+    if (!res.body || !res.headers.get('content-type')?.includes('text/event-stream')) {
+      throw new Error('The server returned an invalid response.')
     }
 
     const reader = res.body.getReader()
@@ -153,13 +181,15 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
   // The panel and launcher hug whichever edge the widget is pinned to, so a
   // left-hand widget opens leftwards instead of off the side of the viewport.
   const left = position === 'bottom-left'
+  const foreground = widgetForeground(color)
+  const accent = widgetAccessibleAccent(color)
   return `
     :host { all: initial; font-family: system-ui, -apple-system, sans-serif; }
 
     #container {
       position: fixed;
-      bottom: 24px;
-      ${left ? 'left: 24px;' : 'right: 24px;'}
+      bottom: max(24px, env(safe-area-inset-bottom));
+      ${left ? 'left: max(24px, env(safe-area-inset-left));' : 'right: max(24px, env(safe-area-inset-right));'}
       z-index: 2147483647;
       display: flex;
       flex-direction: column;
@@ -170,41 +200,115 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     #toggle {
       width: 52px;
       height: 52px;
+      box-sizing: border-box;
+      padding: 0;
       border-radius: 50%;
       background: ${color};
       border: none;
       cursor: pointer;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
+      color: ${foreground};
       box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      transition-property: transform, background-color, box-shadow;
+      transition-duration: 180ms;
+      transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
       flex-shrink: 0;
     }
-    #toggle:hover { transform: scale(1.06); box-shadow: 0 6px 20px rgba(0,0,0,0.22); }
-    #toggle svg { width: 24px; height: 24px; fill: white; }
+    @media (hover: hover) {
+      #toggle:hover {
+        background: color-mix(in srgb, ${color} 82%, #000);
+        transform: translateY(-2px) scale(1.04);
+        box-shadow:
+          0 0 0 8px color-mix(in srgb, ${color} 14%, transparent),
+          0 12px 28px rgba(0,0,0,0.28);
+      }
+    }
+    #toggle:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 4px #fff,
+        0 0 0 7px color-mix(in srgb, ${color} 70%, transparent),
+        0 8px 24px rgba(0,0,0,0.24);
+    }
+    #toggle:active { transform: translateY(0) scale(0.96); }
+    #toggle svg { width: 24px; height: 24px; fill: currentColor; }
+    #unread-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 18px;
+      height: 18px;
+      box-sizing: border-box;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      padding: 0 4px;
+      background: #dc2626;
+      color: #fff;
+      font: 700 10px/14px system-ui, -apple-system, sans-serif;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    #unread-badge[hidden] { display: none; }
+    .toggle-icon {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      opacity: 1;
+      transform: scale(1);
+      filter: blur(0);
+      transition-property: opacity, transform, filter;
+      transition-duration: 180ms;
+      transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    }
+    .toggle-close {
+      opacity: 0;
+      transform: scale(0.25);
+      filter: blur(4px);
+    }
+    #toggle[aria-expanded="true"] .toggle-chat {
+      opacity: 0;
+      transform: scale(0.25);
+      filter: blur(4px);
+    }
+    #toggle[aria-expanded="true"] .toggle-close {
+      opacity: 1;
+      transform: scale(1);
+      filter: blur(0);
+    }
 
     #panel {
       width: 360px;
-      height: 520px;
+      height: min(520px, calc(100dvh - 100px));
+      min-height: 360px;
       background: #fff;
       border-radius: 16px;
       box-shadow: 0 8px 40px rgba(0,0,0,0.16);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transition: opacity 0.2s ease, transform 0.2s ease;
+      visibility: visible;
+      transition-property: opacity, transform, visibility;
+      transition-duration: 200ms, 200ms, 0s;
+      transition-delay: 0s;
+      transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
     }
     #panel.hidden {
       opacity: 0;
       pointer-events: none;
+      visibility: hidden;
       transform: translateY(12px) scale(0.97);
+      transition-duration: 150ms, 150ms, 0s;
+      transition-delay: 0s, 0s, 150ms;
     }
 
     /* Header */
     #header {
       background: ${color};
-      color: #fff;
+      color: ${foreground};
       padding: 14px 16px;
       display: flex;
       align-items: center;
@@ -215,7 +319,7 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      background: rgba(255,255,255,0.25);
+      background: color-mix(in srgb, ${foreground} 18%, transparent);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -223,24 +327,50 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       font-weight: 600;
       flex-shrink: 0;
       overflow: hidden;
+      box-shadow:
+        0 0 0 4px color-mix(in srgb, ${foreground} 22%, transparent),
+        0 3px 10px rgba(0,0,0,0.16);
     }
-    #avatar img { width: 100%; height: 100%; object-fit: cover; }
-    #agent-name { font-size: 15px; font-weight: 600; flex: 1; }
-    #close-btn {
+    #avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      outline: 1px solid color-mix(in srgb, ${foreground} 12%, transparent);
+      outline-offset: -1px;
+    }
+    #agent-identity { flex: 1; min-width: 0; }
+    #agent-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; }
+    #agent-status { display: block; margin-top: 2px; font-size: 11px; opacity: .78; }
+    #header-actions { display: flex; align-items: center; gap: 2px; }
+    #close-btn,
+    #new-chat-btn {
+      width: 40px;
+      height: 40px;
       background: none;
       border: none;
-      color: rgba(255,255,255,0.8);
+      color: color-mix(in srgb, ${foreground} 82%, transparent);
       cursor: pointer;
-      padding: 4px;
+      padding: 0;
       display: flex;
       align-items: center;
+      justify-content: center;
       border-radius: 6px;
+      transition-property: background-color, color, transform;
+      transition-duration: 150ms;
+      transition-timing-function: ease-out;
     }
-    #close-btn:hover { color: #fff; background: rgba(255,255,255,0.15); }
+    #close-btn:hover,
+    #new-chat-btn:hover { color: ${foreground}; background: color-mix(in srgb, ${foreground} 15%, transparent); }
+    #close-btn:focus-visible,
+    #new-chat-btn:focus-visible { outline: 2px solid ${foreground}; outline-offset: 2px; }
+    #close-btn:active,
+    #new-chat-btn:active { transform: scale(0.96); }
 
     /* Messages */
+    #message-stage { position: relative; flex: 1; min-height: 0; }
     #messages {
-      flex: 1;
+      position: absolute;
+      inset: 0;
       overflow-y: auto;
       padding: 16px;
       display: flex;
@@ -250,6 +380,28 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     }
     #messages::-webkit-scrollbar { width: 4px; }
     #messages::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 2px; }
+    #jump-latest {
+      position: absolute;
+      left: 50%;
+      bottom: 12px;
+      z-index: 2;
+      min-height: 36px;
+      transform: translateX(-50%);
+      border: none;
+      border-radius: 999px;
+      padding: 0 13px;
+      background: #fff;
+      color: #3f3f46;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.08), 0 5px 16px rgba(0,0,0,0.14);
+      cursor: pointer;
+      font: 600 11px/1 system-ui, -apple-system, sans-serif;
+      transition-property: transform, box-shadow;
+      transition-duration: 150ms;
+      transition-timing-function: ease-out;
+    }
+    #jump-latest[hidden] { display: none; }
+    #jump-latest:hover { transform: translateX(-50%) translateY(-1px); box-shadow: 0 0 0 1px rgba(0,0,0,0.1), 0 7px 20px rgba(0,0,0,0.18); }
+    #jump-latest:active { transform: translateX(-50%) scale(0.96); }
 
     .msg {
       max-width: 80%;
@@ -263,7 +415,7 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     .msg.user {
       align-self: flex-end;
       background: ${color};
-      color: #fff;
+      color: ${foreground};
       border-bottom-right-radius: 4px;
     }
     .msg.bot {
@@ -271,13 +423,89 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       background: #f4f4f5;
       color: #18181b;
       border-bottom-left-radius: 4px;
+      white-space: normal;
     }
+    .msg.bot > :first-child { margin-top: 0; }
+    .msg.bot > :last-child { margin-bottom: 0; }
+    .msg.bot p { margin: 0 0 10px; }
+    .msg.bot ul,
+    .msg.bot ol { margin: 7px 0 10px; padding-left: 20px; }
+    .msg.bot ul { list-style: disc outside; }
+    .msg.bot ol { list-style: decimal outside; }
+    .msg.bot li { display: list-item; margin: 3px 0; padding-left: 1px; }
+    .msg.bot li > p { margin: 0; }
+    .msg.bot strong { font-weight: 700; }
+    .msg.bot em { font-style: italic; }
+    .msg.bot a {
+      color: ${accent};
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+    .msg.bot code {
+      border-radius: 4px;
+      background: rgba(0,0,0,0.07);
+      padding: 1px 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+    }
+    .msg.bot pre {
+      margin: 8px 0 10px;
+      overflow-x: auto;
+      border-radius: 8px;
+      background: #27272a;
+      color: #fafafa;
+      padding: 10px 12px;
+      white-space: pre;
+    }
+    .msg.bot pre code { background: transparent; padding: 0; color: inherit; }
+    .msg.bot blockquote {
+      margin: 8px 0 10px;
+      border-left: 3px solid color-mix(in srgb, ${accent} 55%, transparent);
+      padding-left: 10px;
+      color: #52525b;
+    }
+    .msg.bot h1,
+    .msg.bot h2,
+    .msg.bot h3,
+    .msg.bot h4 { margin: 12px 0 6px; line-height: 1.25; font-weight: 700; }
+    .msg.bot h1 { font-size: 1.2em; }
+    .msg.bot h2 { font-size: 1.12em; }
+    .msg.bot h3,
+    .msg.bot h4 { font-size: 1em; }
+    .msg.bot table {
+      display: block;
+      width: max-content;
+      max-width: 100%;
+      margin: 8px 0 10px;
+      overflow-x: auto;
+      border-collapse: collapse;
+      font-size: 0.9em;
+    }
+    .msg.bot th,
+    .msg.bot td { border: 1px solid #d4d4d8; padding: 5px 7px; text-align: left; }
+    .msg.bot th { background: rgba(0,0,0,0.04); font-weight: 700; }
+    .msg.bot hr { margin: 12px 0; border: 0; border-top: 1px solid #d4d4d8; }
     .msg.error {
       align-self: flex-start;
       background: #fef2f2;
       color: #dc2626;
       border-bottom-left-radius: 4px;
     }
+    .retry-btn {
+      display: block;
+      min-height: 36px;
+      margin-top: 8px;
+      border: 1px solid currentColor;
+      border-radius: 8px;
+      padding: 0 11px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: 600 12px/1 system-ui, -apple-system, sans-serif;
+    }
+    .retry-btn:hover { background: rgba(220,38,38,.08); }
+    .retry-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
     .msg.system {
       align-self: center;
       background: transparent;
@@ -315,44 +543,81 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     #input-area {
       padding: 12px 16px;
       border-top: 1px solid #e4e4e7;
-      display: flex;
-      gap: 8px;
-      align-items: flex-end;
       flex-shrink: 0;
+      background: #fff;
+    }
+    #composer {
+      position: relative;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.12),
+        0 2px 5px rgba(0,0,0,0.04);
+      transition-property: box-shadow;
+      transition-duration: 180ms;
+      transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    }
+    #composer:focus-within {
+      box-shadow:
+        0 0 0 2px ${accent},
+        0 0 0 6px color-mix(in srgb, ${color} 13%, transparent),
+        0 4px 12px rgba(0,0,0,0.08);
     }
     #input {
-      flex: 1;
-      border: 1px solid #d4d4d8;
-      border-radius: 10px;
-      padding: 9px 12px;
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 88px;
+      max-height: 136px;
+      border: none;
+      border-radius: 18px;
+      padding: 14px 52px 40px 14px;
       font-size: 14px;
       font-family: inherit;
       resize: none;
-      max-height: 100px;
       outline: none;
       color: #18181b;
       background: #fff;
-      transition: border-color 0.15s;
-      line-height: 1.4;
+      line-height: 1.45;
     }
-    #input:focus { border-color: ${color}; }
     #input::placeholder { color: #a1a1aa; }
+    #composer-hint {
+      position: absolute;
+      left: 14px;
+      bottom: 13px;
+      color: #a1a1aa;
+      font-size: 10px;
+      line-height: 1;
+      pointer-events: none;
+    }
 
     #send-btn {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: ${color};
+      position: absolute;
+      right: 7px;
+      bottom: 7px;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: transparent;
       border: none;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      flex-shrink: 0;
-      transition: opacity 0.15s;
+      color: ${accent};
+      transition-property: background-color, color, transform;
+      transition-duration: 150ms;
+      transition-timing-function: ease-out;
     }
-    #send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    #send-btn svg { width: 18px; height: 18px; fill: white; }
+    #send-btn:hover:not(:disabled) {
+      background: color-mix(in srgb, ${color} 12%, transparent);
+    }
+    #send-btn:focus-visible { outline: 2px solid ${accent}; outline-offset: 1px; }
+    #send-btn:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+    #send-btn:disabled { color: #c4c4cc; cursor: not-allowed; }
+    #send-btn svg { width: 20px; height: 20px; fill: currentColor; }
 
     /* Powered-by */
     #poweredby {
@@ -364,6 +629,27 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     }
     #poweredby a { color: #a1a1aa; text-decoration: none; }
     #poweredby a:hover { color: #71717a; }
+
+    @media (max-width: 480px) {
+      #container {
+        left: max(12px, env(safe-area-inset-left));
+        right: max(12px, env(safe-area-inset-right));
+        bottom: max(12px, env(safe-area-inset-bottom));
+      }
+      #panel {
+        width: 100%;
+        height: min(520px, calc(100dvh - 88px));
+        min-height: min(360px, calc(100dvh - 88px));
+      }
+      #close-btn,
+      #new-chat-btn,
+      #send-btn { width: 44px; height: 44px; }
+      #composer-hint { font-size: 11px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #toggle, .toggle-icon, #panel, #composer, #send-btn, .typing span { transition: none; animation: none; }
+    }
   `
 }
 
@@ -383,6 +669,10 @@ const ICON_SEND = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
   <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
 </svg>`
 
+const ICON_NEW_CHAT = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/>
+</svg>`
+
 // ---------------------------------------------------------------------------
 // Widget class
 // ---------------------------------------------------------------------------
@@ -393,12 +683,18 @@ class AyoodaWidget {
   private messages!: HTMLElement
   private input!: HTMLTextAreaElement
   private sendBtn!: HTMLButtonElement
+  private toggleBtn!: HTMLButtonElement
   private open = false
   private sending = false
   private conversationId: string
   private visitorId: string
   private config: WidgetConfig
-  private renderedIds = new Set<string>()
+  private messageBuffer = new MessageBuffer()
+  private jumpLatestBtn!: HTMLButtonElement
+  private unreadBadge!: HTMLElement
+  private statusText!: HTMLElement
+  private historyReady: Promise<void>
+  private unreadCount = 0
   private eventSource: EventSource | null = null
   private reconnectDelay = 1000
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -411,10 +707,15 @@ class AyoodaWidget {
 
     this.shadow = host.attachShadow({ mode: 'open' })
     this.build()
+    this.historyReady = this.loadHistory()
   }
 
   private build() {
-    const { agentName, agentPhotoURL, widgetColor, widgetPosition, welcomeMessage } = this.config
+    const { agentName, agentPhotoURL, widgetColor, widgetPosition } = this.config
+    const photoURL = safeAgentPhotoURL(agentPhotoURL)
+    const escapedAgentName = escapeHtmlAttribute(agentName)
+    const escapedInitial = escapeHtmlAttribute(agentName.charAt(0).toUpperCase())
+    const escapedPhotoURL = photoURL ? escapeHtmlAttribute(photoURL) : null
     // Absent on responses from an older API: show the line rather than hide it.
     const showBranding = this.config.showBranding !== false
 
@@ -425,31 +726,45 @@ class AyoodaWidget {
     const container = document.createElement('div')
     container.id = 'container'
     container.innerHTML = `
-      <div id="panel" class="hidden">
+      <div id="panel" class="hidden" role="dialog" aria-labelledby="agent-name" aria-hidden="true" inert>
         <div id="header">
           <div id="avatar">
             ${
-              agentPhotoURL
-                ? `<img src="${agentPhotoURL}" alt="${agentName}" />`
-                : agentName.charAt(0).toUpperCase()
+              escapedPhotoURL
+                ? `<img src="${escapedPhotoURL}" alt="" />`
+                : escapedInitial
             }
           </div>
-          <span id="agent-name">${agentName}</span>
-          <button id="close-btn" aria-label="Close chat">${ICON_CLOSE}</button>
+          <span id="agent-identity"><span id="agent-name">${escapedAgentName}</span><span id="agent-status" role="status">Online</span></span>
+          <span id="header-actions">
+            <button id="new-chat-btn" type="button" aria-label="Start a new conversation">${ICON_NEW_CHAT}</button>
+            <button id="close-btn" type="button" aria-label="Close chat">${ICON_CLOSE}</button>
+          </span>
         </div>
-        <div id="messages" role="log" aria-live="polite"></div>
+        <div id="message-stage">
+          <div id="messages" role="log" aria-live="polite" dir="auto"></div>
+          <button id="jump-latest" type="button" hidden>↓ New messages</button>
+        </div>
         <div id="input-area">
-          <textarea
-            id="input"
-            rows="1"
-            placeholder="Type a message\u2026"
-            aria-label="Chat message"
-          ></textarea>
-          <button id="send-btn" aria-label="Send" disabled>${ICON_SEND}</button>
+          <div id="composer">
+            <textarea
+              id="input"
+              rows="1"
+              placeholder="Compose your message\u2026"
+              aria-label="Chat message"
+              dir="auto"
+            ></textarea>
+            <span id="composer-hint" aria-hidden="true">Enter to send · Shift+Enter for a new line</span>
+            <button id="send-btn" type="button" aria-label="Send" disabled>${ICON_SEND}</button>
+          </div>
         </div>
-        ${showBranding ? '<div id="poweredby">Powered by <a href="https://ayooda.com" target="_blank" rel="noopener">Ayooda</a></div>' : ''}
+        ${showBranding ? '<div id="poweredby">Powered by <a href="https://ayooda.live" target="_blank" rel="noopener noreferrer">Ayooda</a></div>' : ''}
       </div>
-      <button id="toggle" aria-label="Open chat">${ICON_CHAT}</button>
+      <button id="toggle" type="button" aria-label="Open chat with ${escapedAgentName}" aria-expanded="false" aria-controls="panel">
+        <span class="toggle-icon toggle-chat" aria-hidden="true">${ICON_CHAT}</span>
+        <span class="toggle-icon toggle-close" aria-hidden="true">${ICON_CLOSE}</span>
+        <span id="unread-badge" hidden aria-label="Unread messages"></span>
+      </button>
     `
     this.shadow.appendChild(container)
 
@@ -458,11 +773,26 @@ class AyoodaWidget {
     this.messages = container.querySelector('#messages')!
     this.input = container.querySelector<HTMLTextAreaElement>('#input')!
     this.sendBtn = container.querySelector<HTMLButtonElement>('#send-btn')!
+    this.toggleBtn = container.querySelector<HTMLButtonElement>('#toggle')!
+    this.jumpLatestBtn = container.querySelector<HTMLButtonElement>('#jump-latest')!
+    this.unreadBadge = container.querySelector<HTMLElement>('#unread-badge')!
+    this.statusText = container.querySelector<HTMLElement>('#agent-status')!
 
     // Event listeners
-    container.querySelector('#toggle')!.addEventListener('click', () => this.toggle())
+    this.toggleBtn.addEventListener('click', () => this.toggle())
     container.querySelector('#close-btn')!.addEventListener('click', () => this.toggle(false))
+    container.querySelector('#new-chat-btn')!.addEventListener('click', () => this.startNewConversation())
+    container.addEventListener('keydown', (event) => {
+      if ((event as KeyboardEvent).key === 'Escape' && this.open) {
+        event.preventDefault()
+        this.toggle(false)
+      }
+    })
     this.sendBtn.addEventListener('click', () => this.submit())
+    this.jumpLatestBtn.addEventListener('click', () => this.scrollToBottom(true))
+    this.messages.addEventListener('scroll', () => {
+      if (this.isNearBottom()) this.jumpLatestBtn.hidden = true
+    }, { passive: true })
     this.input.addEventListener('keydown', (e: Event) => {
       const ke = e as KeyboardEvent
       if (ke.key === 'Enter' && !ke.shiftKey) {
@@ -473,27 +803,65 @@ class AyoodaWidget {
     this.input.addEventListener('input', () => {
       this.sendBtn.disabled = !this.input.value.trim() || this.sending
       this.input.style.height = 'auto'
-      this.input.style.height = `${Math.min(this.input.scrollHeight, 100)}px`
+      this.input.style.height = `${Math.max(88, Math.min(this.input.scrollHeight, 136))}px`
     })
+  }
 
-    // Welcome message
-    this.appendBotMessage(welcomeMessage)
+  private async loadHistory() {
+    try {
+      const history = await fetchHistory(this.conversationId, this.visitorId)
+      if (!history?.messages.length) {
+        this.appendBotMessage(this.config.welcomeMessage, true)
+      } else {
+        for (const message of history.messages) {
+          this.messageBuffer.markRendered(message.id)
+          this.appendMessage(message.content, message.role === 'user' ? 'user' : 'bot', true)
+        }
+        if (history.status === 'human') this.appendSystemNote("You're chatting with a human", true)
+        else if (history.status === 'waiting') this.appendSystemNote('Waiting for a teammate', true)
+        else if (history.status === 'resolved') this.appendSystemNote('This conversation has been resolved', true)
+      }
+      this.openFeed()
+    } catch {
+      this.appendBotMessage(this.config.welcomeMessage, true)
+    }
   }
 
   private toggle(force?: boolean) {
     this.open = force !== undefined ? force : !this.open
+    this.panel.toggleAttribute('inert', !this.open)
+    this.panel.setAttribute('aria-hidden', String(!this.open))
     this.panel.classList.toggle('hidden', !this.open)
+    this.toggleBtn.setAttribute('aria-expanded', String(this.open))
     if (this.open) {
+      this.setUnreadCount(0)
       this.input.focus()
-      this.scrollToBottom()
+      this.scrollToBottom(true)
       this.openFeed()
     } else {
-      this.closeFeed()
+      this.setUnreadCount(this.unreadCount)
+      this.toggleBtn.focus({ preventScroll: true })
     }
   }
 
+  private startNewConversation() {
+    if (this.sending) return
+    this.eventSource?.close()
+    this.eventSource = null
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = null
+    this.conversationId = createConversationId()
+    this.messageBuffer = new MessageBuffer()
+    this.feedSuspended = true
+    this.messages.replaceChildren()
+    this.setUnreadCount(0)
+    this.setStatus('online')
+    this.appendBotMessage(this.config.welcomeMessage, true)
+    this.input.focus()
+  }
+
   private openFeed() {
-    if (this.eventSource || this.feedSuspended || !this.open) return
+    if (this.eventSource || this.feedSuspended) return
     const url =
       `${API_BASE}/widget/conversations/${this.conversationId}/events` +
       `?channelId=${encodeURIComponent(CHANNEL_ID)}&visitorId=${encodeURIComponent(this.visitorId)}`
@@ -502,13 +870,15 @@ class AyoodaWidget {
 
     es.onopen = () => {
       this.reconnectDelay = 1000
+      if (!this.sending) this.setStatus('online')
     }
 
     es.addEventListener('message', (e: MessageEvent) => {
-      const msg = JSON.parse(e.data) as { id: string; role: string; content: string }
-      if (this.renderedIds.has(msg.id)) return
-      this.renderedIds.add(msg.id)
-      this.appendBotMessage(msg.content)
+      const message = JSON.parse(e.data) as FeedMessage
+      for (const ready of this.messageBuffer.accept(message, this.sending)) {
+        this.appendBotMessage(ready.content)
+        if (!this.open) this.setUnreadCount(this.unreadCount + 1)
+      }
     })
 
     es.addEventListener('status', (e: MessageEvent) => {
@@ -530,82 +900,133 @@ class AyoodaWidget {
         this.feedSuspended = true
         return
       }
-      if (!this.open) return
+      if (this.open) this.setStatus('reconnecting')
       this.reconnectTimer = setTimeout(() => this.openFeed(), this.reconnectDelay)
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30_000)
     }
   }
 
-  private closeFeed() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = null
-    }
-    this.eventSource?.close()
-    this.eventSource = null
+  private setUnreadCount(count: number) {
+    this.unreadCount = count
+    this.unreadBadge.hidden = count === 0
+    this.unreadBadge.textContent = count > 9 ? '9+' : String(count)
+    this.toggleBtn.setAttribute(
+      'aria-label',
+      this.open ? 'Close chat' : `${count ? `${count} unread. ` : ''}Open chat with ${this.config.agentName}`,
+    )
   }
 
-  private appendSystemNote(text: string) {
+  private isNearBottom() {
+    return this.messages.scrollHeight - this.messages.scrollTop - this.messages.clientHeight < 56
+  }
+
+  private appendSystemNote(text: string, forceScroll = false) {
+    const stick = forceScroll || this.isNearBottom()
     const div = document.createElement('div')
     div.className = 'msg system'
     div.textContent = text
     this.messages.appendChild(div)
-    this.scrollToBottom()
+    this.afterContentChange(stick)
   }
 
-  private appendMessage(text: string, role: 'user' | 'bot' | 'error'): HTMLElement {
+  private appendMessage(text: string, role: 'user' | 'bot' | 'error', forceScroll = false): HTMLElement {
+    const stick = forceScroll || role === 'user' || this.isNearBottom()
     const div = document.createElement('div')
     div.className = `msg ${role}`
-    div.textContent = text
+    if (role === 'bot') this.renderBotMarkdown(div, text)
+    else div.textContent = text
     this.messages.appendChild(div)
-    this.scrollToBottom()
+    this.afterContentChange(stick)
     return div
   }
 
-  private appendBotMessage(text: string) {
-    return this.appendMessage(text, 'bot')
+  private renderBotMarkdown(element: HTMLElement, markdown: string) {
+    element.innerHTML = renderMarkdown(markdown)
+    element.querySelectorAll<HTMLAnchorElement>('a').forEach((link) => {
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+    })
+  }
+
+  private appendBotMessage(text: string, forceScroll = false) {
+    return this.appendMessage(text, 'bot', forceScroll)
+  }
+
+  private appendRetryError(message: string, originalText: string) {
+    const element = this.appendMessage(message, 'error')
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'retry-btn'
+    button.textContent = 'Try again'
+    button.addEventListener('click', () => {
+      element.remove()
+      void this.submit(originalText, false)
+    })
+    element.appendChild(button)
+  }
+
+  private setStatus(status: 'online' | 'responding' | 'reconnecting') {
+    this.statusText.textContent = status === 'responding'
+      ? 'Responding…'
+      : status === 'reconnecting'
+        ? 'Reconnecting…'
+        : 'Online'
   }
 
   private showTyping(): HTMLElement {
+    const stick = this.isNearBottom()
     const div = document.createElement('div')
     div.className = 'typing'
     div.innerHTML = '<span></span><span></span><span></span>'
     this.messages.appendChild(div)
-    this.scrollToBottom()
+    this.afterContentChange(stick)
     return div
   }
 
-  private scrollToBottom() {
+  private afterContentChange(stick: boolean) {
+    if (stick) this.scrollToBottom(true)
+    else this.jumpLatestBtn.hidden = false
+  }
+
+  private scrollToBottom(force = false) {
     requestAnimationFrame(() => {
-      this.messages.scrollTop = this.messages.scrollHeight
+      if (force || this.isNearBottom()) {
+        this.messages.scrollTop = this.messages.scrollHeight
+        this.jumpLatestBtn.hidden = true
+      }
     })
   }
 
-  private async submit() {
-    const text = this.input.value.trim()
+  private async submit(retryText?: string, appendUser = true) {
+    await this.historyReady
+    const text = (retryText ?? this.input.value).trim()
     if (!text || this.sending) return
 
     this.sending = true
+    this.setStatus('responding')
     this.sendBtn.disabled = true
     this.input.value = ''
     this.input.style.height = 'auto'
 
-    this.appendMessage(text, 'user')
+    if (appendUser) this.appendMessage(text, 'user')
     const typingEl = this.showTyping()
     let bubble: HTMLElement | null = null
+    let streamedMarkdown = ''
 
     try {
       await sendMessageStream(text, this.conversationId, this.visitorId, {
         onChunk: (chunk) => {
+          const stick = this.isNearBottom()
           if (!bubble) {
             typingEl.remove()
             bubble = this.appendBotMessage('')
           }
-          bubble.textContent += chunk
-          this.scrollToBottom()
+          streamedMarkdown += chunk
+          this.renderBotMarkdown(bubble, streamedMarkdown)
+          this.afterContentChange(stick)
         },
         onDone: (done) => {
-          this.renderedIds.add(done.messageId)
+          this.messageBuffer.markRendered(done.messageId)
           if (done.status === 'waiting') this.appendSystemNote('This conversation is waiting for a human')
           else if (done.status === 'human') this.appendSystemNote('This conversation was assigned to a teammate')
           else if (done.status === 'resolved') this.appendSystemNote('This conversation has been resolved')
@@ -618,11 +1039,23 @@ class AyoodaWidget {
           }
         },
       })
-    } catch {
+    } catch (error) {
       typingEl.remove()
-      if (!bubble) this.appendMessage('Sorry, something went wrong. Please try again.', 'error')
+      if (!bubble) {
+        const message = error instanceof DOMException && error.name === 'AbortError'
+          ? 'The response took too long to start.'
+          : error instanceof Error && error.message.includes('Too many')
+            ? 'Too many messages were sent. Please wait a moment.'
+            : 'The message could not be sent.'
+        this.appendRetryError(message, text)
+      }
     } finally {
       this.sending = false
+      this.setStatus('online')
+      for (const pending of this.messageBuffer.flush()) {
+        this.appendBotMessage(pending.content)
+        if (!this.open) this.setUnreadCount(this.unreadCount + 1)
+      }
       this.sendBtn.disabled = !this.input.value.trim()
     }
   }
