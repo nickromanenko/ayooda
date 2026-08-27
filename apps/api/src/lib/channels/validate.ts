@@ -7,6 +7,7 @@ import {
   MAX_WIDGET_COPY_CHARS,
   MAX_WIDGET_PATH_RULES,
   DEFAULT_WIDGET_APPEARANCE,
+  isWidgetPathRule,
   type WidgetAppearance,
   type WidgetPosition,
 } from '@ayooda/shared'
@@ -33,7 +34,7 @@ function pathRules(a: Record<string, unknown>, key: string): string[] | null {
   const values = Array.isArray(a[key]) ? a[key] as unknown[] : []
   if (values.length > MAX_WIDGET_PATH_RULES) return null
   const rules = [...new Set(values.map((value) => typeof value === 'string' ? value.trim() : '').filter(Boolean))]
-  return rules.every((rule) => rule.startsWith('/') && rule.length <= 120 && /^[/a-zA-Z0-9._~!*?&=\-{}:]+$/.test(rule))
+  return rules.every(isWidgetPathRule)
     ? rules
     : null
 }

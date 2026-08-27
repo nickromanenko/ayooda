@@ -369,6 +369,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
                 agentId={agentId}
                 agentName={widget.config?.agentName ?? 'Support Agent'}
                 agentPhotoURL={widget.config?.agentPhotoURL ?? null}
+                observedDomains={widget.observedDomains ?? []}
                 brandingLocked={widget.brandingLocked !== false}
                 initial={{
                   ...DEFAULT_WIDGET_APPEARANCE,

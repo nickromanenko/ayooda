@@ -13,7 +13,7 @@ import { escapeHtmlAttribute, safeAgentPhotoURL } from './identity'
 import { renderMarkdown } from './markdown'
 import { MessageBuffer, type FeedMessage } from './message-buffer'
 import { resolveWidgetLocale, widgetStrings, type WidgetStrings } from './strings'
-import { widgetAccessibleAccent, widgetForeground, type WidgetAppearance } from '@ayooda/shared'
+import { widgetAccessibleAccent, widgetForeground, widgetVisibleOnPath, type WidgetAppearance } from '@ayooda/shared'
 
 // ---------------------------------------------------------------------------
 // Bootstrap — read attributes synchronously before any async work
@@ -99,17 +99,10 @@ function createConversationId(config: WidgetConfig): string {
   return id
 }
 
-function matchesPath(pathname: string, rule: string): boolean {
-  const escaped = rule.replace(/[.+^$()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
-  return new RegExp(`^${escaped}$`).test(pathname)
-}
-
 function shouldRender(config: WidgetConfig): boolean {
   const mobile = window.matchMedia('(max-width: 600px)').matches
   if ((mobile && !config.showOnMobile) || (!mobile && !config.showOnDesktop)) return false
-  const path = window.location.pathname
-  if (config.includePaths.length && !config.includePaths.some((rule) => matchesPath(path, rule))) return false
-  return !config.excludePaths.some((rule) => matchesPath(path, rule))
+  return widgetVisibleOnPath(window.location.pathname, config.includePaths, config.excludePaths)
 }
 
 function observeWidgetVisibility(host: HTMLElement, config: WidgetConfig) {

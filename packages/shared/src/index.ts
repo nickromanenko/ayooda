@@ -1016,6 +1016,23 @@ export const DEFAULT_WIDGET_POSITION: WidgetPosition = 'bottom-right'
 export const MAX_WELCOME_MESSAGE_CHARS = 200
 export const MAX_WIDGET_COPY_CHARS = 160
 export const MAX_WIDGET_PATH_RULES = 20
+export const MAX_WIDGET_PATH_RULE_CHARS = 120
+const WIDGET_PATH_RULE = /^[/a-zA-Z0-9._~!*?&=\-{}:]+$/
+
+export function isWidgetPathRule(value: string): boolean {
+  return value.startsWith('/') && value.length <= MAX_WIDGET_PATH_RULE_CHARS && WIDGET_PATH_RULE.test(value)
+}
+
+export function widgetPathMatches(pathname: string, rule: string): boolean {
+  if (!isWidgetPathRule(rule)) return false
+  const escaped = rule.replace(/[.+^$()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
+  return new RegExp(`^${escaped}$`).test(pathname)
+}
+
+export function widgetVisibleOnPath(pathname: string, includePaths: readonly string[], excludePaths: readonly string[]): boolean {
+  if (includePaths.length && !includePaths.some((rule) => widgetPathMatches(pathname, rule))) return false
+  return !excludePaths.some((rule) => widgetPathMatches(pathname, rule))
+}
 
 export const WIDGET_THEMES = ['light', 'dark', 'auto'] as const
 export type WidgetTheme = (typeof WIDGET_THEMES)[number]
