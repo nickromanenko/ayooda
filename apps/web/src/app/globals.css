@@ -287,6 +287,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 @media (max-width: 760px) {
+  .widget-settings-grid { grid-template-columns: minmax(0, 1fr) !important; }
   .container { padding-inline: 18px; }
 
   .landing-nav-links,

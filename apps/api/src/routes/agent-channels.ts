@@ -10,7 +10,7 @@ import { authTest as testSlackBotToken } from '../lib/slack/client'
 import { assertTwilioNumber } from '../lib/sms/client'
 import { isTwilioAccountSid, normalizePhoneNumber } from '../lib/sms/message'
 import { validateWidgetAppearance } from '../lib/channels/validate'
-import { DEFAULT_WIDGET_COLOR, DEFAULT_WIDGET_POSITION, isEmailAddress } from '@ayooda/shared'
+import { DEFAULT_WIDGET_APPEARANCE, isEmailAddress } from '@ayooda/shared'
 import { canHideBranding } from '../lib/channels/branding'
 import { stripChannelSecrets } from '../lib/channels/sanitize'
 
@@ -87,7 +87,9 @@ agentChannels.get('/', async (c) => {
         // permits the option, so the UI can show it locked rather than hide it.
         brandingLocked: !canHide,
         config: {
+          ...DEFAULT_WIDGET_APPEARANCE,
           ...config,
+          enabled: safe.isActive !== false,
           showBranding: config.showBranding !== false,
           agentName: identity.name,
           agentPhotoURL: identity.photoURL,
@@ -133,11 +135,8 @@ agentChannels.post('/web-widget', async (c) => {
     type: 'web_widget',
     agentId,
     config: {
-      widgetColor: DEFAULT_WIDGET_COLOR,
-      widgetPosition: DEFAULT_WIDGET_POSITION,
+      ...DEFAULT_WIDGET_APPEARANCE,
       welcomeMessage: `Hi there! How can ${agentName} help you today?`,
-      showBranding: true,
-      allowedDomains: [],
       agentName,
       agentPhotoURL,
     },
@@ -173,12 +172,13 @@ agentChannels.put('/web-widget', async (c) => {
     )
   }
 
+  const currentConfig = existing.data().config ?? {}
   await existing.ref.update({
-    'config.widgetColor': result.value.widgetColor,
-    'config.widgetPosition': result.value.widgetPosition,
-    'config.welcomeMessage': result.value.welcomeMessage,
-    'config.showBranding': result.value.showBranding,
-    'config.allowedDomains': result.value.allowedDomains,
+    config: {
+      ...currentConfig,
+      ...result.value,
+    },
+    isActive: result.value.enabled,
   })
   return c.json(result.value)
 })

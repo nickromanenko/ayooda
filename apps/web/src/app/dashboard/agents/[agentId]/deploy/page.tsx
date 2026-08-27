@@ -1,15 +1,14 @@
 'use client'
 
 import { use, useState, useEffect, useCallback } from 'react'
-import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink, Smartphone, X } from 'lucide-react'
+import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink, Smartphone, X, RefreshCw } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import { Loading } from '@/components/dashboard/Loading'
 import { label, errorText, input } from '@/components/dashboard/ui'
 import WidgetAppearance from '@/components/dashboard/WidgetAppearance'
 import {
-  DEFAULT_WIDGET_COLOR,
-  DEFAULT_WIDGET_POSITION,
+  DEFAULT_WIDGET_APPEARANCE,
   type WidgetAppearance as Appearance,
 } from '@ayooda/shared'
 
@@ -20,6 +19,8 @@ interface Channel {
   isActive: boolean
   lastSeenAt?: string | null
   lastSeenOrigin?: string | null
+  observedDomains?: string[]
+  stats?: { views?: number; opens?: number; conversations?: number }
   brandingLocked?: boolean
   config?: Partial<Appearance> & { agentName?: string; agentPhotoURL?: string | null; fromAddress?: string; inboxAddress?: string; accountSid?: string; fromNumber?: string }
   telegram?: { botUsername: string; botId: number }
@@ -270,7 +271,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
               </p>
             </div>
           </div>
-          <span style={pill(Boolean(widget?.lastSeenAt))}>{widget ? (widget.lastSeenAt ? 'Installed' : 'Configured') : 'Off'}</span>
+          <span style={pill(Boolean(widget?.isActive && widget.lastSeenAt))}>{widget ? (!widget.isActive ? 'Paused' : widget.lastSeenAt ? 'Installed' : 'Configured') : 'Off'}</span>
         </div>
 
         <div style={{ padding: 20 }}>
@@ -286,12 +287,10 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
           ) : (
             <>
               <div style={{ marginBottom: 16, padding: '11px 13px', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--bg-2)' }}>
-                <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>
-                  {widget.lastSeenAt ? `Installation detected${widget.lastSeenOrigin ? ` on ${widget.lastSeenOrigin}` : ''}.` : 'Waiting to detect the first page load.'}
-                </p>
-                <p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-mute)' }}>
-                  {widget.lastSeenAt ? `Last seen ${new Date(widget.lastSeenAt).toLocaleString()}` : 'Install the code below, then reload your website.'}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 12 }}><div><p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>{widget.lastSeenAt ? `Installation detected${widget.lastSeenOrigin ? ` on ${widget.lastSeenOrigin}` : ''}.` : 'Waiting to detect the first page load.'}</p><p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-mute)', fontVariantNumeric: 'tabular-nums' }}>{widget.lastSeenAt ? `Last seen ${new Date(widget.lastSeenAt).toLocaleString()}` : 'Install the code below, then reload your website.'}</p></div><button type="button" onClick={() => void fetchChannels()} aria-label="Check installation again" className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', flexShrink: 0 }}><RefreshCw size={13} /></button></div>
+                {Boolean(widget.observedDomains?.length) && <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--ink-faint)' }}>Observed on: {widget.observedDomains!.join(', ')}</p>}
+                <div style={{ display: 'flex', gap: 12, marginTop: 9, flexWrap: 'wrap' }}><a href={`/dashboard/agents/${agentId}/test`} style={{ color: 'var(--accent)', fontSize: 11.5, textDecoration: 'none' }}>Open test chat →</a><details><summary style={{ color: 'var(--ink-mute)', fontSize: 11.5, cursor: 'pointer' }}>Installation troubleshooting</summary><p style={{ maxWidth: 560, margin: '7px 0 0', color: 'var(--ink-faint)', fontSize: 11, lineHeight: 1.5 }}>If detection does not appear, check the browser console and allow Ayooda’s CDN in <code style={{ fontFamily: 'var(--font-mono)' }}>script-src</code> and API origin in <code style={{ fontFamily: 'var(--font-mono)' }}>connect-src</code> in your Content Security Policy.</p></details></div>
+                {Boolean(widget.stats?.views) && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: 12, paddingTop: 11, borderTop: '1px solid var(--line)' }}>{[{ label: 'Loads', value: widget.stats?.views ?? 0 }, { label: 'Opens', value: widget.stats?.opens ?? 0 }, { label: 'Conversations', value: widget.stats?.conversations ?? 0 }].map((metric) => <div key={metric.label}><strong style={{ display: 'block', color: 'var(--ink)', font: '600 14px var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{metric.value.toLocaleString()}</strong><span style={{ color: 'var(--ink-faint)', fontSize: 10.5 }}>{metric.label}</span></div>)}</div>}
               </div>
               <p style={label}>Embed code</p>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 12 }}>
@@ -372,11 +371,12 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
                 agentPhotoURL={widget.config?.agentPhotoURL ?? null}
                 brandingLocked={widget.brandingLocked !== false}
                 initial={{
-                  widgetColor: widget.config?.widgetColor ?? DEFAULT_WIDGET_COLOR,
-                  widgetPosition: widget.config?.widgetPosition ?? DEFAULT_WIDGET_POSITION,
+                  ...DEFAULT_WIDGET_APPEARANCE,
+                  ...widget.config,
                   welcomeMessage: widget.config?.welcomeMessage ?? '',
                   showBranding: widget.config?.showBranding !== false,
                   allowedDomains: widget.config?.allowedDomains ?? [],
+                  enabled: widget.isActive !== false,
                 }}
                 onSaved={applyAppearance}
               />

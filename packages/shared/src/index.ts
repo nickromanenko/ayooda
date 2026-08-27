@@ -181,10 +181,7 @@ export interface KnowledgeDoc {
   syncError?: string | null
 }
 
-export interface WidgetConfig {
-  widgetColor: string
-  widgetPosition: 'bottom-right' | 'bottom-left'
-  welcomeMessage: string
+export interface WidgetConfig extends WidgetAppearance {
   agentName: string
   agentPhotoURL: string | null
 }
@@ -1017,6 +1014,17 @@ export type WidgetPosition = (typeof WIDGET_POSITIONS)[number]['id']
 export const DEFAULT_WIDGET_COLOR = '#6366f1'
 export const DEFAULT_WIDGET_POSITION: WidgetPosition = 'bottom-right'
 export const MAX_WELCOME_MESSAGE_CHARS = 200
+export const MAX_WIDGET_COPY_CHARS = 160
+export const MAX_WIDGET_PATH_RULES = 20
+
+export const WIDGET_THEMES = ['light', 'dark', 'auto'] as const
+export type WidgetTheme = (typeof WIDGET_THEMES)[number]
+
+export const WIDGET_LOCALES = ['auto', 'en', 'es', 'fr', 'de', 'pt', 'ar'] as const
+export type WidgetLocale = (typeof WIDGET_LOCALES)[number]
+
+export const WIDGET_CONVERSATION_PERSISTENCE = ['session', 'visitor', 'fresh'] as const
+export type WidgetConversationPersistence = (typeof WIDGET_CONVERSATION_PERSISTENCE)[number]
 
 /** Plan required to hide the "Powered by Ayooda" line. Enforced on read as well
  *  as on write, so a downgrade puts the badge back rather than leaving a lapsed
@@ -1032,6 +1040,57 @@ export interface WidgetAppearance {
   showBranding: boolean
   /** Empty means any website. Entries are hostnames or wildcard subdomains. */
   allowedDomains: string[]
+  /** Whether the existing embed is currently serving the widget. */
+  enabled: boolean
+  theme: WidgetTheme
+  headerTitle: string
+  statusText: string
+  inputPlaceholder: string
+  launcherGreeting: string
+  launcherGreetingDelaySeconds: number
+  autoOpenDelaySeconds: number
+  autoOpenOncePerSession: boolean
+  showOnDesktop: boolean
+  showOnMobile: boolean
+  includePaths: string[]
+  excludePaths: string[]
+  horizontalOffset: number
+  verticalOffset: number
+  locale: WidgetLocale
+  privacyNotice: string
+  privacyPolicyURL: string
+  soundEnabled: boolean
+  conversationPersistence: WidgetConversationPersistence
+  persistenceDays: number
+}
+
+export const DEFAULT_WIDGET_APPEARANCE: WidgetAppearance = {
+  widgetColor: DEFAULT_WIDGET_COLOR,
+  widgetPosition: DEFAULT_WIDGET_POSITION,
+  welcomeMessage: '',
+  showBranding: true,
+  allowedDomains: [],
+  enabled: true,
+  theme: 'light',
+  headerTitle: '',
+  statusText: '',
+  inputPlaceholder: '',
+  launcherGreeting: '',
+  launcherGreetingDelaySeconds: 5,
+  autoOpenDelaySeconds: 0,
+  autoOpenOncePerSession: true,
+  showOnDesktop: true,
+  showOnMobile: true,
+  includePaths: [],
+  excludePaths: [],
+  horizontalOffset: 24,
+  verticalOffset: 24,
+  locale: 'auto',
+  privacyNotice: '',
+  privacyPolicyURL: '',
+  soundEnabled: false,
+  conversationPersistence: 'session',
+  persistenceDays: 7,
 }
 
 // ---------------------------------------------------------------------------

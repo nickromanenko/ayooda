@@ -12,7 +12,8 @@ import { extractSSEMessages } from './sse'
 import { escapeHtmlAttribute, safeAgentPhotoURL } from './identity'
 import { renderMarkdown } from './markdown'
 import { MessageBuffer, type FeedMessage } from './message-buffer'
-import { widgetAccessibleAccent, widgetForeground } from '@ayooda/shared'
+import { resolveWidgetLocale, widgetStrings, type WidgetStrings } from './strings'
+import { widgetAccessibleAccent, widgetForeground, type WidgetAppearance } from '@ayooda/shared'
 
 // ---------------------------------------------------------------------------
 // Bootstrap — read attributes synchronously before any async work
@@ -34,15 +35,9 @@ if (!CHANNEL_ID) {
 // Types
 // ---------------------------------------------------------------------------
 
-interface WidgetConfig {
+interface WidgetConfig extends WidgetAppearance {
   agentName: string
   agentPhotoURL: string | null
-  widgetColor: string
-  widgetPosition: 'bottom-right' | 'bottom-left'
-  welcomeMessage: string
-  /** The API decides this: it is forced true below the plan that can hide it,
-   *  so an expired or downgraded workspace gets the line back automatically. */
-  showBranding: boolean
 }
 
 interface ChatDone {
@@ -72,20 +67,72 @@ function getVisitorId(): string {
   return id
 }
 
-function getConversationId(): string {
+function getConversationId(config: WidgetConfig): string {
+  if (config.conversationPersistence === 'fresh') return crypto.randomUUID()
   const key = `ayooda_conv_${CHANNEL_ID}`
-  let id = sessionStorage.getItem(key)
+  const storage = config.conversationPersistence === 'visitor' ? localStorage : sessionStorage
+  let id = storage.getItem(key)
+  if (config.conversationPersistence === 'visitor') {
+    const expiresAt = Number(localStorage.getItem(`${key}_expires`))
+    if (!expiresAt || Date.now() > expiresAt) id = null
+  }
   if (!id) {
     id = crypto.randomUUID()
-    sessionStorage.setItem(key, id)
+    storage.setItem(key, id)
+    if (config.conversationPersistence === 'visitor') {
+      localStorage.setItem(`${key}_expires`, String(Date.now() + config.persistenceDays * 86_400_000))
+    }
   }
   return id
 }
 
-function createConversationId(): string {
+function createConversationId(config: WidgetConfig): string {
   const id = crypto.randomUUID()
-  sessionStorage.setItem(`ayooda_conv_${CHANNEL_ID}`, id)
+  if (config.conversationPersistence !== 'fresh') {
+    const storage = config.conversationPersistence === 'visitor' ? localStorage : sessionStorage
+    const key = `ayooda_conv_${CHANNEL_ID}`
+    storage.setItem(key, id)
+    if (config.conversationPersistence === 'visitor') {
+      localStorage.setItem(`${key}_expires`, String(Date.now() + config.persistenceDays * 86_400_000))
+    }
+  }
   return id
+}
+
+function matchesPath(pathname: string, rule: string): boolean {
+  const escaped = rule.replace(/[.+^$()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
+  return new RegExp(`^${escaped}$`).test(pathname)
+}
+
+function shouldRender(config: WidgetConfig): boolean {
+  const mobile = window.matchMedia('(max-width: 600px)').matches
+  if ((mobile && !config.showOnMobile) || (!mobile && !config.showOnDesktop)) return false
+  const path = window.location.pathname
+  if (config.includePaths.length && !config.includePaths.some((rule) => matchesPath(path, rule))) return false
+  return !config.excludePaths.some((rule) => matchesPath(path, rule))
+}
+
+function observeWidgetVisibility(host: HTMLElement, config: WidgetConfig) {
+  const update = () => { host.style.display = shouldRender(config) ? '' : 'none' }
+  update()
+  window.addEventListener('popstate', update)
+  window.addEventListener('ayooda:navigation', update)
+  window.matchMedia('(max-width: 600px)').addEventListener('change', update)
+  const marker = '__ayoodaNavigationPatched'
+  const markedHistory = history as History & { [marker]?: boolean }
+  if (!markedHistory[marker]) {
+    markedHistory[marker] = true
+    const pushState = history.pushState.bind(history)
+    const replaceState = history.replaceState.bind(history)
+    history.pushState = (data: unknown, unused: string, url?: string | URL | null) => {
+      pushState(data, unused, url)
+      window.dispatchEvent(new Event('ayooda:navigation'))
+    }
+    history.replaceState = (data: unknown, unused: string, url?: string | URL | null) => {
+      replaceState(data, unused, url)
+      window.dispatchEvent(new Event('ayooda:navigation'))
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -177,19 +224,23 @@ async function sendMessageStream(
 // CSS
 // ---------------------------------------------------------------------------
 
-function buildCSS(color: string, position: WidgetConfig['widgetPosition']): string {
+function buildCSS(config: WidgetConfig): string {
+  const { widgetColor: color, widgetPosition: position, horizontalOffset, verticalOffset, theme } = config
   // The panel and launcher hug whichever edge the widget is pinned to, so a
   // left-hand widget opens leftwards instead of off the side of the viewport.
   const left = position === 'bottom-left'
   const foreground = widgetForeground(color)
   const accent = widgetAccessibleAccent(color)
+  const darkVariables = `--aw-panel:#18181b;--aw-panel-soft:#27272a;--aw-ink:#fafafa;--aw-ink-muted:#a1a1aa;--aw-line:#3f3f46;--aw-bot:#27272a;--aw-code:#09090b;`
+  const lightVariables = `--aw-panel:#fff;--aw-panel-soft:#fafafa;--aw-ink:#18181b;--aw-ink-muted:#71717a;--aw-line:#e4e4e7;--aw-bot:#f4f4f5;--aw-code:#27272a;`
   return `
-    :host { all: initial; font-family: system-ui, -apple-system, sans-serif; }
+    :host { all: initial; font-family: system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; ${theme === 'dark' ? darkVariables : lightVariables} }
+    ${theme === 'auto' ? `@media (prefers-color-scheme: dark) { :host { ${darkVariables} } }` : ''}
 
     #container {
       position: fixed;
-      bottom: max(24px, env(safe-area-inset-bottom));
-      ${left ? 'left: max(24px, env(safe-area-inset-left));' : 'right: max(24px, env(safe-area-inset-right));'}
+      bottom: max(${verticalOffset}px, env(safe-area-inset-bottom));
+      ${left ? `left: max(${horizontalOffset}px, env(safe-area-inset-left));` : `right: max(${horizontalOffset}px, env(safe-area-inset-right));`}
       z-index: 2147483647;
       display: flex;
       flex-direction: column;
@@ -284,7 +335,8 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       width: 360px;
       height: min(520px, calc(100dvh - 100px));
       min-height: 360px;
-      background: #fff;
+      background: var(--aw-panel);
+      color: var(--aw-ink);
       border-radius: 16px;
       box-shadow: 0 8px 40px rgba(0,0,0,0.16);
       display: flex;
@@ -379,7 +431,7 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       scroll-behavior: smooth;
     }
     #messages::-webkit-scrollbar { width: 4px; }
-    #messages::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 2px; }
+    #messages::-webkit-scrollbar-thumb { background: var(--aw-line); border-radius: 2px; }
     #jump-latest {
       position: absolute;
       left: 50%;
@@ -390,8 +442,8 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       border: none;
       border-radius: 999px;
       padding: 0 13px;
-      background: #fff;
-      color: #3f3f46;
+      background: var(--aw-panel);
+      color: var(--aw-ink);
       box-shadow: 0 0 0 1px rgba(0,0,0,0.08), 0 5px 16px rgba(0,0,0,0.14);
       cursor: pointer;
       font: 600 11px/1 system-ui, -apple-system, sans-serif;
@@ -420,8 +472,8 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     }
     .msg.bot {
       align-self: flex-start;
-      background: #f4f4f5;
-      color: #18181b;
+      background: var(--aw-bot);
+      color: var(--aw-ink);
       border-bottom-left-radius: 4px;
       white-space: normal;
     }
@@ -453,7 +505,7 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       margin: 8px 0 10px;
       overflow-x: auto;
       border-radius: 8px;
-      background: #27272a;
+      background: var(--aw-code);
       color: #fafafa;
       padding: 10px 12px;
       white-space: pre;
@@ -463,7 +515,7 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       margin: 8px 0 10px;
       border-left: 3px solid color-mix(in srgb, ${accent} 55%, transparent);
       padding-left: 10px;
-      color: #52525b;
+      color: var(--aw-ink-muted);
     }
     .msg.bot h1,
     .msg.bot h2,
@@ -483,9 +535,9 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       font-size: 0.9em;
     }
     .msg.bot th,
-    .msg.bot td { border: 1px solid #d4d4d8; padding: 5px 7px; text-align: left; }
+    .msg.bot td { border: 1px solid var(--aw-line); padding: 5px 7px; text-align: left; }
     .msg.bot th { background: rgba(0,0,0,0.04); font-weight: 700; }
-    .msg.bot hr { margin: 12px 0; border: 0; border-top: 1px solid #d4d4d8; }
+    .msg.bot hr { margin: 12px 0; border: 0; border-top: 1px solid var(--aw-line); }
     .msg.error {
       align-self: flex-start;
       background: #fef2f2;
@@ -509,7 +561,7 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     .msg.system {
       align-self: center;
       background: transparent;
-      color: #a1a1aa;
+      color: var(--aw-ink-muted);
       font-size: 12px;
       padding: 2px 8px;
     }
@@ -517,7 +569,7 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     /* Typing indicator */
     .typing {
       align-self: flex-start;
-      background: #f4f4f5;
+      background: var(--aw-bot);
       border-radius: 14px;
       border-bottom-left-radius: 4px;
       padding: 10px 14px;
@@ -529,7 +581,7 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #a1a1aa;
+      background: var(--aw-ink-muted);
       animation: bounce 1.2s infinite;
     }
     .typing span:nth-child(2) { animation-delay: 0.2s; }
@@ -542,14 +594,14 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     /* Input area */
     #input-area {
       padding: 12px 16px;
-      border-top: 1px solid #e4e4e7;
+      border-top: 1px solid var(--aw-line);
       flex-shrink: 0;
-      background: #fff;
+      background: var(--aw-panel);
     }
     #composer {
       position: relative;
       border-radius: 18px;
-      background: #fff;
+      background: var(--aw-panel);
       box-shadow:
         0 0 0 1px rgba(0,0,0,0.12),
         0 2px 5px rgba(0,0,0,0.04);
@@ -576,16 +628,16 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
       font-family: inherit;
       resize: none;
       outline: none;
-      color: #18181b;
-      background: #fff;
+      color: var(--aw-ink);
+      background: var(--aw-panel);
       line-height: 1.45;
     }
-    #input::placeholder { color: #a1a1aa; }
+    #input::placeholder { color: var(--aw-ink-muted); }
     #composer-hint {
       position: absolute;
       left: 14px;
       bottom: 13px;
-      color: #a1a1aa;
+      color: var(--aw-ink-muted);
       font-size: 10px;
       line-height: 1;
       pointer-events: none;
@@ -618,17 +670,41 @@ function buildCSS(color: string, position: WidgetConfig['widgetPosition']): stri
     }
     #send-btn:disabled { color: #c4c4cc; cursor: not-allowed; }
     #send-btn svg { width: 20px; height: 20px; fill: currentColor; }
+    #panel[dir="rtl"] #input { padding: 14px 14px 40px 52px; }
+    #panel[dir="rtl"] #send-btn { left: 7px; right: auto; }
+    #panel[dir="rtl"] #composer-hint { left: auto; right: 14px; }
+    #panel[dir="rtl"] .msg.bot blockquote { border-left: 0; border-right: 3px solid color-mix(in srgb, ${accent} 55%, transparent); padding-left: 0; padding-right: 10px; }
 
     /* Powered-by */
     #poweredby {
       text-align: center;
       font-size: 11px;
-      color: #a1a1aa;
+      color: var(--aw-ink-muted);
       padding: 6px 0 10px;
       flex-shrink: 0;
     }
-    #poweredby a { color: #a1a1aa; text-decoration: none; }
-    #poweredby a:hover { color: #71717a; }
+    #poweredby a { color: var(--aw-ink-muted); text-decoration: none; }
+    #poweredby a:hover { color: var(--aw-ink); }
+
+    #launcher-greeting {
+      max-width: 240px;
+      border: 0;
+      border-radius: 14px;
+      padding: 10px 13px;
+      background: var(--aw-panel);
+      color: var(--aw-ink);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 6px 20px rgba(0,0,0,.14);
+      cursor: pointer;
+      font: 500 13px/1.4 system-ui, -apple-system, sans-serif;
+      text-align: left;
+      opacity: 1;
+      transform: translateY(0);
+      transition-property: opacity, transform;
+      transition-duration: 180ms;
+      transition-timing-function: cubic-bezier(0.2,0,0,1);
+    }
+    #launcher-greeting[hidden] { display: none; }
+    #launcher-greeting.dismissed { opacity: 0; transform: translateY(6px); pointer-events: none; }
 
     @media (max-width: 480px) {
       #container {
@@ -689,6 +765,7 @@ class AyoodaWidget {
   private conversationId: string
   private visitorId: string
   private config: WidgetConfig
+  private strings: WidgetStrings
   private messageBuffer = new MessageBuffer()
   private jumpLatestBtn!: HTMLButtonElement
   private unreadBadge!: HTMLElement
@@ -699,34 +776,43 @@ class AyoodaWidget {
   private reconnectDelay = 1000
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private feedSuspended = false // set on immediate failure (conversation may not exist yet)
+  private openTracked = false
 
   constructor(host: HTMLElement, config: WidgetConfig) {
     this.config = config
-    this.conversationId = getConversationId()
+    this.strings = widgetStrings(config.locale, navigator.language)
+    this.conversationId = getConversationId(config)
     this.visitorId = getVisitorId()
 
     this.shadow = host.attachShadow({ mode: 'open' })
     this.build()
     this.historyReady = this.loadHistory()
+    this.setupProactiveBehavior()
   }
 
   private build() {
-    const { agentName, agentPhotoURL, widgetColor, widgetPosition } = this.config
+    const { agentName, agentPhotoURL, privacyPolicyURL, privacyNotice, launcherGreeting } = this.config
     const photoURL = safeAgentPhotoURL(agentPhotoURL)
     const escapedAgentName = escapeHtmlAttribute(agentName)
     const escapedInitial = escapeHtmlAttribute(agentName.charAt(0).toUpperCase())
     const escapedPhotoURL = photoURL ? escapeHtmlAttribute(photoURL) : null
+    const escapedHeaderTitle = escapeHtmlAttribute(this.config.headerTitle || agentName)
+    const escapedStatus = escapeHtmlAttribute(this.config.statusText || this.strings.online)
+    const escapedPlaceholder = escapeHtmlAttribute(this.config.inputPlaceholder || this.strings.compose)
+    const escapedGreeting = escapeHtmlAttribute(launcherGreeting)
+    const escapedPrivacyNotice = escapeHtmlAttribute(privacyNotice)
+    const escapedPrivacyURL = privacyPolicyURL ? escapeHtmlAttribute(privacyPolicyURL) : ''
     // Absent on responses from an older API: show the line rather than hide it.
     const showBranding = this.config.showBranding !== false
 
     const style = document.createElement('style')
-    style.textContent = buildCSS(widgetColor, widgetPosition)
+    style.textContent = buildCSS(this.config)
     this.shadow.appendChild(style)
 
     const container = document.createElement('div')
     container.id = 'container'
     container.innerHTML = `
-      <div id="panel" class="hidden" role="dialog" aria-labelledby="agent-name" aria-hidden="true" inert>
+      <div id="panel" class="hidden" dir="${resolveWidgetLocale(this.config.locale, navigator.language) === 'ar' ? 'rtl' : 'ltr'}" role="dialog" aria-labelledby="agent-name" aria-hidden="true" inert>
         <div id="header">
           <div id="avatar">
             ${
@@ -735,32 +821,33 @@ class AyoodaWidget {
                 : escapedInitial
             }
           </div>
-          <span id="agent-identity"><span id="agent-name">${escapedAgentName}</span><span id="agent-status" role="status">Online</span></span>
+          <span id="agent-identity"><span id="agent-name">${escapedHeaderTitle}</span><span id="agent-status" role="status">${escapedStatus}</span></span>
           <span id="header-actions">
-            <button id="new-chat-btn" type="button" aria-label="Start a new conversation">${ICON_NEW_CHAT}</button>
-            <button id="close-btn" type="button" aria-label="Close chat">${ICON_CLOSE}</button>
+            <button id="new-chat-btn" type="button" aria-label="${escapeHtmlAttribute(this.strings.newConversation)}">${ICON_NEW_CHAT}</button>
+            <button id="close-btn" type="button" aria-label="${escapeHtmlAttribute(this.strings.close)}">${ICON_CLOSE}</button>
           </span>
         </div>
         <div id="message-stage">
           <div id="messages" role="log" aria-live="polite" dir="auto"></div>
-          <button id="jump-latest" type="button" hidden>↓ New messages</button>
+          <button id="jump-latest" type="button" hidden>${escapeHtmlAttribute(this.strings.newMessages)}</button>
         </div>
         <div id="input-area">
           <div id="composer">
             <textarea
               id="input"
               rows="1"
-              placeholder="Compose your message\u2026"
+              placeholder="${escapedPlaceholder}"
               aria-label="Chat message"
               dir="auto"
             ></textarea>
-            <span id="composer-hint" aria-hidden="true">Enter to send · Shift+Enter for a new line</span>
-            <button id="send-btn" type="button" aria-label="Send" disabled>${ICON_SEND}</button>
+            <span id="composer-hint" aria-hidden="true">${escapeHtmlAttribute(this.strings.inputHint)}</span>
+            <button id="send-btn" type="button" aria-label="${escapeHtmlAttribute(this.strings.send)}" disabled>${ICON_SEND}</button>
           </div>
         </div>
-        ${showBranding ? '<div id="poweredby">Powered by <a href="https://ayooda.live" target="_blank" rel="noopener noreferrer">Ayooda</a></div>' : ''}
+        ${(showBranding || escapedPrivacyNotice || escapedPrivacyURL) ? `<div id="poweredby">${escapedPrivacyNotice ? `<span>${escapedPrivacyNotice}</span> ` : ''}${escapedPrivacyURL ? `<a href="${escapedPrivacyURL}" target="_blank" rel="noopener noreferrer">${escapeHtmlAttribute(this.strings.privacy)}</a>${showBranding ? ' · ' : ''}` : ''}${showBranding ? `${escapeHtmlAttribute(this.strings.poweredBy)} <a href="https://ayooda.live" target="_blank" rel="noopener noreferrer">Ayooda</a>` : ''}</div>` : ''}
       </div>
-      <button id="toggle" type="button" aria-label="Open chat with ${escapedAgentName}" aria-expanded="false" aria-controls="panel">
+      ${launcherGreeting ? `<button id="launcher-greeting" type="button" hidden>${escapedGreeting}</button>` : ''}
+      <button id="toggle" type="button" aria-label="${escapeHtmlAttribute(this.strings.openChat)} ${escapedAgentName}" aria-expanded="false" aria-controls="panel">
         <span class="toggle-icon toggle-chat" aria-hidden="true">${ICON_CHAT}</span>
         <span class="toggle-icon toggle-close" aria-hidden="true">${ICON_CLOSE}</span>
         <span id="unread-badge" hidden aria-label="Unread messages"></span>
@@ -777,6 +864,7 @@ class AyoodaWidget {
     this.jumpLatestBtn = container.querySelector<HTMLButtonElement>('#jump-latest')!
     this.unreadBadge = container.querySelector<HTMLElement>('#unread-badge')!
     this.statusText = container.querySelector<HTMLElement>('#agent-status')!
+    container.querySelector('#launcher-greeting')?.addEventListener('click', () => this.toggle(true))
 
     // Event listeners
     this.toggleBtn.addEventListener('click', () => this.toggle())
@@ -817,9 +905,9 @@ class AyoodaWidget {
           this.messageBuffer.markRendered(message.id)
           this.appendMessage(message.content, message.role === 'user' ? 'user' : 'bot', true)
         }
-        if (history.status === 'human') this.appendSystemNote("You're chatting with a human", true)
-        else if (history.status === 'waiting') this.appendSystemNote('Waiting for a teammate', true)
-        else if (history.status === 'resolved') this.appendSystemNote('This conversation has been resolved', true)
+        if (history.status === 'human') this.appendSystemNote(this.strings.human, true)
+        else if (history.status === 'waiting') this.appendSystemNote(this.strings.waiting, true)
+        else if (history.status === 'resolved') this.appendSystemNote(this.strings.resolved, true)
       }
       this.openFeed()
     } catch {
@@ -834,6 +922,15 @@ class AyoodaWidget {
     this.panel.classList.toggle('hidden', !this.open)
     this.toggleBtn.setAttribute('aria-expanded', String(this.open))
     if (this.open) {
+      if (!this.openTracked) {
+        this.openTracked = true
+        this.recordEvent('open')
+      }
+      const greeting = this.shadow.querySelector<HTMLElement>('#launcher-greeting')
+      if (greeting) {
+        greeting.classList.add('dismissed')
+        setTimeout(() => { greeting.hidden = true }, 180)
+      }
       this.setUnreadCount(0)
       this.input.focus()
       this.scrollToBottom(true)
@@ -844,13 +941,42 @@ class AyoodaWidget {
     }
   }
 
+  private recordEvent(event: 'open' | 'conversation_started') {
+    void fetch(`${API_BASE}/widget/event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId: CHANNEL_ID, event }),
+      keepalive: true,
+    }).catch(() => {})
+  }
+
+  private setupProactiveBehavior() {
+    if (this.config.launcherGreeting) {
+      setTimeout(() => {
+        if (this.open) return
+        const greeting = this.shadow.querySelector<HTMLElement>('#launcher-greeting')
+        if (greeting) greeting.hidden = false
+      }, this.config.launcherGreetingDelaySeconds * 1000)
+    }
+    if (this.config.autoOpenDelaySeconds > 0) {
+      const key = `ayooda_auto_opened_${CHANNEL_ID}`
+      if (!this.config.autoOpenOncePerSession || !sessionStorage.getItem(key)) {
+        setTimeout(() => {
+          if (this.open) return
+          this.toggle(true)
+          sessionStorage.setItem(key, '1')
+        }, this.config.autoOpenDelaySeconds * 1000)
+      }
+    }
+  }
+
   private startNewConversation() {
     if (this.sending) return
     this.eventSource?.close()
     this.eventSource = null
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
-    this.conversationId = createConversationId()
+    this.conversationId = createConversationId(this.config)
     this.messageBuffer = new MessageBuffer()
     this.feedSuspended = true
     this.messages.replaceChildren()
@@ -877,14 +1003,15 @@ class AyoodaWidget {
       const message = JSON.parse(e.data) as FeedMessage
       for (const ready of this.messageBuffer.accept(message, this.sending)) {
         this.appendBotMessage(ready.content)
+        this.playNotification()
         if (!this.open) this.setUnreadCount(this.unreadCount + 1)
       }
     })
 
     es.addEventListener('status', (e: MessageEvent) => {
       const { status } = JSON.parse(e.data) as { status: string }
-      if (status === 'human') this.appendSystemNote("You're now chatting with a human")
-      else if (status === 'resolved') this.appendSystemNote('This conversation has been resolved')
+      if (status === 'human') this.appendSystemNote(this.strings.human)
+      else if (status === 'resolved') this.appendSystemNote(this.strings.resolved)
     })
 
     es.onerror = () => {
@@ -912,7 +1039,7 @@ class AyoodaWidget {
     this.unreadBadge.textContent = count > 9 ? '9+' : String(count)
     this.toggleBtn.setAttribute(
       'aria-label',
-      this.open ? 'Close chat' : `${count ? `${count} unread. ` : ''}Open chat with ${this.config.agentName}`,
+      this.open ? this.strings.closeChat : `${count ? `${count} ${this.strings.unread}. ` : ''}${this.strings.openChat} ${this.config.agentName}`,
     )
   }
 
@@ -957,7 +1084,7 @@ class AyoodaWidget {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'retry-btn'
-    button.textContent = 'Try again'
+    button.textContent = this.strings.retry
     button.addEventListener('click', () => {
       element.remove()
       void this.submit(originalText, false)
@@ -967,10 +1094,29 @@ class AyoodaWidget {
 
   private setStatus(status: 'online' | 'responding' | 'reconnecting') {
     this.statusText.textContent = status === 'responding'
-      ? 'Responding…'
+      ? this.strings.responding
       : status === 'reconnecting'
-        ? 'Reconnecting…'
-        : 'Online'
+        ? this.strings.reconnecting
+        : (this.config.statusText || this.strings.online)
+  }
+
+  private playNotification() {
+    if (!this.config.soundEnabled || this.open) return
+    try {
+      const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!AudioContextClass) return
+      const context = new AudioContextClass()
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      oscillator.frequency.value = 660
+      gain.gain.setValueAtTime(0.0001, context.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.14)
+      oscillator.connect(gain).connect(context.destination)
+      oscillator.start()
+      oscillator.stop(context.currentTime + 0.15)
+      oscillator.addEventListener('ended', () => void context.close())
+    } catch { /* autoplay policies may block sound before a visitor interaction */ }
   }
 
   private showTyping(): HTMLElement {
@@ -1009,6 +1155,11 @@ class AyoodaWidget {
     this.input.style.height = 'auto'
 
     if (appendUser) this.appendMessage(text, 'user')
+    const startedKey = `ayooda_started_${this.conversationId}`
+    if (!sessionStorage.getItem(startedKey)) {
+      sessionStorage.setItem(startedKey, '1')
+      this.recordEvent('conversation_started')
+    }
     const typingEl = this.showTyping()
     let bubble: HTMLElement | null = null
     let streamedMarkdown = ''
@@ -1027,15 +1178,15 @@ class AyoodaWidget {
         },
         onDone: (done) => {
           this.messageBuffer.markRendered(done.messageId)
-          if (done.status === 'waiting') this.appendSystemNote('This conversation is waiting for a human')
-          else if (done.status === 'human') this.appendSystemNote('This conversation was assigned to a teammate')
-          else if (done.status === 'resolved') this.appendSystemNote('This conversation has been resolved')
+          if (done.status === 'waiting') this.appendSystemNote(this.strings.waiting)
+          else if (done.status === 'human') this.appendSystemNote(this.strings.human)
+          else if (done.status === 'resolved') this.appendSystemNote(this.strings.resolved)
           this.feedSuspended = false
           this.openFeed()
           if (!bubble) {
             // model produced no chunks (empty reply) — show something sane
             typingEl.remove()
-            this.appendMessage('Sorry, I could not generate a response.', 'error')
+            this.appendMessage(this.strings.emptyResponse, 'error')
           }
         },
       })
@@ -1043,10 +1194,10 @@ class AyoodaWidget {
       typingEl.remove()
       if (!bubble) {
         const message = error instanceof DOMException && error.name === 'AbortError'
-          ? 'The response took too long to start.'
+          ? this.strings.timeout
           : error instanceof Error && error.message.includes('Too many')
-            ? 'Too many messages were sent. Please wait a moment.'
-            : 'The message could not be sent.'
+            ? this.strings.rateLimit
+            : this.strings.sendError
         this.appendRetryError(message, text)
       }
     } finally {
@@ -1068,9 +1219,11 @@ class AyoodaWidget {
 async function init() {
   try {
     const config = await fetchConfig()
+    if (!config.enabled) return
     const host = document.createElement('div')
     host.id = 'ayooda-widget-host'
     document.body.appendChild(host)
+    observeWidgetVisibility(host, config)
     new AyoodaWidget(host, config)
   } catch (err) {
     console.error('[Ayooda] Failed to initialize widget:', err)

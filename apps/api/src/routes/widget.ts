@@ -8,10 +8,12 @@
 
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
+import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from '../lib/firebase-admin'
 import { canHideBranding } from '../lib/channels/branding'
 import { runAgentTurn } from '../lib/chat/tools'
 import { rateLimit } from '../lib/rate-limit'
+import { DEFAULT_WIDGET_APPEARANCE } from '@ayooda/shared'
 
 const widget = new Hono()
 
@@ -23,6 +25,7 @@ const RATE_WINDOW_MS = 60_000
 const CHAT_LIMIT_PER_CHANNEL = 60
 const CHAT_LIMIT_PER_IP = 30
 const EVENTS_LIMIT_PER_IP = 20
+const CONFIG_HEARTBEATS_PER_IP = 120
 
 /** Best-effort client IP from Cloud Run's forwarding headers. */
 function clientIp(c: { req: { header: (name: string) => string | undefined } }): string {
@@ -72,7 +75,9 @@ widget.get('/config/:channelId', async (c) => {
   if (!channelDoc) return c.json({ error: 'Channel not found' }, 404)
 
   const data = channelDoc.data()
+  if (data.isActive === false) return c.json({ error: 'This widget is paused.' }, 404)
   if (!domainAllowed(c, data)) return c.json({ error: 'This widget is not allowed on this domain.' }, 403)
+  const config = { ...DEFAULT_WIDGET_APPEARANCE, ...(data.config ?? {}) }
   const originHeader = c.req.header('origin') ?? c.req.header('referer')
   let lastSeenOrigin: string | null = null
   if (originHeader) {
@@ -81,18 +86,24 @@ widget.get('/config/:channelId', async (c) => {
 
   // This is also the installation heartbeat shown in Deploy. It records only
   // the host, never a customer page path or query string.
-  void channelDoc.ref.update({
-    lastSeenAt: new Date(),
-    ...(lastSeenOrigin ? { lastSeenOrigin } : {}),
-  }).catch((err) => console.warn('[widget] installation heartbeat failed:', err))
+  if (rateLimit(`widget-config:${clientIp(c)}`, CONFIG_HEARTBEATS_PER_IP, RATE_WINDOW_MS).ok) {
+    void channelDoc.ref.update({
+      lastSeenAt: new Date(),
+      'stats.views': FieldValue.increment(1),
+      ...(lastSeenOrigin ? {
+        lastSeenOrigin,
+        observedDomains: [...new Set([...(Array.isArray(data.observedDomains) ? data.observedDomains : []).slice(-19), lastSeenOrigin])],
+      } : {}),
+    }).catch((err) => console.warn('[widget] installation heartbeat failed:', err))
+  }
 
   // The channel carries a cached copy of the agent's name and photo, refreshed
   // only when a channel is reassigned to a different agent. Renaming an agent or
   // uploading a logo would therefore never reach an already-embedded widget, so
   // read the agent live and fall back to the cache only if it has gone.
   // Appearance (colour, position, welcome message) stays channel-level.
-  let agentName: string = data.config.agentName
-  let agentPhotoURL: string | null = data.config.agentPhotoURL ?? null
+  let agentName: string = config.agentName
+  let agentPhotoURL: string | null = config.agentPhotoURL ?? null
   const workspaceId = channelDoc.ref.parent.parent?.id
   const agentId = data.agentId as string | undefined
   if (workspaceId && agentId) {
@@ -112,7 +123,7 @@ widget.get('/config/:channelId', async (c) => {
   // Branding is re-checked here, not just when it is saved: a workspace that
   // turned the line off on a paid plan and later downgraded or lapsed must get
   // it back, and this endpoint is the only thing the embedded widget trusts.
-  let showBranding = data.config.showBranding !== false
+  let showBranding = config.showBranding !== false
   if (!showBranding && workspaceId) {
     try {
       const wsSnap = await adminDb.doc(`workspaces/${workspaceId}`).get()
@@ -125,14 +136,34 @@ widget.get('/config/:channelId', async (c) => {
   }
 
   return c.json({
+    ...config,
     agentName,
     agentPhotoURL,
-    widgetColor: data.config.widgetColor,
-    widgetPosition: data.config.widgetPosition,
-    welcomeMessage: data.config.welcomeMessage,
     showBranding,
-    allowedDomains: Array.isArray(data.config.allowedDomains) ? data.config.allowedDomains : [],
+    allowedDomains: undefined,
   })
+})
+
+// ---------------------------------------------------------------------------
+// POST /widget/event — small, privacy-safe engagement counters
+// ---------------------------------------------------------------------------
+
+widget.post('/event', async (c) => {
+  const body: { channelId?: string; event?: string } = await c.req
+    .json<{ channelId?: string; event?: string }>()
+    .catch(() => ({}))
+  if (!body.channelId || !['open', 'conversation_started'].includes(body.event ?? '')) {
+    return c.json({ error: 'Invalid widget event.' }, 400)
+  }
+  const limit = rateLimit(`widget-event:${clientIp(c)}`, 120, RATE_WINDOW_MS)
+  if (!limit.ok) return c.json({ ok: true })
+  const channelDoc = await findChannel(body.channelId)
+  if (!channelDoc || channelDoc.data().isActive === false || !domainAllowed(c, channelDoc.data())) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  const field = body.event === 'open' ? 'stats.opens' : 'stats.conversations'
+  await channelDoc.ref.update({ [field]: FieldValue.increment(1) })
+  return c.json({ ok: true })
 })
 
 // ---------------------------------------------------------------------------
@@ -251,6 +282,7 @@ widget.get('/conversations/:conversationId/messages', async (c) => {
 
   const channelDoc = await findChannel(channelId)
   if (!channelDoc) return c.json({ error: 'Not found' }, 404)
+  if (channelDoc.data().isActive === false) return c.json({ error: 'Not found' }, 404)
   if (!domainAllowed(c, channelDoc.data())) return c.json({ error: 'Not found' }, 404)
 
   const workspaceId: string = channelDoc.data().workspaceId
@@ -291,6 +323,7 @@ widget.get('/conversations/:conversationId/events', async (c) => {
 
   const channelDoc = await findChannel(channelId)
   if (!channelDoc) return c.json({ error: 'Not found' }, 404)
+  if (channelDoc.data().isActive === false) return c.json({ error: 'Not found' }, 404)
   if (!domainAllowed(c, channelDoc.data())) return c.json({ error: 'Not found' }, 404)
 
   const workspaceId: string = channelDoc.data().workspaceId

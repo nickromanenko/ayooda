@@ -104,4 +104,41 @@ describe('validateWidgetAppearance', () => {
       expect(validateWidgetAppearance({ ...base, allowedDomains: ['https://example.com/path'] }).ok).toBe(false)
     })
   })
+
+  describe('behavior and privacy', () => {
+    test('adds safe defaults for older clients', () => {
+      const r = validateWidgetAppearance(base)
+      expect(r.ok).toBe(true)
+      if (r.ok) {
+        expect(r.value.theme).toBe('light')
+        expect(r.value.enabled).toBe(true)
+        expect(r.value.showOnMobile).toBe(true)
+        expect(r.value.conversationPersistence).toBe('session')
+      }
+    })
+
+    test('accepts valid visibility and persistence settings', () => {
+      const r = validateWidgetAppearance({
+        ...base,
+        theme: 'auto',
+        locale: 'es',
+        includePaths: ['/help/*'],
+        excludePaths: ['/help/private/*'],
+        conversationPersistence: 'visitor',
+        persistenceDays: 14,
+      })
+      expect(r.ok).toBe(true)
+      if (r.ok) expect(r.value.includePaths).toEqual(['/help/*'])
+    })
+
+    test('rejects unsafe URLs and malformed path rules', () => {
+      expect(validateWidgetAppearance({ ...base, privacyPolicyURL: 'javascript:alert(1)' }).ok).toBe(false)
+      expect(validateWidgetAppearance({ ...base, includePaths: ['https://example.com/help'] }).ok).toBe(false)
+    })
+
+    test('rejects timing and offset values outside their bounds', () => {
+      expect(validateWidgetAppearance({ ...base, autoOpenDelaySeconds: 90 }).ok).toBe(false)
+      expect(validateWidgetAppearance({ ...base, horizontalOffset: 2 }).ok).toBe(false)
+    })
+  })
 })
