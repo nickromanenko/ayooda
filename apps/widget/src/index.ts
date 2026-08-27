@@ -326,7 +326,7 @@ function buildCSS(config: WidgetConfig): string {
 
     #panel {
       width: 360px;
-      height: min(520px, calc(100dvh - 100px));
+      height: min(680px, calc(100dvh - 100px));
       min-height: 360px;
       background: var(--aw-panel);
       color: var(--aw-ink);
@@ -399,13 +399,13 @@ function buildCSS(config: WidgetConfig): string {
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 6px;
+      border-radius: 50%;
       transition-property: background-color, color, transform;
       transition-duration: 150ms;
       transition-timing-function: ease-out;
     }
     #close-btn:hover,
-    #new-chat-btn:hover { color: ${foreground}; background: color-mix(in srgb, ${foreground} 15%, transparent); }
+    #new-chat-btn:hover { color: ${foreground}; background: color-mix(in srgb, ${foreground} 10%, transparent); }
     #close-btn:focus-visible,
     #new-chat-btn:focus-visible { outline: 2px solid ${foreground}; outline-offset: 2px; }
     #close-btn:active,
@@ -586,11 +586,12 @@ function buildCSS(config: WidgetConfig): string {
 
     /* Input area */
     #input-area {
-      padding: 12px 16px;
+      padding: 12px 16px 2px;
       border-top: 1px solid var(--aw-line);
       flex-shrink: 0;
       background: var(--aw-panel);
     }
+    #input-area:last-child { padding-bottom: 12px; }
     #composer {
       position: relative;
       border-radius: 18px;
@@ -673,7 +674,7 @@ function buildCSS(config: WidgetConfig): string {
       text-align: center;
       font-size: 11px;
       color: var(--aw-ink-muted);
-      padding: 6px 0 10px;
+      padding: 3px 0 8px;
       flex-shrink: 0;
     }
     #poweredby a { color: var(--aw-ink-muted); text-decoration: none; }
@@ -816,8 +817,8 @@ class AyoodaWidget {
           </div>
           <span id="agent-identity"><span id="agent-name">${escapedHeaderTitle}</span><span id="agent-status" role="status">${escapedStatus}</span></span>
           <span id="header-actions">
-            <button id="new-chat-btn" type="button" aria-label="${escapeHtmlAttribute(this.strings.newConversation)}">${ICON_NEW_CHAT}</button>
-            <button id="close-btn" type="button" aria-label="${escapeHtmlAttribute(this.strings.close)}">${ICON_CLOSE}</button>
+            <button id="new-chat-btn" type="button" title="${escapeHtmlAttribute(this.strings.newConversation)}" aria-label="${escapeHtmlAttribute(this.strings.newConversation)}">${ICON_NEW_CHAT}</button>
+            <button id="close-btn" type="button" title="${escapeHtmlAttribute(this.strings.close)}" aria-label="${escapeHtmlAttribute(this.strings.close)}">${ICON_CLOSE}</button>
           </span>
         </div>
         <div id="message-stage">
