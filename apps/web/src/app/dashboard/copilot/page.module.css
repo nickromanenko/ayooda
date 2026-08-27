@@ -1,7 +1,14 @@
+.root {
+  display: flex;
+  height: 100dvh;
+  margin: -24px;
+  overflow: hidden;
+}
+
 .backButton { display: none; }
 
 @media (max-width: 760px) {
-  .root { height: calc(100dvh - 64px) !important; margin: -16px !important; }
+  .root { height: calc(100dvh - 64px); margin: -16px; }
   .list { width: 100% !important; border-right: 0 !important; }
   .list[data-compose-open='true'] { display: none !important; }
   .conversation, .emptyConversation { display: none !important; }

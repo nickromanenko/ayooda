@@ -1,9 +1,16 @@
+.root {
+  display: flex;
+  height: 100dvh;
+  margin: -24px;
+  overflow: hidden;
+}
+
 .backButton { display: none; }
 
 @media (max-width: 760px) {
   .root {
-    height: calc(100dvh - 64px) !important;
-    margin: -16px !important;
+    height: calc(100dvh - 64px);
+    margin: -16px;
   }
 
   .list {

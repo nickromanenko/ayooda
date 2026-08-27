@@ -231,7 +231,7 @@ function CopilotPageInner() {
   }
 
   return (
-    <div className={styles.root} style={{ display: 'flex', height: 'calc(100vh - 48px)', margin: -24, overflow: 'hidden' }}>
+    <div className={styles.root}>
       {/* Thread list */}
       <div className={styles.list} data-compose-open={mobileComposeOpen} style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
