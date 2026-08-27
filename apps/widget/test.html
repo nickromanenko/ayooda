@@ -44,7 +44,8 @@
       const agent = agentInput.value.trim();
       const api = apiInput.value.trim();
       const msg = document.getElementById('msg');
-      if (!agent) { msg.innerHTML = '<span class="err">Enter a Channel ID first.</span>'; return; }
+      const preview = params.get('preview') === '1';
+      if (!agent && !preview) { msg.innerHTML = '<span class="err">Enter a Channel ID first.</span>'; return; }
       if (document.getElementById('ayooda-widget-script')) {
         msg.innerHTML = '<span class="err">Widget already loaded — reload the page to change channel.</span>';
         return;
@@ -54,19 +55,30 @@
       // Defaults to the deployed bundle. Add ?local=1 to load the bundle you just
       // built (pnpm --filter widget build) instead — needed whenever you are
       // testing a change to the widget's own code rather than to its config.
-      s.src = params.get('local') === '1' ? '/dist/widget.js' : 'https://cdn.ayooda.live/widget.js';
+      s.src = params.get('local') === '1' || preview ? `/dist/widget.js?v=${Date.now()}` : 'https://cdn.ayooda.live/widget.js';
       s.async = true;
-      s.setAttribute('data-agent-id', agent);
-      s.setAttribute('data-api-url', api);
+      if (preview) {
+        s.setAttribute('data-preview-config', JSON.stringify({
+          widgetColor: '#6366f1', widgetPosition: 'bottom-right', welcomeMessage: 'Hi there! How can I help you today?', showBranding: true,
+          allowedDomains: [], enabled: true, theme: params.get('theme') || 'light', headerTitle: 'Kim', statusText: '', inputPlaceholder: '', launcherGreeting: 'Need help? Chat with us.',
+          launcherGreetingDelaySeconds: 0, autoOpenDelaySeconds: 0, autoOpenOncePerSession: true, showOnDesktop: true, showOnMobile: true,
+          includePaths: [], excludePaths: [], horizontalOffset: 24, verticalOffset: 24, locale: 'en', privacyNotice: '', privacyPolicyURL: '', soundEnabled: false,
+          conversationPersistence: 'session', persistenceDays: 7, localizedContent: {}, agentName: 'Kim', agentPhotoURL: null,
+        }));
+        s.setAttribute('data-preview-scenario', params.get('scenario') || 'markdown');
+      } else {
+        s.setAttribute('data-agent-id', agent);
+        s.setAttribute('data-api-url', api);
+      }
       document.body.appendChild(s);
-      const which = params.get('local') === '1' ? 'local dist/widget.js' : 'deployed bundle';
-      msg.innerHTML = 'Loading the ' + which + ' for channel <code>' + agent + '</code> against <code>' + api
+      const which = params.get('local') === '1' || preview ? 'local dist/widget.js' : 'deployed bundle';
+      msg.innerHTML = preview ? 'Loading an isolated production-runtime preview.' : 'Loading the ' + which + ' for channel <code>' + agent + '</code> against <code>' + api
         + '</code>. Look for the bubble in the corner set on the Deploy tab.';
     }
 
     document.getElementById('load').addEventListener('click', loadWidget);
     // Auto-load if a channel id was supplied via the query string.
-    if (agentInput.value.trim()) loadWidget();
+    if (agentInput.value.trim() || params.get('preview') === '1') loadWidget();
   </script>
 </body>
 </html>

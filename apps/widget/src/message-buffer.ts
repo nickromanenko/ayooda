@@ -2,6 +2,8 @@ export interface FeedMessage {
   id: string
   role: string
   content: string
+  createdAt?: string
+  visitorFeedback?: 'helpful' | 'unhelpful'
 }
 
 /** Reconciles live conversation events with replies already rendered by POST streams. */

@@ -20,7 +20,14 @@ interface Channel {
   lastSeenAt?: string | null
   lastSeenOrigin?: string | null
   observedDomains?: string[]
-  stats?: { views?: number; opens?: number; conversations?: number }
+  stats?: {
+    views?: number
+    visible?: number
+    opens?: number
+    conversations?: number
+    feedback?: { helpful?: number; unhelpful?: number }
+    daily?: Record<string, { loads?: number; visible?: number; open?: number; conversations?: number }>
+  }
   brandingLocked?: boolean
   config?: Partial<Appearance> & { agentName?: string; agentPhotoURL?: string | null; fromAddress?: string; inboxAddress?: string; accountSid?: string; fromNumber?: string }
   telegram?: { botUsername: string; botId: number }
@@ -46,6 +53,27 @@ const pill = (on: boolean): React.CSSProperties => ({
   background: on ? 'rgba(52,211,153,0.15)' : 'var(--panel-2)',
   color: on ? 'var(--mint)' : 'var(--ink-mute)', flexShrink: 0, whiteSpace: 'nowrap',
 })
+
+function WidgetMetrics({ stats }: { stats?: Channel['stats'] }) {
+  const [range, setRange] = useState<'7' | '30' | 'all'>('30')
+  const [today] = useState(() => new Date())
+  if (!stats || !Object.values(stats).some(Boolean)) return null
+  const cutoff = range === 'all' ? '' : `d${new Date(today.getTime() - (Number(range) - 1) * 86_400_000).toISOString().slice(0, 10).replaceAll('-', '')}`
+  const period = range === 'all'
+    ? { loads: stats.views ?? 0, visible: stats.visible ?? 0, open: stats.opens ?? 0, conversations: stats.conversations ?? 0 }
+    : Object.entries(stats.daily ?? {}).filter(([day]) => day >= cutoff).reduce((sum, [, day]) => ({
+      loads: sum.loads + (day.loads ?? 0), visible: sum.visible + (day.visible ?? 0), open: sum.open + (day.open ?? 0), conversations: sum.conversations + (day.conversations ?? 0),
+    }), { loads: 0, visible: 0, open: 0, conversations: 0 })
+  const openRate = period.visible ? Math.round(period.open / period.visible * 100) : 0
+  const conversationRate = period.open ? Math.round(period.conversations / period.open * 100) : 0
+  const feedbackTotal = (stats.feedback?.helpful ?? 0) + (stats.feedback?.unhelpful ?? 0)
+  const helpfulRate = feedbackTotal ? Math.round((stats.feedback?.helpful ?? 0) / feedbackTotal * 100) : null
+  return <div style={{ marginTop: 12, paddingTop: 11, borderTop: '1px solid var(--line)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}><span style={{ color: 'var(--ink-mute)', fontSize: 10.5 }}>Widget engagement</span><select aria-label="Analytics time range" value={range} onChange={(event) => setRange(event.target.value as '7' | '30' | 'all')} style={{ minHeight: 36, border: '1px solid var(--line)', borderRadius: 8, padding: '0 8px', background: 'var(--panel)', color: 'var(--ink-dim)', fontSize: 11 }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">All time</option></select></div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>{[{ label: 'Config loads', value: period.loads }, { label: 'Visible', value: period.visible }, { label: 'Opens', value: period.open }, { label: 'Conversations', value: period.conversations }].map((metric) => <div key={metric.label}><strong style={{ display: 'block', color: 'var(--ink)', font: '600 14px var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{metric.value.toLocaleString()}</strong><span style={{ color: 'var(--ink-faint)', fontSize: 10.5 }}>{metric.label}</span></div>)}</div>
+    <p style={{ margin: '9px 0 0', color: 'var(--ink-faint)', fontSize: 10.5, fontVariantNumeric: 'tabular-nums' }}>Open rate {openRate}% · Conversation rate {conversationRate}%{helpfulRate === null ? '' : ` · Helpful answers ${helpfulRate}% (${feedbackTotal})`}</p>
+  </div>
+}
 
 export default function AgentDeployPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = use(params)
@@ -290,7 +318,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
                 <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 12 }}><div><p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>{widget.lastSeenAt ? `Installation detected${widget.lastSeenOrigin ? ` on ${widget.lastSeenOrigin}` : ''}.` : 'Waiting to detect the first page load.'}</p><p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-mute)', fontVariantNumeric: 'tabular-nums' }}>{widget.lastSeenAt ? `Last seen ${new Date(widget.lastSeenAt).toLocaleString()}` : 'Install the code below, then reload your website.'}</p></div><button type="button" onClick={() => void fetchChannels()} aria-label="Check installation again" className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', flexShrink: 0 }}><RefreshCw size={13} /></button></div>
                 {Boolean(widget.observedDomains?.length) && <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--ink-faint)' }}>Observed on: {widget.observedDomains!.join(', ')}</p>}
                 <div style={{ display: 'flex', gap: 12, marginTop: 9, flexWrap: 'wrap' }}><a href={`/dashboard/agents/${agentId}/test`} style={{ color: 'var(--accent)', fontSize: 11.5, textDecoration: 'none' }}>Open test chat →</a><details><summary style={{ color: 'var(--ink-mute)', fontSize: 11.5, cursor: 'pointer' }}>Installation troubleshooting</summary><p style={{ maxWidth: 560, margin: '7px 0 0', color: 'var(--ink-faint)', fontSize: 11, lineHeight: 1.5 }}>If detection does not appear, check the browser console and allow Ayooda’s CDN in <code style={{ fontFamily: 'var(--font-mono)' }}>script-src</code> and API origin in <code style={{ fontFamily: 'var(--font-mono)' }}>connect-src</code> in your Content Security Policy.</p></details></div>
-                {Boolean(widget.stats?.views) && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: 12, paddingTop: 11, borderTop: '1px solid var(--line)' }}>{[{ label: 'Loads', value: widget.stats?.views ?? 0 }, { label: 'Opens', value: widget.stats?.opens ?? 0 }, { label: 'Conversations', value: widget.stats?.conversations ?? 0 }].map((metric) => <div key={metric.label}><strong style={{ display: 'block', color: 'var(--ink)', font: '600 14px var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{metric.value.toLocaleString()}</strong><span style={{ color: 'var(--ink-faint)', fontSize: 10.5 }}>{metric.label}</span></div>)}</div>}
+                <WidgetMetrics stats={widget.stats} />
               </div>
               <p style={label}>Embed code</p>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 12 }}>

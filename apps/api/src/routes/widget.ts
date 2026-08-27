@@ -87,9 +87,11 @@ widget.get('/config/:channelId', async (c) => {
   // This is also the installation heartbeat shown in Deploy. It records only
   // the host, never a customer page path or query string.
   if (rateLimit(`widget-config:${clientIp(c)}`, CONFIG_HEARTBEATS_PER_IP, RATE_WINDOW_MS).ok) {
+    const day = `d${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`
     void channelDoc.ref.update({
       lastSeenAt: new Date(),
       'stats.views': FieldValue.increment(1),
+      [`stats.daily.${day}.loads`]: FieldValue.increment(1),
       ...(lastSeenOrigin ? {
         lastSeenOrigin,
         observedDomains: [...new Set([...(Array.isArray(data.observedDomains) ? data.observedDomains : []).slice(-19), lastSeenOrigin])],
@@ -152,7 +154,7 @@ widget.post('/event', async (c) => {
   const body: { channelId?: string; event?: string } = await c.req
     .json<{ channelId?: string; event?: string }>()
     .catch(() => ({}))
-  if (!body.channelId || !['open', 'conversation_started'].includes(body.event ?? '')) {
+  if (!body.channelId || !['visible', 'open', 'conversation_started'].includes(body.event ?? '')) {
     return c.json({ error: 'Invalid widget event.' }, 400)
   }
   const limit = rateLimit(`widget-event:${clientIp(c)}`, 120, RATE_WINDOW_MS)
@@ -161,9 +163,48 @@ widget.post('/event', async (c) => {
   if (!channelDoc || channelDoc.data().isActive === false || !domainAllowed(c, channelDoc.data())) {
     return c.json({ error: 'Not found' }, 404)
   }
-  const field = body.event === 'open' ? 'stats.opens' : 'stats.conversations'
-  await channelDoc.ref.update({ [field]: FieldValue.increment(1) })
+  const field = body.event === 'visible' ? 'stats.visible' : body.event === 'open' ? 'stats.opens' : 'stats.conversations'
+  const dailyField = body.event === 'conversation_started' ? 'conversations' : body.event
+  const day = `d${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`
+  await channelDoc.ref.update({ [field]: FieldValue.increment(1), [`stats.daily.${day}.${dailyField}`]: FieldValue.increment(1) })
   return c.json({ ok: true })
+})
+
+// ---------------------------------------------------------------------------
+// POST /widget/conversations/:conversationId/messages/:messageId/feedback
+// ---------------------------------------------------------------------------
+
+widget.post('/conversations/:conversationId/messages/:messageId/feedback', async (c) => {
+  const conversationId = c.req.param('conversationId')
+  const messageId = c.req.param('messageId')
+  const body = await c.req.json<{ channelId?: string; visitorId?: string; value?: string }>()
+    .catch(() => ({} as { channelId?: string; visitorId?: string; value?: string }))
+  if (!body.channelId || !body.visitorId || !['helpful', 'unhelpful'].includes(body.value ?? '')) {
+    return c.json({ error: 'Invalid feedback.' }, 400)
+  }
+  if (!rateLimit(`widget-feedback:${clientIp(c)}`, 60, RATE_WINDOW_MS).ok) return c.json({ ok: true })
+
+  const channelDoc = await findChannel(body.channelId)
+  if (!channelDoc || channelDoc.data().isActive === false || !domainAllowed(c, channelDoc.data())) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  const workspaceId: string = channelDoc.data().workspaceId
+  const conversationRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
+  const messageRef = conversationRef.collection('messages').doc(messageId)
+  const value = body.value as 'helpful' | 'unhelpful'
+
+  const found = await adminDb.runTransaction(async (transaction) => {
+    const [conversation, message] = await Promise.all([transaction.get(conversationRef), transaction.get(messageRef)])
+    if (!conversation.exists || conversation.data()!.visitorId !== body.visitorId || !message.exists || message.data()!.role === 'user') return false
+    const previous = message.data()!.metadata?.visitorFeedback as 'helpful' | 'unhelpful' | undefined
+    if (previous === value) return true
+    transaction.update(messageRef, { 'metadata.visitorFeedback': value })
+    const updates: Record<string, FieldValue> = { [`stats.feedback.${value}`]: FieldValue.increment(1) }
+    if (previous) updates[`stats.feedback.${previous}`] = FieldValue.increment(-1)
+    transaction.update(channelDoc.ref, updates)
+    return true
+  })
+  return found ? c.json({ ok: true }) : c.json({ error: 'Not found' }, 404)
 })
 
 // ---------------------------------------------------------------------------
@@ -295,7 +336,13 @@ widget.get('/conversations/:conversationId/messages', async (c) => {
   const snapshot = await convRef.collection('messages').orderBy('createdAt', 'desc').limit(50).get()
   const messages = snapshot.docs.reverse().map((doc) => {
     const data = doc.data()
-    return { id: doc.id, role: data.role, content: data.content }
+    return {
+      id: doc.id,
+      role: data.role,
+      content: data.content,
+      createdAt: data.createdAt?.toDate?.().toISOString(),
+      visitorFeedback: data.metadata?.visitorFeedback,
+    }
   })
   return c.json({ messages, status: convSnap.data()!.status ?? 'bot' })
 })
@@ -376,7 +423,13 @@ widget.get('/conversations/:conversationId/events', async (c) => {
             stream
               .writeSSE({
                 event: 'message',
-                data: JSON.stringify({ id: change.doc.id, role: data.role, content: data.content }),
+                data: JSON.stringify({
+                  id: change.doc.id,
+                  role: data.role,
+                  content: data.content,
+                  createdAt: data.createdAt?.toDate?.().toISOString(),
+                  visitorFeedback: data.metadata?.visitorFeedback,
+                }),
               })
               .catch(() => {})
           }

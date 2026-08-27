@@ -13,22 +13,30 @@ import { escapeHtmlAttribute, safeAgentPhotoURL } from './identity'
 import { renderMarkdown } from './markdown'
 import { MessageBuffer, type FeedMessage } from './message-buffer'
 import { resolveWidgetLocale, widgetStrings, type WidgetStrings } from './strings'
-import { widgetAccessibleAccent, widgetForeground, widgetVisibleOnPath, type WidgetAppearance } from '@ayooda/shared'
+import {
+  DEFAULT_WIDGET_APPEARANCE, isWidgetHexColor, widgetAccessibleAccent, widgetForeground,
+  widgetVisibleOnPath, type WidgetAppearance,
+} from '@ayooda/shared'
 
 // ---------------------------------------------------------------------------
 // Bootstrap — read attributes synchronously before any async work
 // ---------------------------------------------------------------------------
 
-const $script = document.currentScript as HTMLScriptElement | null
+const $script = (document.currentScript as HTMLScriptElement | null)
+  ?? document.querySelector<HTMLScriptElement>('script[data-preview-config]')
 const CHANNEL_ID = $script?.getAttribute('data-agent-id') ?? ''
+const PREVIEW_CONFIG_RAW = $script?.getAttribute('data-preview-config') ?? ''
+const PREVIEW_SCENARIO = $script?.getAttribute('data-preview-scenario') ?? 'welcome'
 const API_BASE =
   $script?.getAttribute('data-api-url') ??
   'https://ayooda-api-uc.a.run.app' // placeholder: update with real Cloud Run URL
 
-if (!CHANNEL_ID) {
+if (!CHANNEL_ID && !PREVIEW_CONFIG_RAW) {
   console.error('[Ayooda] Missing data-agent-id attribute on widget script tag')
 } else {
-  init()
+  // Defer until the module has initialized its templates and class declarations.
+  // Production config fetching already yielded naturally; local previews do not.
+  queueMicrotask(() => void init())
 }
 
 // ---------------------------------------------------------------------------
@@ -105,8 +113,16 @@ function shouldRender(config: WidgetConfig): boolean {
   return widgetVisibleOnPath(window.location.pathname, config.includePaths, config.excludePaths)
 }
 
-function observeWidgetVisibility(host: HTMLElement, config: WidgetConfig) {
-  const update = () => { host.style.display = shouldRender(config) ? '' : 'none' }
+function observeWidgetVisibility(host: HTMLElement, config: WidgetConfig, onFirstVisible: () => void) {
+  let recorded = false
+  const update = () => {
+    const visible = shouldRender(config)
+    host.style.display = visible ? '' : 'none'
+    if (visible && !recorded) {
+      recorded = true
+      onFirstVisible()
+    }
+  }
   update()
   window.addEventListener('popstate', update)
   window.addEventListener('ayooda:navigation', update)
@@ -128,6 +144,16 @@ function observeWidgetVisibility(host: HTMLElement, config: WidgetConfig) {
   }
 }
 
+function recordWidgetEvent(event: 'visible' | 'open' | 'conversation_started') {
+  if (!CHANNEL_ID || PREVIEW_CONFIG_RAW) return
+  void fetch(`${API_BASE}/widget/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channelId: CHANNEL_ID, event }),
+    keepalive: true,
+  }).catch(() => {})
+}
+
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
@@ -136,6 +162,32 @@ async function fetchConfig(): Promise<WidgetConfig> {
   const res = await fetch(`${API_BASE}/widget/config/${CHANNEL_ID}`)
   if (!res.ok) throw new Error('Failed to load widget config')
   return res.json()
+}
+
+function previewConfig(): WidgetConfig | null {
+  if (!PREVIEW_CONFIG_RAW) return null
+  try {
+    const parsed = JSON.parse(PREVIEW_CONFIG_RAW) as Partial<WidgetConfig>
+    return localizeConfig({
+      ...DEFAULT_WIDGET_APPEARANCE,
+      ...parsed,
+      widgetColor: isWidgetHexColor(parsed.widgetColor ?? '') ? parsed.widgetColor! : DEFAULT_WIDGET_APPEARANCE.widgetColor,
+      agentName: typeof parsed.agentName === 'string' && parsed.agentName.trim() ? parsed.agentName.trim() : 'Support Agent',
+      agentPhotoURL: typeof parsed.agentPhotoURL === 'string' ? parsed.agentPhotoURL : null,
+      localizedContent: parsed.localizedContent && typeof parsed.localizedContent === 'object' ? parsed.localizedContent : {},
+      enabled: true,
+    })
+  } catch {
+    console.error('[Ayooda] Invalid preview configuration')
+    return null
+  }
+}
+
+function localizeConfig(config: WidgetConfig): WidgetConfig {
+  const locale = resolveWidgetLocale(config.locale, navigator.language)
+  const overrides = config.localizedContent?.[locale] ?? {}
+  const copy = Object.fromEntries(Object.entries(overrides).filter(([, value]) => typeof value === 'string' && value.trim()))
+  return { ...config, ...copy }
 }
 
 async function fetchHistory(conversationId: string, visitorId: string): Promise<ConversationHistory | null> {
@@ -325,6 +377,7 @@ function buildCSS(config: WidgetConfig): string {
     }
 
     #panel {
+      position: relative;
       width: 360px;
       height: min(680px, calc(100dvh - 100px));
       min-height: 360px;
@@ -349,6 +402,43 @@ function buildCSS(config: WidgetConfig): string {
       transition-duration: 150ms, 150ms, 0s;
       transition-delay: 0s, 0s, 150ms;
     }
+    #new-chat-confirm {
+      position: absolute;
+      inset: 0;
+      z-index: 8;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(0,0,0,.28);
+      backdrop-filter: blur(2px);
+    }
+    #new-chat-confirm[hidden] { display: none; }
+    #new-chat-confirm-card {
+      width: min(280px, 100%);
+      box-sizing: border-box;
+      border-radius: 16px;
+      padding: 18px;
+      background: var(--aw-panel);
+      color: var(--aw-ink);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 16px 42px rgba(0,0,0,.24);
+    }
+    #new-chat-confirm-title { display: block; font-size: 15px; line-height: 1.3; text-wrap: balance; }
+    #new-chat-confirm-copy { margin: 7px 0 16px; color: var(--aw-ink-muted); font-size: 12px; line-height: 1.5; text-wrap: pretty; }
+    #new-chat-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    #new-chat-confirm-actions button {
+      min-height: 40px;
+      border: 0;
+      border-radius: 10px;
+      padding: 0 13px;
+      cursor: pointer;
+      font: 600 12px/1 system-ui, -apple-system, sans-serif;
+      transition-property: background-color, transform;
+      transition-duration: 150ms;
+    }
+    #new-chat-cancel { background: var(--aw-panel-soft); color: var(--aw-ink); }
+    #new-chat-confirm-btn { background: ${color}; color: ${foreground}; }
+    #new-chat-confirm-actions button:active { transform: scale(.96); }
+    #new-chat-confirm-actions button:focus-visible { outline: 2px solid ${accent}; outline-offset: 2px; }
 
     /* Header */
     #header {
@@ -456,6 +546,7 @@ function buildCSS(config: WidgetConfig): string {
       line-height: 1.5;
       word-break: break-word;
       white-space: pre-wrap;
+      position: relative;
     }
     .msg.user {
       align-self: flex-end;
@@ -558,6 +649,47 @@ function buildCSS(config: WidgetConfig): string {
       font-size: 12px;
       padding: 2px 8px;
     }
+    .message-time {
+      display: block;
+      max-height: 0;
+      margin-top: 0;
+      overflow: hidden;
+      color: currentColor;
+      font-size: 9px;
+      line-height: 1.2;
+      opacity: 0;
+      transition-property: max-height, margin-top, opacity;
+      transition-duration: 150ms;
+    }
+    .msg:hover .message-time,
+    .msg.show-time .message-time,
+    .msg:focus-within .message-time { max-height: 14px; margin-top: 5px; opacity: .55; }
+    .message-feedback {
+      display: flex;
+      gap: 3px;
+      margin: 7px -5px -4px;
+      color: var(--aw-ink-muted);
+    }
+    .message-feedback button {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      transition-property: background-color, color, transform;
+      transition-duration: 150ms;
+    }
+    .message-feedback button:hover,
+    .message-feedback button[aria-pressed="true"] { background: color-mix(in srgb, ${color} 10%, transparent); color: ${accent}; }
+    .message-feedback button:active { transform: scale(.96); }
+    .message-feedback button:focus-visible { outline: 2px solid ${accent}; outline-offset: 1px; }
+    .message-feedback svg { width: 15px; height: 15px; }
+    .feedback-thanks { align-self: center; padding: 0 5px; font-size: 10px; color: var(--aw-ink-muted); }
 
     /* Typing indicator */
     .typing {
@@ -631,11 +763,15 @@ function buildCSS(config: WidgetConfig): string {
       position: absolute;
       left: 14px;
       bottom: 13px;
-      color: var(--aw-ink-muted);
+      color: color-mix(in srgb, var(--aw-ink-muted) 58%, transparent);
       font-size: 10px;
       line-height: 1;
       pointer-events: none;
+      opacity: 1;
+      transition-property: opacity;
+      transition-duration: 150ms;
     }
+    #composer.has-content #composer-hint { opacity: 0; }
 
     #send-btn {
       position: absolute;
@@ -704,12 +840,12 @@ function buildCSS(config: WidgetConfig): string {
       #container {
         left: max(12px, env(safe-area-inset-left));
         right: max(12px, env(safe-area-inset-right));
-        bottom: max(12px, env(safe-area-inset-bottom));
+        bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--aw-keyboard-inset, 0px));
       }
       #panel {
         width: 100%;
-        height: min(520px, calc(100dvh - 88px));
-        min-height: min(360px, calc(100dvh - 88px));
+        height: min(520px, calc(var(--aw-viewport-height, 100dvh) - 88px));
+        min-height: min(360px, calc(var(--aw-viewport-height, 100dvh) - 88px));
       }
       #close-btn,
       #new-chat-btn,
@@ -718,7 +854,7 @@ function buildCSS(config: WidgetConfig): string {
     }
 
     @media (prefers-reduced-motion: reduce) {
-      #toggle, .toggle-icon, #panel, #composer, #send-btn, .typing span { transition: none; animation: none; }
+      #toggle, .toggle-icon, #panel, #composer, #send-btn, .typing span, .message-time { transition: none; animation: none; }
     }
   `
 }
@@ -742,6 +878,9 @@ const ICON_SEND = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 const ICON_NEW_CHAT = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/>
 </svg>`
+
+const ICON_THUMBS_UP = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12H3V10h4Z"/><path d="M7 20h10.7a2 2 0 0 0 2-1.6l1.2-6A2 2 0 0 0 19 10h-5l1-5a2 2 0 0 0-2-2l-6 7v10Z"/></svg>`
+const ICON_THUMBS_DOWN = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2h4v12h-4Z"/><path d="M17 4H6.3a2 2 0 0 0-2 1.6l-1.2 6A2 2 0 0 0 5 14h5l-1 5a2 2 0 0 0 2 2l6-7V4Z"/></svg>`
 
 // ---------------------------------------------------------------------------
 // Widget class
@@ -771,17 +910,23 @@ class AyoodaWidget {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private feedSuspended = false // set on immediate failure (conversation may not exist yet)
   private openTracked = false
+  private hasConversationActivity = false
+  private readonly preview: boolean
+  private newChatDialog!: HTMLElement
+  private newChatButton!: HTMLButtonElement
 
-  constructor(host: HTMLElement, config: WidgetConfig) {
-    this.config = config
+  constructor(host: HTMLElement, config: WidgetConfig, preview = false) {
+    this.config = localizeConfig(config)
+    this.preview = preview
     this.strings = widgetStrings(config.locale, navigator.language)
-    this.conversationId = getConversationId(config)
-    this.visitorId = getVisitorId()
+    this.conversationId = preview ? crypto.randomUUID() : getConversationId(config)
+    this.visitorId = preview ? 'preview' : getVisitorId()
 
     this.shadow = host.attachShadow({ mode: 'open' })
     this.build()
-    this.historyReady = this.loadHistory()
-    this.setupProactiveBehavior()
+    this.setupViewportSizing(host)
+    this.historyReady = preview ? Promise.resolve(this.loadPreview()) : this.loadHistory()
+    if (!preview) this.setupProactiveBehavior()
   }
 
   private build() {
@@ -839,6 +984,16 @@ class AyoodaWidget {
           </div>
         </div>
         ${(showBranding || escapedPrivacyNotice || escapedPrivacyURL) ? `<div id="poweredby">${escapedPrivacyNotice ? `<span>${escapedPrivacyNotice}</span> ` : ''}${escapedPrivacyURL ? `<a href="${escapedPrivacyURL}" target="_blank" rel="noopener noreferrer">${escapeHtmlAttribute(this.strings.privacy)}</a>${showBranding ? ' · ' : ''}` : ''}${showBranding ? `${escapeHtmlAttribute(this.strings.poweredBy)} <a href="https://ayooda.live" target="_blank" rel="noopener noreferrer">Ayooda</a>` : ''}</div>` : ''}
+        <div id="new-chat-confirm" role="alertdialog" aria-modal="true" aria-labelledby="new-chat-confirm-title" aria-describedby="new-chat-confirm-copy" hidden>
+          <div id="new-chat-confirm-card">
+            <strong id="new-chat-confirm-title">${escapeHtmlAttribute(this.strings.confirmNewConversation)}</strong>
+            <p id="new-chat-confirm-copy">${escapeHtmlAttribute(this.strings.confirmNewConversationBody)}</p>
+            <div id="new-chat-confirm-actions">
+              <button id="new-chat-cancel" type="button">${escapeHtmlAttribute(this.strings.cancel)}</button>
+              <button id="new-chat-confirm-btn" type="button">${escapeHtmlAttribute(this.strings.startNew)}</button>
+            </div>
+          </div>
+        </div>
       </div>
       ${launcherGreeting ? `<button id="launcher-greeting" type="button" hidden>${escapedGreeting}</button>` : ''}
       <button id="toggle" type="button" aria-label="${escapeHtmlAttribute(this.strings.openChat)} ${escapedAgentName}" aria-expanded="false" aria-controls="panel">
@@ -858,16 +1013,35 @@ class AyoodaWidget {
     this.jumpLatestBtn = container.querySelector<HTMLButtonElement>('#jump-latest')!
     this.unreadBadge = container.querySelector<HTMLElement>('#unread-badge')!
     this.statusText = container.querySelector<HTMLElement>('#agent-status')!
+    this.newChatDialog = container.querySelector<HTMLElement>('#new-chat-confirm')!
+    this.newChatButton = container.querySelector<HTMLButtonElement>('#new-chat-btn')!
     container.querySelector('#launcher-greeting')?.addEventListener('click', () => this.toggle(true))
 
     // Event listeners
     this.toggleBtn.addEventListener('click', () => this.toggle())
     container.querySelector('#close-btn')!.addEventListener('click', () => this.toggle(false))
-    container.querySelector('#new-chat-btn')!.addEventListener('click', () => this.startNewConversation())
+    this.newChatButton.addEventListener('click', () => this.requestNewConversation())
+    container.querySelector('#new-chat-cancel')!.addEventListener('click', () => this.hideNewConversationConfirmation())
+    container.querySelector('#new-chat-confirm-btn')!.addEventListener('click', () => {
+      this.hideNewConversationConfirmation(false)
+      this.startNewConversation()
+    })
     container.addEventListener('keydown', (event) => {
+      if ((event as KeyboardEvent).key === 'Tab' && !this.newChatDialog.hidden) {
+        const controls = [...this.newChatDialog.querySelectorAll<HTMLButtonElement>('button')]
+        const first = controls[0]
+        const last = controls[controls.length - 1]
+        if ((event as KeyboardEvent).shiftKey && this.shadow.activeElement === first) {
+          event.preventDefault(); last?.focus()
+        } else if (!(event as KeyboardEvent).shiftKey && this.shadow.activeElement === last) {
+          event.preventDefault(); first?.focus()
+        }
+        return
+      }
       if ((event as KeyboardEvent).key === 'Escape' && this.open) {
         event.preventDefault()
-        this.toggle(false)
+        if (!this.newChatDialog.hidden) this.hideNewConversationConfirmation()
+        else this.toggle(false)
       }
     })
     this.sendBtn.addEventListener('click', () => this.submit())
@@ -883,10 +1057,58 @@ class AyoodaWidget {
       }
     })
     this.input.addEventListener('input', () => {
+      container.querySelector('#composer')!.classList.toggle('has-content', Boolean(this.input.value))
       this.sendBtn.disabled = !this.input.value.trim() || this.sending
       this.input.style.height = 'auto'
       this.input.style.height = `${Math.max(88, Math.min(this.input.scrollHeight, 136))}px`
     })
+  }
+
+  private setupViewportSizing(host: HTMLElement) {
+    const viewport = window.visualViewport
+    if (!viewport) return
+    const update = () => {
+      const keyboardInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+      host.style.setProperty('--aw-viewport-height', `${viewport.height}px`)
+      host.style.setProperty('--aw-keyboard-inset', `${keyboardInset}px`)
+    }
+    update()
+    viewport.addEventListener('resize', update, { passive: true })
+    viewport.addEventListener('scroll', update, { passive: true })
+  }
+
+  private loadPreview() {
+    this.hasConversationActivity = PREVIEW_SCENARIO !== 'welcome'
+    if (PREVIEW_SCENARIO === 'markdown') {
+      this.appendBotMessage('**Here are the next steps:**\n\n- Review your account\n- Choose a plan\n- Invite your team', true)
+    } else if (PREVIEW_SCENARIO === 'handoff') {
+      this.appendBotMessage(this.config.welcomeMessage, true)
+      this.appendSystemNote(this.strings.waiting, true)
+    } else if (PREVIEW_SCENARIO === 'error') {
+      this.appendRetryError(this.strings.sendError, 'Can you help me?')
+    } else if (PREVIEW_SCENARIO === 'long') {
+      this.appendBotMessage(`## A longer answer\n\nThis preview checks how the production widget handles longer content, scrolling, and rich formatting.\n\n1. Messages remain readable.\n2. The composer stays anchored.\n3. Links such as [Ayooda](https://ayooda.live) remain accessible.\n\n> The preview uses the same renderer as the installed widget.`, true)
+    } else if (PREVIEW_SCENARIO === 'streaming') {
+      const typing = this.showTyping()
+      const answer = 'This answer is arriving progressively, just as it does for a visitor.'
+      let index = 0
+      const bubble = this.appendBotMessage('', true)
+      typing.remove()
+      const timer = window.setInterval(() => {
+        index += 2
+        this.renderBotMarkdown(bubble, answer.slice(0, index))
+        this.afterContentChange(true)
+        if (index >= answer.length) {
+          window.clearInterval(timer)
+          this.addMessageDetails(bubble, new Date().toISOString(), 'preview-message')
+        }
+      }, 45)
+    } else {
+      this.appendBotMessage(this.config.welcomeMessage, true)
+    }
+    const greeting = this.shadow.querySelector<HTMLElement>('#launcher-greeting')
+    if (greeting) greeting.hidden = false
+    this.toggle(true)
   }
 
   private async loadHistory() {
@@ -897,7 +1119,8 @@ class AyoodaWidget {
       } else {
         for (const message of history.messages) {
           this.messageBuffer.markRendered(message.id)
-          this.appendMessage(message.content, message.role === 'user' ? 'user' : 'bot', true)
+          if (message.role === 'user') this.hasConversationActivity = true
+          this.appendMessage(message.content, message.role === 'user' ? 'user' : 'bot', true, message)
         }
         if (history.status === 'human') this.appendSystemNote(this.strings.human, true)
         else if (history.status === 'waiting') this.appendSystemNote(this.strings.waiting, true)
@@ -930,18 +1153,14 @@ class AyoodaWidget {
       this.scrollToBottom(true)
       this.openFeed()
     } else {
+      if (!this.newChatDialog.hidden) this.hideNewConversationConfirmation(false)
       this.setUnreadCount(this.unreadCount)
       this.toggleBtn.focus({ preventScroll: true })
     }
   }
 
   private recordEvent(event: 'open' | 'conversation_started') {
-    void fetch(`${API_BASE}/widget/event`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channelId: CHANNEL_ID, event }),
-      keepalive: true,
-    }).catch(() => {})
+    recordWidgetEvent(event)
   }
 
   private setupProactiveBehavior() {
@@ -970,14 +1189,30 @@ class AyoodaWidget {
     this.eventSource = null
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
-    this.conversationId = createConversationId(this.config)
+    this.conversationId = this.preview ? crypto.randomUUID() : createConversationId(this.config)
     this.messageBuffer = new MessageBuffer()
     this.feedSuspended = true
     this.messages.replaceChildren()
+    this.hasConversationActivity = false
     this.setUnreadCount(0)
     this.setStatus('online')
     this.appendBotMessage(this.config.welcomeMessage, true)
     this.input.focus()
+  }
+
+  private requestNewConversation() {
+    if (this.sending) return
+    if (!this.hasConversationActivity) {
+      this.startNewConversation()
+      return
+    }
+    this.newChatDialog.hidden = false
+    this.newChatDialog.querySelector<HTMLButtonElement>('#new-chat-cancel')?.focus()
+  }
+
+  private hideNewConversationConfirmation(restoreFocus = true) {
+    this.newChatDialog.hidden = true
+    if (restoreFocus) this.newChatButton.focus()
   }
 
   private openFeed() {
@@ -996,7 +1231,7 @@ class AyoodaWidget {
     es.addEventListener('message', (e: MessageEvent) => {
       const message = JSON.parse(e.data) as FeedMessage
       for (const ready of this.messageBuffer.accept(message, this.sending)) {
-        this.appendBotMessage(ready.content)
+        this.appendBotMessage(ready.content, false, ready)
         this.playNotification()
         if (!this.open) this.setUnreadCount(this.unreadCount + 1)
       }
@@ -1050,12 +1285,19 @@ class AyoodaWidget {
     this.afterContentChange(stick)
   }
 
-  private appendMessage(text: string, role: 'user' | 'bot' | 'error', forceScroll = false): HTMLElement {
+  private appendMessage(text: string, role: 'user' | 'bot' | 'error', forceScroll = false, details?: Partial<FeedMessage>): HTMLElement {
     const stick = forceScroll || role === 'user' || this.isNearBottom()
     const div = document.createElement('div')
     div.className = `msg ${role}`
     if (role === 'bot') this.renderBotMarkdown(div, text)
     else div.textContent = text
+    if (details?.createdAt || (role !== 'error' && details)) {
+      this.addMessageDetails(div, details.createdAt ?? new Date().toISOString(), role === 'bot' ? details.id : undefined, details.visitorFeedback)
+    }
+    div.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('a,button')) return
+      div.classList.toggle('show-time')
+    })
     this.messages.appendChild(div)
     this.afterContentChange(stick)
     return div
@@ -1069,8 +1311,64 @@ class AyoodaWidget {
     })
   }
 
-  private appendBotMessage(text: string, forceScroll = false) {
-    return this.appendMessage(text, 'bot', forceScroll)
+  private appendBotMessage(text: string, forceScroll = false, details?: Partial<FeedMessage>) {
+    return this.appendMessage(text, 'bot', forceScroll, details)
+  }
+
+  private addMessageDetails(element: HTMLElement, createdAt: string, messageId?: string, feedback?: 'helpful' | 'unhelpful') {
+    if (!element.querySelector('.message-time')) {
+      const date = new Date(createdAt)
+      if (!Number.isNaN(date.getTime())) {
+        const time = document.createElement('time')
+        time.className = 'message-time'
+        time.dateTime = date.toISOString()
+        time.textContent = new Intl.DateTimeFormat(resolveWidgetLocale(this.config.locale, navigator.language), { hour: 'numeric', minute: '2-digit' }).format(date)
+        time.title = new Intl.DateTimeFormat(resolveWidgetLocale(this.config.locale, navigator.language), { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+        element.appendChild(time)
+      }
+    }
+    if (!messageId || element.querySelector('.message-feedback')) return
+    const actions = document.createElement('div')
+    actions.className = 'message-feedback'
+    const helpful = this.feedbackButton('helpful', this.strings.helpful, ICON_THUMBS_UP, feedback)
+    const unhelpful = this.feedbackButton('unhelpful', this.strings.notHelpful, ICON_THUMBS_DOWN, feedback)
+    actions.append(helpful, unhelpful)
+    const thanks = document.createElement('span')
+    thanks.className = 'feedback-thanks'
+    thanks.setAttribute('role', 'status')
+    thanks.textContent = this.strings.feedbackThanks
+    thanks.hidden = !feedback
+    actions.appendChild(thanks)
+    actions.addEventListener('click', (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-feedback]')
+      if (!button) return
+      const value = button.dataset.feedback as 'helpful' | 'unhelpful'
+      actions.querySelectorAll<HTMLButtonElement>('button').forEach((item) => item.setAttribute('aria-pressed', String(item === button)))
+      thanks.hidden = false
+      this.sendFeedback(messageId, value)
+    })
+    element.appendChild(actions)
+  }
+
+  private feedbackButton(value: 'helpful' | 'unhelpful', label: string, icon: string, selected?: 'helpful' | 'unhelpful') {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.dataset.feedback = value
+    button.title = label
+    button.setAttribute('aria-label', label)
+    button.setAttribute('aria-pressed', String(selected === value))
+    button.innerHTML = icon
+    return button
+  }
+
+  private sendFeedback(messageId: string, value: 'helpful' | 'unhelpful') {
+    if (this.preview) return
+    void fetch(`${API_BASE}/widget/conversations/${this.conversationId}/messages/${messageId}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId: CHANNEL_ID, visitorId: this.visitorId, value }),
+      keepalive: true,
+    }).catch(() => {})
   }
 
   private appendRetryError(message: string, originalText: string) {
@@ -1141,14 +1439,20 @@ class AyoodaWidget {
     await this.historyReady
     const text = (retryText ?? this.input.value).trim()
     if (!text || this.sending) return
+    if (this.preview) {
+      this.submitPreview(text, appendUser)
+      return
+    }
 
     this.sending = true
     this.setStatus('responding')
     this.sendBtn.disabled = true
     this.input.value = ''
     this.input.style.height = 'auto'
+    this.shadow.querySelector('#composer')?.classList.remove('has-content')
 
-    if (appendUser) this.appendMessage(text, 'user')
+    this.hasConversationActivity = true
+    if (appendUser) this.appendMessage(text, 'user', false, { createdAt: new Date().toISOString() })
     const startedKey = `ayooda_started_${this.conversationId}`
     if (!sessionStorage.getItem(startedKey)) {
       sessionStorage.setItem(startedKey, '1')
@@ -1172,6 +1476,7 @@ class AyoodaWidget {
         },
         onDone: (done) => {
           this.messageBuffer.markRendered(done.messageId)
+          if (bubble) this.addMessageDetails(bubble, new Date().toISOString(), done.messageId)
           if (done.status === 'waiting') this.appendSystemNote(this.strings.waiting)
           else if (done.status === 'human') this.appendSystemNote(this.strings.human)
           else if (done.status === 'resolved') this.appendSystemNote(this.strings.resolved)
@@ -1198,11 +1503,27 @@ class AyoodaWidget {
       this.sending = false
       this.setStatus('online')
       for (const pending of this.messageBuffer.flush()) {
-        this.appendBotMessage(pending.content)
+        this.appendBotMessage(pending.content, false, pending)
         if (!this.open) this.setUnreadCount(this.unreadCount + 1)
       }
       this.sendBtn.disabled = !this.input.value.trim()
     }
+  }
+
+  private submitPreview(text: string, appendUser: boolean) {
+    this.hasConversationActivity = true
+    this.input.value = ''
+    this.input.style.height = 'auto'
+    this.shadow.querySelector('#composer')?.classList.remove('has-content')
+    this.sendBtn.disabled = true
+    if (appendUser) this.appendMessage(text, 'user', false, { createdAt: new Date().toISOString() })
+    const typing = this.showTyping()
+    window.setTimeout(() => {
+      typing.remove()
+      this.appendBotMessage('This is an interactive preview. The installed widget will answer using your agent’s knowledge and workflow rules.', false, {
+        id: 'preview-reply', createdAt: new Date().toISOString(),
+      })
+    }, 650)
   }
 }
 
@@ -1212,14 +1533,17 @@ class AyoodaWidget {
 
 async function init() {
   try {
-    const config = await fetchConfig()
+    const preview = previewConfig()
+    const config = preview ?? localizeConfig(await fetchConfig())
     if (!config.enabled) return
     const host = document.createElement('div')
     host.id = 'ayooda-widget-host'
     document.body.appendChild(host)
-    observeWidgetVisibility(host, config)
-    new AyoodaWidget(host, config)
+    if (preview) host.style.setProperty('--aw-keyboard-inset', '0px')
+    else observeWidgetVisibility(host, config, () => recordWidgetEvent('visible'))
+    new AyoodaWidget(host, config, Boolean(preview))
   } catch (err) {
+    if (PREVIEW_CONFIG_RAW) document.body.dataset.ayoodaPreviewError = err instanceof Error ? err.message : 'Preview failed to initialize'
     console.error('[Ayooda] Failed to initialize widget:', err)
   }
 }

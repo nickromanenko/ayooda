@@ -208,6 +208,7 @@ export interface MessageMetadata {
   llmModel?: string
   promptTokens?: number
   completionTokens?: number
+  visitorFeedback?: 'helpful' | 'unhelpful'
 }
 
 export interface MessageDoc {
@@ -1043,6 +1044,17 @@ export type WidgetLocale = (typeof WIDGET_LOCALES)[number]
 export const WIDGET_CONVERSATION_PERSISTENCE = ['session', 'visitor', 'fresh'] as const
 export type WidgetConversationPersistence = (typeof WIDGET_CONVERSATION_PERSISTENCE)[number]
 
+export type WidgetContentLocale = Exclude<WidgetLocale, 'auto'>
+
+export interface WidgetLocalizedContent {
+  headerTitle?: string
+  statusText?: string
+  welcomeMessage?: string
+  inputPlaceholder?: string
+  launcherGreeting?: string
+  privacyNotice?: string
+}
+
 /** Plan required to hide the "Powered by Ayooda" line. Enforced on read as well
  *  as on write, so a downgrade puts the badge back rather than leaving a lapsed
  *  workspace with a benefit it no longer pays for. */
@@ -1079,6 +1091,8 @@ export interface WidgetAppearance {
   soundEnabled: boolean
   conversationPersistence: WidgetConversationPersistence
   persistenceDays: number
+  /** Optional visitor-language overrides. Empty values fall back to the default copy above. */
+  localizedContent: Partial<Record<WidgetContentLocale, WidgetLocalizedContent>>
 }
 
 export const DEFAULT_WIDGET_APPEARANCE: WidgetAppearance = {
@@ -1108,6 +1122,7 @@ export const DEFAULT_WIDGET_APPEARANCE: WidgetAppearance = {
   soundEnabled: false,
   conversationPersistence: 'session',
   persistenceDays: 7,
+  localizedContent: {},
 }
 
 // ---------------------------------------------------------------------------

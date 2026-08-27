@@ -1,23 +1,24 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
-  Check, ChevronRight, CircleAlert, Loader2, Lock, MessageCircle, Monitor,
-  Moon, Plus, Send, Smartphone, Sun, X,
+  Check, ChevronRight, CircleAlert, Loader2, Lock, Monitor,
+  Moon, Plus, Smartphone, Sun, X,
 } from 'lucide-react'
 import {
   WIDGET_LOCALES, WIDGET_POSITIONS, WIDGET_THEMES,
   MAX_WELCOME_MESSAGE_CHARS, MAX_WIDGET_COPY_CHARS, MAX_WIDGET_PATH_RULES,
   isWidgetHexColor, isWidgetPathRule, normalizeWidgetHexColor,
-  widgetAccessibleAccent, widgetContrastRatio, widgetForeground,
-  widgetVisibleOnPath, type WidgetAppearance as Appearance, type WidgetPosition,
+  widgetContrastRatio,
+  widgetVisibleOnPath, type WidgetAppearance as Appearance, type WidgetContentLocale,
+  type WidgetPosition,
 } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { errorText, input, label } from './ui'
 
 type SettingsTab = 'appearance' | 'content' | 'behavior' | 'security'
-type PreviewScenario = 'welcome' | 'markdown' | 'handoff' | 'error'
+type PreviewScenario = 'welcome' | 'markdown' | 'handoff' | 'error' | 'long' | 'streaming'
 type FieldErrorKey =
   | 'widgetColor' | 'welcomeMessage' | 'headerTitle' | 'statusText'
   | 'inputPlaceholder' | 'launcherGreeting' | 'privacyNotice'
@@ -25,15 +26,6 @@ type FieldErrorKey =
   | 'autoOpenDelaySeconds' | 'launcherGreetingDelaySeconds'
   | 'persistenceDays' | 'devices' | 'includePaths' | 'excludePaths'
   | 'allowedDomains'
-
-const PREVIEW_STRINGS = {
-  en: { online: 'Online', compose: 'Compose your message…', privacy: 'Privacy', powered: 'Powered by Ayooda', waiting: 'Waiting for a teammate', retry: 'Try again', failed: 'The message could not be sent.' },
-  es: { online: 'En línea', compose: 'Escribe tu mensaje…', privacy: 'Privacidad', powered: 'Funciona con Ayooda', waiting: 'Esperando a un miembro del equipo', retry: 'Intentar de nuevo', failed: 'No se pudo enviar el mensaje.' },
-  fr: { online: 'En ligne', compose: 'Écrivez votre message…', privacy: 'Confidentialité', powered: 'Propulsé par Ayooda', waiting: "En attente d'un membre de l'équipe", retry: 'Réessayer', failed: "Le message n'a pas pu être envoyé." },
-  de: { online: 'Online', compose: 'Nachricht verfassen…', privacy: 'Datenschutz', powered: 'Bereitgestellt von Ayooda', waiting: 'Warten auf ein Teammitglied', retry: 'Erneut versuchen', failed: 'Die Nachricht konnte nicht gesendet werden.' },
-  pt: { online: 'Online', compose: 'Escreva sua mensagem…', privacy: 'Privacidade', powered: 'Desenvolvido por Ayooda', waiting: 'Aguardando um membro da equipe', retry: 'Tentar novamente', failed: 'Não foi possível enviar a mensagem.' },
-  ar: { online: 'متصل', compose: 'اكتب رسالتك…', privacy: 'الخصوصية', powered: 'مدعوم من Ayooda', waiting: 'في انتظار أحد أعضاء الفريق', retry: 'حاول مرة أخرى', failed: 'تعذر إرسال الرسالة.' },
-} as const
 
 const DOMAIN = /^(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i
 const fieldLabel: CSSProperties = { display: 'block', marginBottom: 6, fontSize: 12.5, color: 'var(--ink-mute)' }
@@ -116,6 +108,14 @@ function Toggle({ id, checked, onChange, title, description, disabled = false }:
   </label>
 }
 
+function Disclosure({ title, forceOpen = false, children }: { title: string; forceOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return <details open={open || forceOpen} onToggle={(event) => setOpen(event.currentTarget.open)} style={{ marginTop: 14, borderRadius: 12, background: 'var(--bg-2)', boxShadow: '0 0 0 1px rgba(0,0,0,.06)', overflow: 'hidden' }}>
+    <summary style={{ minHeight: 44, padding: '0 13px', display: 'flex', alignItems: 'center', cursor: 'pointer', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600 }}>{title}</summary>
+    <div style={{ padding: '4px 13px 2px' }}>{children}</div>
+  </details>
+}
+
 function PathRulesInput({ id, value, onChange, placeholder, error }: { id: string; value: string[]; onChange: (value: string[]) => void; placeholder: string; error?: string }) {
   const [entry, setEntry] = useState('')
   const [entryError, setEntryError] = useState('')
@@ -140,54 +140,39 @@ function PathRulesInput({ id, value, onChange, placeholder, error }: { id: strin
 
 function Preview({ appearance, agentName, agentPhotoURL }: { appearance: Appearance; agentName: string; agentPhotoURL: string | null }) {
   const [mobile, setMobile] = useState(false)
-  const [open, setOpen] = useState(true)
   const [scenario, setScenario] = useState<PreviewScenario>('welcome')
   const [autoDark, setAutoDark] = useState(false)
 
-  useEffect(() => {
-    setAutoDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
-  }, [])
-
-  const foreground = isWidgetHexColor(appearance.widgetColor) ? widgetForeground(appearance.widgetColor) : '#fff'
-  const accent = isWidgetHexColor(appearance.widgetColor) ? widgetAccessibleAccent(appearance.widgetColor) : '#6366f1'
-  const dark = appearance.theme === 'dark' || (appearance.theme === 'auto' && autoDark)
-  const panel = dark ? '#18181b' : '#fff'
-  const ink = dark ? '#fafafa' : '#18181b'
-  const muted = dark ? '#a1a1aa' : '#71717a'
-  const bot = dark ? '#27272a' : '#f4f4f5'
-  const brand = isWidgetHexColor(appearance.widgetColor) ? appearance.widgetColor : '#6366f1'
-  const previewLocale = appearance.locale === 'auto' ? 'en' : appearance.locale
-  const ui = PREVIEW_STRINGS[previewLocale]
-  const sample = scenario === 'welcome'
-    ? <span>{appearance.welcomeMessage || 'Your welcome message appears here.'}</span>
-    : scenario === 'markdown'
-      ? <><strong>Here are the next steps:</strong><ul style={{ margin: '5px 0 0', paddingInlineStart: 16 }}><li>Review your account</li><li>Choose a plan</li></ul></>
-      : scenario === 'handoff'
-        ? <><span>I’ll bring in a teammate.</span><small style={{ display: 'block', marginTop: 7, color: muted }}>{ui.waiting}</small></>
-        : <><span style={{ color: '#dc2626' }}>{ui.failed}</span><button type="button" style={{ display: 'block', minHeight: 28, marginTop: 7, border: '1px solid #dc2626', borderRadius: 6, background: 'transparent', color: '#dc2626', fontSize: 8 }}>{ui.retry}</button></>
-  const footerParts = Boolean(appearance.privacyNotice || appearance.privacyPolicyURL || appearance.showBranding)
+  const previewConfig = useMemo(() => ({
+    ...appearance,
+    theme: appearance.theme === 'auto' ? (autoDark ? 'dark' : 'light') : appearance.theme,
+    showOnDesktop: true,
+    showOnMobile: true,
+    includePaths: [],
+    excludePaths: [],
+    agentName,
+    agentPhotoURL,
+  }), [appearance, autoDark, agentName, agentPhotoURL])
+  const encodedConfig = encodeURIComponent(JSON.stringify(previewConfig)).replace(/'/g, '%27')
+  const localWidget = process.env.NODE_ENV === 'development' && !process.env.NEXT_PUBLIC_WIDGET_SCRIPT_URL
+  const widgetScript = process.env.NEXT_PUBLIC_WIDGET_SCRIPT_URL ?? (localWidget ? 'http://localhost:5173/dist/widget.js' : 'https://cdn.ayooda.live/widget.js')
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}</style></head><body><script>const s=document.createElement('script');s.src=${JSON.stringify(widgetScript)};s.onload=()=>document.body.dataset.widgetScript='loaded';s.onerror=()=>document.body.dataset.widgetScript='failed';s.setAttribute('data-preview-config',decodeURIComponent('${encodedConfig}'));s.setAttribute('data-preview-scenario',${JSON.stringify(scenario)});document.body.appendChild(s);<\/script></body></html>`
+  const scale = mobile ? 1 : .7
 
   return <div style={{ position: 'sticky', top: 18 }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-      <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-mute)' }}>Live preview</p>
+      <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-mute)' }}>Interactive production preview</p>
       <div style={{ display: 'flex', gap: 4 }}>
         {appearance.theme === 'auto' && <><button type="button" aria-label="Preview light theme" aria-pressed={!autoDark} onClick={() => setAutoDark(false)} className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', color: !autoDark ? 'var(--accent)' : 'var(--ink-mute)' }}><Sun size={14} /></button><button type="button" aria-label="Preview dark theme" aria-pressed={autoDark} onClick={() => setAutoDark(true)} className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', color: autoDark ? 'var(--accent)' : 'var(--ink-mute)' }}><Moon size={14} /></button></>}
         <button type="button" aria-label="Desktop preview" aria-pressed={!mobile} onClick={() => setMobile(false)} className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', color: !mobile ? 'var(--accent)' : 'var(--ink-mute)' }}><Monitor size={14} /></button>
         <button type="button" aria-label="Mobile preview" aria-pressed={mobile} onClick={() => setMobile(true)} className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', color: mobile ? 'var(--accent)' : 'var(--ink-mute)' }}><Smartphone size={14} /></button>
       </div>
     </div>
-    <div className="widget-preview-scenarios" style={{ display: 'flex', gap: 5, marginBottom: 8, overflowX: 'auto' }}>{(['welcome', 'markdown', 'handoff', 'error'] as const).map((item) => <button key={item} type="button" aria-pressed={scenario === item} onClick={() => setScenario(item)} style={{ minHeight: 40, padding: '0 11px', borderRadius: 999, border: 0, background: scenario === item ? 'var(--accent-soft)' : 'var(--bg-2)', color: scenario === item ? 'var(--accent)' : 'var(--ink-mute)', fontSize: 10.5, textTransform: 'capitalize', cursor: 'pointer', transitionProperty: 'background-color, color, scale', transitionDuration: '150ms' }}>{item}</button>)}</div>
-    <div style={{ position: 'relative', height: 372, padding: 12, borderRadius: 16, background: 'var(--bg-2)', boxShadow: '0 0 0 1px rgba(0,0,0,.07), 0 4px 14px rgba(0,0,0,.06)', display: 'flex', flexDirection: 'column', alignItems: appearance.widgetPosition === 'bottom-left' ? 'flex-start' : 'flex-end', justifyContent: 'flex-end', gap: 8, overflow: 'hidden' }}>
-      {appearance.launcherGreeting && !open && <div style={{ maxWidth: 190, padding: '8px 10px', borderRadius: 10, background: panel, color: ink, fontSize: 9.5, boxShadow: '0 4px 14px rgba(0,0,0,.14)' }}>{appearance.launcherGreeting}</div>}
-      {open && <div dir={previewLocale === 'ar' ? 'rtl' : 'ltr'} style={{ width: mobile ? '100%' : 236, background: panel, color: ink, borderRadius: 13, overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,.2)' }}>
-        <div style={{ minHeight: 44, padding: '8px 9px', background: brand, color: foreground, display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 24, height: 24, borderRadius: 99, overflow: 'hidden', display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,.2)', boxShadow: '0 0 0 3px rgba(255,255,255,.2)' }}>{agentPhotoURL ? <img src={agentPhotoURL} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', outline: `1px solid ${dark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)'}`, outlineOffset: -1 }} /> : agentName.slice(0, 1)}</span><span style={{ minWidth: 0, flex: 1 }}><strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 10 }}>{appearance.headerTitle || agentName}</strong><small style={{ display: 'block', marginTop: 1, opacity: .8, fontSize: 8 }}>{appearance.statusText || ui.online}</small></span><X size={13} /></div>
-        <div style={{ minHeight: 155, padding: 10, display: 'flex', flexDirection: 'column', gap: 7 }}><div style={{ alignSelf: 'flex-start', maxWidth: '88%', padding: '7px 8px', borderRadius: '9px 9px 9px 3px', background: bot, color: ink, fontSize: 9, lineHeight: 1.42 }}>{sample}</div>{scenario !== 'error' && <div style={{ alignSelf: 'flex-end', padding: '6px 8px', borderRadius: '9px 9px 3px 9px', background: brand, color: foreground, fontSize: 9 }}>Thanks — that helps</div>}</div>
-        <div style={{ position: 'relative', minHeight: 50, margin: '0 8px 7px', padding: '9px 35px 9px 9px', borderRadius: 10, color: muted, boxShadow: `0 0 0 1px ${dark ? '#3f3f46' : '#d4d4d8'}`, fontSize: 9 }}>{appearance.inputPlaceholder || ui.compose}<Send size={14} style={{ position: 'absolute', insetInlineEnd: 10, bottom: 9, color: accent }} /></div>
-        {footerParts && <p style={{ margin: '0 8px 7px', textAlign: 'center', color: muted, fontSize: 7.5, lineHeight: 1.45 }}>{appearance.privacyNotice && <span>{appearance.privacyNotice} </span>}{appearance.privacyPolicyURL && <span style={{ textDecoration: 'underline' }}>{ui.privacy}</span>}{appearance.privacyPolicyURL && appearance.showBranding && ' · '}{appearance.showBranding && ui.powered}</p>}
-      </div>}
-      <button type="button" aria-label={open ? 'Close preview' : 'Open preview'} onClick={() => setOpen((value) => !value)} style={{ width: 44, height: 44, border: 0, borderRadius: 99, background: brand, color: foreground, display: 'grid', placeItems: 'center', boxShadow: '0 5px 16px rgba(0,0,0,.22)', cursor: 'pointer', transitionProperty: 'transform, box-shadow', transitionDuration: '150ms' }}>{open ? <X size={19} /> : <MessageCircle size={19} fill="currentColor" />}</button>
+    <div className="widget-preview-scenarios" style={{ display: 'flex', gap: 5, marginBottom: 8, overflowX: 'auto' }}>{(['welcome', 'markdown', 'handoff', 'error', 'long', 'streaming'] as const).map((item) => <button key={item} type="button" aria-pressed={scenario === item} onClick={() => setScenario(item)} style={{ minHeight: 40, padding: '0 11px', borderRadius: 999, border: 0, background: scenario === item ? 'var(--accent-soft)' : 'var(--bg-2)', color: scenario === item ? 'var(--accent)' : 'var(--ink-mute)', fontSize: 10.5, textTransform: 'capitalize', cursor: 'pointer', transitionProperty: 'background-color, color, scale', transitionDuration: '150ms' }}>{item}</button>)}</div>
+    <div style={{ position: 'relative', height: 560, borderRadius: 16, background: 'var(--bg-2)', boxShadow: '0 0 0 1px rgba(0,0,0,.07), 0 4px 14px rgba(0,0,0,.06)', overflow: 'hidden' }}>
+      <iframe key={`${scenario}-${JSON.stringify(previewConfig)}`} title="Interactive widget preview" sandbox="allow-scripts allow-popups" srcDoc={srcDoc} style={{ width: mobile ? '100%' : `${100 / scale}%`, height: mobile ? '100%' : `${560 / scale}px`, border: 0, transform: mobile ? undefined : `scale(${scale})`, transformOrigin: appearance.widgetPosition === 'bottom-left' ? 'bottom left' : 'bottom right', position: 'absolute', inset: 0 }} />
     </div>
-    <p style={{ ...help, marginTop: 8 }}>{appearance.theme === 'auto' ? `Auto theme · previewing ${dark ? 'dark' : 'light'}.` : `${appearance.theme[0]!.toUpperCase()}${appearance.theme.slice(1)} theme preview.`}</p>
+    <p style={{ ...help, marginTop: 8 }}>Uses the production widget renderer. Preview messages remain local and are not sent to your agent.</p>
   </div>
 }
 
@@ -209,6 +194,11 @@ export default function WidgetAppearance({ agentId, agentName, agentPhotoURL, in
   const contrast = useMemo(() => validColor ? Math.max(widgetContrastRatio(draft.widgetColor, '#fff'), widgetContrastRatio(draft.widgetColor, '#18181b')) : 0, [draft.widgetColor, validColor])
   const pathVisible = testPath.startsWith('/') && widgetVisibleOnPath(testPath, draft.includePaths, draft.excludePaths)
   const suggestedDomains = [...new Set(observedDomains.map((domain) => domain.toLowerCase()))].filter((domain) => validDomain(domain) && !draft.allowedDomains.includes(domain))
+
+  useEffect(() => {
+    const section = new URL(window.location.href).searchParams.get('widgetSection') as SettingsTab | null
+    if (section && ['appearance', 'content', 'behavior', 'security'].includes(section)) setActiveTab(section)
+  }, [])
 
   useEffect(() => {
     if (!dirty) return
@@ -250,11 +240,17 @@ export default function WidgetAppearance({ agentId, agentName, agentPhotoURL, in
   }
 
   const tabs: Array<{ id: SettingsTab; label: string }> = [{ id: 'appearance', label: 'Appearance' }, { id: 'content', label: 'Content' }, { id: 'behavior', label: 'Behavior' }, { id: 'security', label: 'Security' }]
+  function selectTab(tab: SettingsTab) {
+    setActiveTab(tab)
+    const url = new URL(window.location.href)
+    url.searchParams.set('widgetSection', tab)
+    window.history.replaceState(window.history.state, '', url)
+  }
   function focusFirstError() {
     const first = errorEntries[0]
     if (!first) return
     const target = FIELD_TARGETS[first[0]]
-    setActiveTab(target.tab)
+    selectTab(target.tab)
     requestAnimationFrame(() => document.getElementById(target.id)?.focus())
   }
 
@@ -265,7 +261,7 @@ export default function WidgetAppearance({ agentId, agentName, agentPhotoURL, in
     else if (event.key === 'Home') next = 0
     else if (event.key === 'End') next = tabs.length - 1
     else return
-    event.preventDefault(); setActiveTab(tabs[next]!.id); tabRefs.current[next]?.focus()
+    event.preventDefault(); selectTab(tabs[next]!.id); tabRefs.current[next]?.focus()
   }
 
   return <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
@@ -273,7 +269,7 @@ export default function WidgetAppearance({ agentId, agentName, agentPhotoURL, in
       <div><p style={{ ...label, marginBottom: 4 }}>Widget settings</p><p style={{ margin: 0, maxWidth: 520, color: 'var(--ink-mute)', fontSize: 12, lineHeight: 1.5, textWrap: 'pretty' }}>Control what visitors see, where the widget appears, and how conversations behave.</p></div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}><span style={{ padding: '4px 9px', borderRadius: 99, background: initial.enabled ? 'rgba(52,211,153,.14)' : 'var(--panel-2)', color: initial.enabled ? 'var(--mint)' : 'var(--ink-mute)', font: '500 10.5px var(--font-mono)' }}>{initial.enabled ? 'Published · enabled' : 'Published · paused'}</span>{dirty && <span style={{ padding: '4px 9px', borderRadius: 99, background: 'rgba(245,158,11,.11)', color: '#d97706', font: '500 10.5px var(--font-mono)' }}>Unsaved changes</span>}</div>
     </div>
-    <div className="widget-settings-tabs" role="tablist" aria-label="Widget settings" style={{ display: 'flex', gap: 4, marginBottom: 18, overflowX: 'auto' }}>{tabs.map((tab, index) => <button key={tab.id} ref={(node) => { tabRefs.current[index] = node }} id={`widget-tab-${tab.id}`} type="button" role="tab" aria-selected={activeTab === tab.id} aria-controls="widget-settings-panel" tabIndex={activeTab === tab.id ? 0 : -1} onKeyDown={(event) => moveTab(event, index)} onClick={() => setActiveTab(tab.id)} style={{ minHeight: 40, padding: '0 13px', border: 0, borderRadius: 9, background: activeTab === tab.id ? 'var(--accent-soft)' : 'transparent', color: activeTab === tab.id ? 'var(--accent)' : 'var(--ink-mute)', fontSize: 12.5, fontWeight: activeTab === tab.id ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', transitionProperty: 'background-color, color, transform', transitionDuration: '150ms' }}>{tab.label}</button>)}</div>
+    <div className="widget-settings-tabs" role="tablist" aria-label="Widget settings" style={{ display: 'flex', gap: 4, marginBottom: 18, overflowX: 'auto' }}>{tabs.map((tab, index) => <button key={tab.id} ref={(node) => { tabRefs.current[index] = node }} id={`widget-tab-${tab.id}`} type="button" role="tab" aria-selected={activeTab === tab.id} aria-controls="widget-settings-panel" tabIndex={activeTab === tab.id ? 0 : -1} onKeyDown={(event) => moveTab(event, index)} onClick={() => selectTab(tab.id)} style={{ minHeight: 40, padding: '0 13px', border: 0, borderRadius: 9, background: activeTab === tab.id ? 'var(--accent-soft)' : 'transparent', color: activeTab === tab.id ? 'var(--accent)' : 'var(--ink-mute)', fontSize: 12.5, fontWeight: activeTab === tab.id ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', transitionProperty: 'background-color, color, transform', transitionDuration: '150ms' }}>{tab.label}</button>)}</div>
     <div className="widget-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(260px, .95fr)', gap: 24, alignItems: 'start' }}>
       <div id="widget-settings-panel" role="tabpanel" aria-labelledby={`widget-tab-${activeTab}`}>
         {activeTab === 'appearance' && <AppearanceSettings draft={draft} setDraft={setDraft} errors={errors} validColor={validColor} contrast={contrast} brandingLocked={brandingLocked} />}
@@ -309,7 +305,41 @@ function ContentSettings({ draft, setDraft, errors, agentId, agentName }: Settin
     <div style={group}><label htmlFor="w-placeholder" style={fieldLabel}>Message placeholder</label><input id="w-placeholder" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.inputPlaceholder} aria-invalid={Boolean(errors.inputPlaceholder)} aria-describedby="w-placeholder-error" onChange={(event) => setDraft({ ...draft, inputPlaceholder: event.target.value })} placeholder="Compose your message…" style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-placeholder-error">{errors.inputPlaceholder}</FieldError></div>
     <div style={group}><label htmlFor="w-greeting" style={fieldLabel}>Launcher greeting</label><input id="w-greeting" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.launcherGreeting} aria-invalid={Boolean(errors.launcherGreeting)} aria-describedby="w-greeting-help w-greeting-error" onChange={(event) => setDraft({ ...draft, launcherGreeting: event.target.value })} placeholder="Need help? Chat with us." style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><p id="w-greeting-help" style={help}>Optional. Its delay appears in Behavior after you add text.</p><FieldError id="w-greeting-error">{errors.launcherGreeting}</FieldError></div>
     <div style={group}><label htmlFor="w-locale" style={fieldLabel}>Interface language</label><select id="w-locale" value={draft.locale} onChange={(event) => setDraft({ ...draft, locale: event.target.value as Appearance['locale'] })} style={{ ...input, padding: '9px 10px', fontSize: 13 }}>{WIDGET_LOCALES.map((locale) => <option key={locale} value={locale}>{({ auto: 'Automatic', en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', ar: 'العربية' } as const)[locale]}</option>)}</select><p style={help}>Built-in controls are translated. Your custom text stays exactly as entered.</p></div>
+    <LocalizedContentSettings draft={draft} setDraft={setDraft} />
   </>
+}
+
+function LocalizedContentSettings({ draft, setDraft }: Pick<SettingsProps, 'draft' | 'setDraft'>) {
+  const [locale, setLocale] = useState<WidgetContentLocale>('es')
+  const values = draft.localizedContent?.[locale] ?? {}
+  const names: Record<WidgetContentLocale, string> = { en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', ar: 'العربية' }
+  type LocalizedField = 'headerTitle' | 'statusText' | 'welcomeMessage' | 'inputPlaceholder' | 'launcherGreeting' | 'privacyNotice'
+  const fields: Array<{ key: LocalizedField; label: string; placeholder: string; max: number }> = [
+    { key: 'headerTitle', label: 'Header title', placeholder: draft.headerTitle || 'Use default title', max: MAX_WIDGET_COPY_CHARS },
+    { key: 'statusText', label: 'Header subtitle', placeholder: draft.statusText || 'Use translated Online label', max: MAX_WIDGET_COPY_CHARS },
+    { key: 'welcomeMessage', label: 'Welcome message', placeholder: draft.welcomeMessage, max: MAX_WELCOME_MESSAGE_CHARS },
+    { key: 'inputPlaceholder', label: 'Message placeholder', placeholder: draft.inputPlaceholder || 'Use built-in translation', max: MAX_WIDGET_COPY_CHARS },
+    { key: 'launcherGreeting', label: 'Launcher greeting', placeholder: draft.launcherGreeting || 'Use default greeting', max: MAX_WIDGET_COPY_CHARS },
+    { key: 'privacyNotice', label: 'Privacy notice', placeholder: draft.privacyNotice || 'Use default privacy notice', max: MAX_WIDGET_COPY_CHARS },
+  ]
+  function update(key: LocalizedField, value: string) {
+    const nextValues = { ...values, [key]: value }
+    for (const entry of Object.keys(nextValues) as LocalizedField[]) {
+      if (!nextValues[entry]) delete nextValues[entry]
+    }
+    const localizedContent = { ...(draft.localizedContent ?? {}), [locale]: nextValues }
+    if (!Object.keys(nextValues).length) delete localizedContent[locale]
+    setDraft({ ...draft, localizedContent })
+  }
+  return <details style={{ marginTop: 8, borderRadius: 12, background: 'var(--bg-2)', boxShadow: '0 0 0 1px rgba(0,0,0,.06)', overflow: 'hidden' }}>
+    <summary style={{ minHeight: 44, padding: '0 13px', display: 'flex', alignItems: 'center', cursor: 'pointer', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600 }}>Localized custom copy</summary>
+    <div style={{ padding: '4px 13px 14px' }}>
+      <p style={{ ...help, margin: '0 0 11px' }}>Add optional visitor-language versions. Empty fields fall back to the default copy above.</p>
+      <label htmlFor="w-content-locale" style={fieldLabel}>Translation language</label>
+      <select id="w-content-locale" value={locale} onChange={(event) => setLocale(event.target.value as WidgetContentLocale)} style={{ ...input, marginBottom: 13, padding: '9px 10px', fontSize: 13 }}>{Object.entries(names).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select>
+      {fields.map((field) => <div key={field.key} style={{ marginBottom: 11 }}><label htmlFor={`w-localized-${field.key}`} style={fieldLabel}>{field.label}</label>{field.key === 'welcomeMessage' || field.key === 'privacyNotice' ? <textarea id={`w-localized-${field.key}`} maxLength={field.max} value={values[field.key] ?? ''} onChange={(event) => update(field.key, event.target.value)} placeholder={field.placeholder} style={{ ...input, minHeight: 64, resize: 'vertical', padding: '9px 10px', fontSize: 13 }} /> : <input id={`w-localized-${field.key}`} maxLength={field.max} value={values[field.key] ?? ''} onChange={(event) => update(field.key, event.target.value)} placeholder={field.placeholder} style={{ ...input, padding: '9px 10px', fontSize: 13 }} />}</div>)}
+    </div>
+  </details>
 }
 
 function BehaviorSettings({ draft, setDraft, errors, testPath, setTestPath, pathVisible }: SettingsProps & { testPath: string; setTestPath: (path: string) => void; pathVisible: boolean }) {
@@ -319,12 +349,14 @@ function BehaviorSettings({ draft, setDraft, errors, testPath, setTestPath, path
     {draft.autoOpenDelaySeconds > 0 && <div style={{ margin: '4px 0 12px 25px' }}><label htmlFor="w-auto-open" style={fieldLabel}>Auto-open delay</label><input id="w-auto-open" type="number" min={1} max={60} value={draft.autoOpenDelaySeconds} aria-invalid={Boolean(errors.autoOpenDelaySeconds)} aria-describedby="w-auto-open-error" onChange={(event) => setDraft({ ...draft, autoOpenDelaySeconds: Number(event.target.value) })} style={{ ...input, maxWidth: 150, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-auto-open-error">{errors.autoOpenDelaySeconds}</FieldError><div style={{ marginTop: 8 }}><Toggle checked={draft.autoOpenOncePerSession} onChange={(checked) => setDraft({ ...draft, autoOpenOncePerSession: checked })} title="Only once per session" /></div></div>}
     {draft.launcherGreeting && <div style={group}><label htmlFor="w-greeting-delay" style={fieldLabel}>Launcher greeting delay</label><input id="w-greeting-delay" type="number" min={0} max={60} value={draft.launcherGreetingDelaySeconds} aria-invalid={Boolean(errors.launcherGreetingDelaySeconds)} aria-describedby="w-greeting-delay-help w-greeting-delay-error" onChange={(event) => setDraft({ ...draft, launcherGreetingDelaySeconds: Number(event.target.value) })} style={{ ...input, maxWidth: 150, padding: '9px 10px', fontSize: 13 }} /><p id="w-greeting-delay-help" style={help}>Seconds after the page loads.</p><FieldError id="w-greeting-delay-error">{errors.launcherGreetingDelaySeconds}</FieldError></div>}
     <div style={{ marginTop: 12 }}><Toggle id="w-desktop" checked={draft.showOnDesktop} onChange={(checked) => setDraft({ ...draft, showOnDesktop: checked })} title="Show on desktop" /><Toggle checked={draft.showOnMobile} onChange={(checked) => setDraft({ ...draft, showOnMobile: checked })} title="Show on mobile" /><FieldError id="w-devices-error">{errors.devices}</FieldError></div>
+    <Disclosure title="Advanced behavior" forceOpen={Boolean(errors.includePaths || errors.excludePaths || errors.persistenceDays)}>
     <div style={{ ...group, marginTop: 12 }}><label htmlFor="w-include" style={fieldLabel}>Only show on paths</label><PathRulesInput id="w-include" value={draft.includePaths} onChange={(value) => setDraft({ ...draft, includePaths: value })} placeholder="/pricing or /help/*" error={errors.includePaths} /><p id="w-include-help" style={help}>Empty includes every page. Add one pattern at a time.</p></div>
     <div style={group}><label htmlFor="w-exclude" style={fieldLabel}>Hide on paths</label><PathRulesInput id="w-exclude" value={draft.excludePaths} onChange={(value) => setDraft({ ...draft, excludePaths: value })} placeholder="/checkout/*" error={errors.excludePaths} /><p id="w-exclude-help" style={help}>Hide rules win when a path matches both lists.</p></div>
     <div style={{ ...group, padding: 12, borderRadius: 12, background: 'var(--bg-2)', boxShadow: '0 0 0 1px rgba(0,0,0,.06)' }}><label htmlFor="w-test-path" style={fieldLabel}>Test a website path</label><input id="w-test-path" value={testPath} onChange={(event) => setTestPath(event.target.value)} placeholder="/pricing" style={{ ...input, padding: '9px 10px', fontFamily: 'var(--font-mono)', fontSize: 12 }} /><p style={{ ...help, color: testPath.startsWith('/') ? (pathVisible ? 'var(--mint)' : '#d97706') : 'var(--danger)' }}>{!testPath.startsWith('/') ? 'Start the path with /.' : pathVisible ? 'The widget will appear on this path.' : 'The widget will be hidden on this path.'}</p></div>
     <div style={group}><label htmlFor="w-persistence" style={fieldLabel}>Conversation memory</label><select id="w-persistence" value={draft.conversationPersistence} onChange={(event) => setDraft({ ...draft, conversationPersistence: event.target.value as Appearance['conversationPersistence'] })} style={{ ...input, padding: '9px 10px', fontSize: 13 }}><option value="session">Remember in this browser tab</option><option value="visitor">Remember returning visitors</option><option value="fresh">Always start fresh</option></select>{draft.conversationPersistence === 'visitor' && <p style={help}>Stores a conversation identifier in the visitor’s browser. Mention this in your privacy notice where required.</p>}</div>
     {draft.conversationPersistence === 'visitor' && <div style={group}><label htmlFor="w-days" style={fieldLabel}>Remember for days</label><input id="w-days" type="number" min={1} max={30} value={draft.persistenceDays} aria-invalid={Boolean(errors.persistenceDays)} aria-describedby="w-days-error" onChange={(event) => setDraft({ ...draft, persistenceDays: Number(event.target.value) })} style={{ ...input, maxWidth: 150, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-days-error">{errors.persistenceDays}</FieldError></div>}
     <Toggle checked={draft.soundEnabled} onChange={(checked) => setDraft({ ...draft, soundEnabled: checked })} title="Reply sound" description="Play a subtle sound for replies received while closed." />
+    </Disclosure>
   </>
 }
 
@@ -333,7 +365,9 @@ function SecuritySettings({ draft, setDraft, errors, domainEntry, setDomainEntry
     <div style={{ marginBottom: 18, padding: 13, borderRadius: 12, background: draft.allowedDomains.length ? 'rgba(52,211,153,.08)' : 'rgba(245,158,11,.09)', boxShadow: '0 0 0 1px rgba(0,0,0,.06)' }}><p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)', display: 'flex', gap: 7, alignItems: 'center' }}>{draft.allowedDomains.length ? <Check size={14} style={{ color: 'var(--mint)' }} /> : <CircleAlert size={14} style={{ color: '#d97706' }} />}{draft.allowedDomains.length ? 'Embedding is restricted' : 'Any website can currently embed this widget'}</p></div>
     {suggestedDomains.length > 0 && <div style={{ ...group, padding: 12, borderRadius: 12, background: 'var(--bg-2)', boxShadow: '0 0 0 1px rgba(0,0,0,.06)' }}><p style={{ ...fieldLabel, margin: 0 }}>Detected installation domains</p><p style={help}>Add a detected hostname to the allowlist with one click.</p><div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 9 }}>{suggestedDomains.map((domain) => <button key={domain} type="button" onClick={() => addDomain(domain)} className="btn btn-ghost" style={{ minHeight: 40, padding: '0 11px', font: '11px var(--font-mono)' }}><Plus size={12} /> {domain}</button>)}</div></div>}
     <div style={group}><label htmlFor="w-domain" style={fieldLabel}>Allowed domains</label><div style={{ display: 'flex', gap: 7 }}><input id="w-domain" value={domainEntry} onChange={(event) => { setDomainEntry(event.target.value); setDomainError('') }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addDomain() } }} aria-invalid={Boolean(domainError || errors.allowedDomains)} aria-describedby="w-domain-error" placeholder="example.com or *.example.com" style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><button type="button" onClick={() => addDomain()} aria-label="Add domain" className="btn btn-ghost" style={{ width: 44, height: 44, padding: 0, display: 'grid', placeItems: 'center', flexShrink: 0 }}><Plus size={14} /></button></div><FieldError id="w-domain-error">{domainError || errors.allowedDomains}</FieldError><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>{draft.allowedDomains.map((domain) => <span key={domain} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, minHeight: 38, padding: '0 2px 0 10px', borderRadius: 999, background: 'var(--panel-2)', color: 'var(--ink-dim)', font: '11px var(--font-mono)' }}>{domain}<button type="button" aria-label={`Remove ${domain}`} onClick={() => setDraft({ ...draft, allowedDomains: draft.allowedDomains.filter((item) => item !== domain) })} className="widget-chip-remove"><X size={11} /></button></span>)}</div></div>
+    <Disclosure title="Privacy and compliance" forceOpen={Boolean(errors.privacyPolicyURL || errors.privacyNotice)}>
     <div style={group}><label htmlFor="w-privacy-url" style={fieldLabel}>Privacy policy URL</label><input id="w-privacy-url" type="url" value={draft.privacyPolicyURL} aria-invalid={Boolean(errors.privacyPolicyURL)} aria-describedby="w-privacy-url-error" onChange={(event) => setDraft({ ...draft, privacyPolicyURL: event.target.value })} placeholder="https://example.com/privacy" style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-privacy-url-error">{errors.privacyPolicyURL}</FieldError></div>
     <div style={group}><label htmlFor="w-privacy-notice" style={fieldLabel}>Privacy notice</label><textarea id="w-privacy-notice" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.privacyNotice} aria-invalid={Boolean(errors.privacyNotice)} aria-describedby="w-privacy-notice-help w-privacy-notice-error" onChange={(event) => setDraft({ ...draft, privacyNotice: event.target.value })} placeholder="Messages may be stored to provide support." style={{ ...input, minHeight: 70, resize: 'vertical', padding: '9px 10px', fontSize: 13 }} /><p id="w-privacy-notice-help" style={help}>Shown in the widget footer beside your privacy-policy link.</p><FieldError id="w-privacy-notice-error">{errors.privacyNotice}</FieldError></div>
+    </Disclosure>
   </>
 }

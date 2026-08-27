@@ -131,6 +131,24 @@ describe('validateWidgetAppearance', () => {
       if (r.ok) expect(r.value.includePaths).toEqual(['/help/*'])
     })
 
+    test('normalizes localized copy and accepts older configs without it', () => {
+      const older = { ...base } as Record<string, unknown>
+      delete older.localizedContent
+      const oldResult = validateWidgetAppearance(older)
+      expect(oldResult.ok).toBe(true)
+      if (oldResult.ok) expect(oldResult.value.localizedContent).toEqual({})
+
+      const r = validateWidgetAppearance({
+        ...base,
+        localizedContent: {
+          es: { welcomeMessage: '  ¡Hola!  ', inputPlaceholder: 'Escribe aquí' },
+          fr: {},
+        },
+      })
+      expect(r.ok).toBe(true)
+      if (r.ok) expect(r.value.localizedContent).toEqual({ es: { welcomeMessage: '¡Hola!', inputPlaceholder: 'Escribe aquí' } })
+    })
+
     test('rejects unsafe URLs and malformed path rules', () => {
       expect(validateWidgetAppearance({ ...base, privacyPolicyURL: 'javascript:alert(1)' }).ok).toBe(false)
       expect(validateWidgetAppearance({ ...base, includePaths: ['https://example.com/help'] }).ok).toBe(false)

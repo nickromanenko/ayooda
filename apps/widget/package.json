@@ -3,12 +3,13 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "vite",
+    "dev": "vite build && concurrently -n bundle,serve -c magenta,cyan \"vite build --watch\" \"vite\"",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "devDependencies": {
+    "concurrently": "^10.0.4",
     "typescript": "^5.4.5",
     "vite": "^5.3.0"
   },

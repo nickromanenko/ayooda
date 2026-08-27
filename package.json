@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web -c blue,green \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev": "concurrently -n api,web,widget -c blue,green,magenta \"pnpm dev:api\" \"pnpm dev:web\" \"pnpm dev:widget\"",
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api dev",
     "dev:login": "pnpm --filter web dev:login",

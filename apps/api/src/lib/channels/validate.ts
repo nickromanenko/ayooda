@@ -9,6 +9,8 @@ import {
   DEFAULT_WIDGET_APPEARANCE,
   isWidgetPathRule,
   type WidgetAppearance,
+  type WidgetContentLocale,
+  type WidgetLocalizedContent,
   type WidgetPosition,
 } from '@ayooda/shared'
 
@@ -37,6 +39,32 @@ function pathRules(a: Record<string, unknown>, key: string): string[] | null {
   return rules.every(isWidgetPathRule)
     ? rules
     : null
+}
+
+const LOCALIZED_COPY_FIELDS = ['headerTitle', 'statusText', 'welcomeMessage', 'inputPlaceholder', 'launcherGreeting', 'privacyNotice'] as const
+
+function localizedContent(a: Record<string, unknown>): WidgetAppearance['localizedContent'] | null {
+  if (a.localizedContent === undefined) return {}
+  if (!a.localizedContent || typeof a.localizedContent !== 'object' || Array.isArray(a.localizedContent)) return null
+  const result: WidgetAppearance['localizedContent'] = {}
+  for (const locale of WIDGET_LOCALES) {
+    if (locale === 'auto') continue
+    const raw = (a.localizedContent as Record<string, unknown>)[locale]
+    if (raw === undefined) continue
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    const values: WidgetLocalizedContent = {}
+    for (const field of LOCALIZED_COPY_FIELDS) {
+      const value = (raw as Record<string, unknown>)[field]
+      if (value === undefined || value === '') continue
+      if (typeof value !== 'string') return null
+      const trimmed = value.trim()
+      const max = field === 'welcomeMessage' ? MAX_WELCOME_MESSAGE_CHARS : MAX_WIDGET_COPY_CHARS
+      if (trimmed.length > max) return null
+      if (trimmed) values[field] = trimmed
+    }
+    if (Object.keys(values).length) result[locale as WidgetContentLocale] = values
+  }
+  return result
 }
 
 export function validateWidgetAppearance(
@@ -104,6 +132,8 @@ export function validateWidgetAppearance(
   const conversationPersistence = WIDGET_CONVERSATION_PERSISTENCE.includes(a.conversationPersistence as typeof WIDGET_CONVERSATION_PERSISTENCE[number])
     ? a.conversationPersistence as WidgetAppearance['conversationPersistence']
     : DEFAULT_WIDGET_APPEARANCE.conversationPersistence
+  const localized = localizedContent(a)
+  if (!localized) return fail('Check the translated widget copy and its length.')
 
   return {
     ok: true,
@@ -134,6 +164,7 @@ export function validateWidgetAppearance(
       soundEnabled: a.soundEnabled === true,
       conversationPersistence,
       persistenceDays: persistenceDays!,
+      localizedContent: localized,
     },
   }
 }
