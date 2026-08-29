@@ -14,7 +14,8 @@ const landing = readFileSync(new URL('../components/LandingPage.tsx', import.met
 const globals = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8')
 
 test('dashboard switches from the desktop sidebar to an accessible mobile drawer', () => {
-  assert.match(dashboardLayout, /className=\{styles\.shell\}/)
+  assert.match(dashboardLayout, /styles\.shell/)
+  assert.match(dashboardLayout, /dashboard-shell/)
   assert.match(dashboardCss, /@media \(max-width: 760px\)/)
   assert.match(sidebar, /aria-controls="dashboard-mobile-drawer"/)
   assert.match(sidebar, /aria-expanded=\{mobileOpen\}/)

@@ -42,3 +42,20 @@ export async function apiRequest(path: string, init: RequestInit = {}): Promise<
     },
   })
 }
+
+/**
+ * Perform an authenticated request and turn HTTP failures into exceptions.
+ * `fetch` only rejects for transport failures, so mutation handlers that rely
+ * on try/catch should use this helper before updating optimistic local state.
+ */
+export async function apiRequestOrThrow(
+  path: string,
+  init: RequestInit = {},
+  fallbackMessage = 'The request could not be completed.',
+): Promise<Response> {
+  const response = await apiRequest(path, init)
+  if (response.ok) return response
+
+  const body = await response.json().catch(() => ({})) as { error?: string }
+  throw new Error(body.error ?? fallbackMessage)
+}

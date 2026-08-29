@@ -1,10 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import {
+  collection, query, orderBy, onSnapshot, Timestamp, limit, limitToLast,
+  getDocs, startAfter, endBefore, type DocumentData, type QueryDocumentSnapshot,
+} from 'firebase/firestore'
 import { ArrowLeft, Loader2, MessageSquare, User, Bot, Send } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import MarkdownMessage from '@/components/dashboard/MarkdownMessage'
 import { useWorkspace } from '@/hooks/useWorkspace'
@@ -39,6 +42,9 @@ const STATUS_STYLE: Record<Conversation['status'], React.CSSProperties> = {
   resolved: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
 }
 
+const CONVERSATION_PAGE_SIZE = 50
+const MESSAGE_PAGE_SIZE = 100
+
 function formatTime(ts: Timestamp | null): string {
   if (!ts) return ''
   const date = ts.toDate()
@@ -54,20 +60,41 @@ function formatTime(ts: Timestamp | null): string {
 
 export default function InboxPage() {
   const { workspace, loading: wsLoading } = useWorkspace()
-  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [liveConversations, setLiveConversations] = useState<Conversation[]>([])
+  const [olderConversations, setOlderConversations] = useState<Conversation[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [liveMessages, setLiveMessages] = useState<Message[]>([])
+  const [olderMessages, setOlderMessages] = useState<Message[]>([])
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
   const [takingOver, setTakingOver] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [realtimeError, setRealtimeError] = useState('')
+  const [subscriptionVersion, setSubscriptionVersion] = useState(0)
+  const [hasOlderConversations, setHasOlderConversations] = useState(false)
+  const [hasOlderMessages, setHasOlderMessages] = useState(false)
+  const [loadingOlderConversations, setLoadingOlderConversations] = useState(false)
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
   const [filter, setFilter] = useState<'all' | 'waiting' | 'human' | 'bot' | 'resolved'>('all')
   const [agentFilter, setAgentFilter] = useState<string>('all')
   // Which agent answered. Sourced from /copilot/agents rather than /agents,
   // because the Inbox is open to members and /agents is owner-only.
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const conversationCursorRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null)
+  const messageCursorRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null)
 
   const workspaceId = workspace?.id
+  const conversations = useMemo(() => {
+    const merged = new Map<string, Conversation>()
+    for (const item of [...liveConversations, ...olderConversations]) merged.set(item.id, item)
+    return [...merged.values()].sort((a, b) => (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0))
+  }, [liveConversations, olderConversations])
+  const messages = useMemo(() => {
+    const merged = new Map<string, Message>()
+    for (const item of [...olderMessages, ...liveMessages]) merged.set(item.id, item)
+    return [...merged.values()].sort((a, b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0))
+  }, [liveMessages, olderMessages])
 
   useEffect(() => {
     let cancelled = false
@@ -83,37 +110,86 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (!workspaceId) return
+    setOlderConversations([]); setRealtimeError('')
     const q = query(
       collection(db, `workspaces/${workspaceId}/conversations`),
       orderBy('updatedAt', 'desc'),
+      limit(CONVERSATION_PAGE_SIZE + 1),
     )
     const unsub = onSnapshot(q, (snap) => {
-      setConversations(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Conversation)))
-    })
+      const page = snap.docs.slice(0, CONVERSATION_PAGE_SIZE)
+      conversationCursorRef.current = page.at(-1) ?? null
+      setHasOlderConversations(snap.docs.length > CONVERSATION_PAGE_SIZE)
+      setLiveConversations(page.map((d) => ({ id: d.id, ...d.data() } as Conversation)))
+      setRealtimeError('')
+    }, () => setRealtimeError('Live conversations could not be loaded. Check your connection and try again.'))
     return unsub
-  }, [workspaceId])
+  }, [workspaceId, subscriptionVersion])
 
   useEffect(() => {
-    if (!workspaceId || !selectedId) { setMessages([]); return }
+    if (!workspaceId || !selectedId) { setLiveMessages([]); setOlderMessages([]); return }
+    setOlderMessages([]); setActionError('')
     const q = query(
       collection(db, `workspaces/${workspaceId}/conversations/${selectedId}/messages`),
       orderBy('createdAt', 'asc'),
+      limitToLast(MESSAGE_PAGE_SIZE + 1),
     )
     const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Message)))
-    })
+      const page = snap.docs.slice(-MESSAGE_PAGE_SIZE)
+      messageCursorRef.current = page[0] ?? null
+      setHasOlderMessages(snap.docs.length > MESSAGE_PAGE_SIZE)
+      setLiveMessages(page.map((d) => ({ id: d.id, ...d.data() } as Message)))
+      setRealtimeError('')
+    }, () => setRealtimeError('Messages could not be updated. Check your connection and try again.'))
     return unsub
-  }, [workspaceId, selectedId])
+  }, [workspaceId, selectedId, subscriptionVersion])
+
+  async function loadOlderConversations() {
+    if (!workspaceId || !conversationCursorRef.current || loadingOlderConversations) return
+    setLoadingOlderConversations(true); setRealtimeError('')
+    try {
+      const snap = await getDocs(query(
+        collection(db, `workspaces/${workspaceId}/conversations`),
+        orderBy('updatedAt', 'desc'), startAfter(conversationCursorRef.current), limit(CONVERSATION_PAGE_SIZE + 1),
+      ))
+      const page = snap.docs.slice(0, CONVERSATION_PAGE_SIZE)
+      conversationCursorRef.current = page.at(-1) ?? conversationCursorRef.current
+      setHasOlderConversations(snap.docs.length > CONVERSATION_PAGE_SIZE)
+      setOlderConversations((current) => [...current, ...page.map((d) => ({ id: d.id, ...d.data() } as Conversation))])
+    } catch {
+      setRealtimeError('Older conversations could not be loaded.')
+    } finally { setLoadingOlderConversations(false) }
+  }
+
+  async function loadOlderMessages() {
+    if (!workspaceId || !selectedId || !messageCursorRef.current || loadingOlderMessages) return
+    setLoadingOlderMessages(true); setRealtimeError('')
+    try {
+      const snap = await getDocs(query(
+        collection(db, `workspaces/${workspaceId}/conversations/${selectedId}/messages`),
+        orderBy('createdAt', 'asc'), endBefore(messageCursorRef.current), limitToLast(MESSAGE_PAGE_SIZE + 1),
+      ))
+      const page = snap.docs.slice(-MESSAGE_PAGE_SIZE)
+      messageCursorRef.current = page[0] ?? messageCursorRef.current
+      setHasOlderMessages(snap.docs.length > MESSAGE_PAGE_SIZE)
+      setOlderMessages((current) => [...page.map((d) => ({ id: d.id, ...d.data() } as Message)), ...current])
+    } catch {
+      setRealtimeError('Older messages could not be loaded.')
+    } finally { setLoadingOlderMessages(false) }
+  }
 
   useEffect(() => {
+    if (loadingOlderMessages) return
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, loadingOlderMessages])
 
   async function handleTakeover() {
     if (!selectedId) return
-    setTakingOver(true)
+    setTakingOver(true); setActionError('')
     try {
-      await apiRequest(`/conversations/${selectedId}/takeover`, { method: 'POST' })
+      await apiRequestOrThrow(`/conversations/${selectedId}/takeover`, { method: 'POST' }, 'Could not take over this conversation.')
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not take over this conversation.')
     } finally {
       setTakingOver(false)
     }
@@ -121,19 +197,26 @@ export default function InboxPage() {
 
   async function handleResolve() {
     if (!selectedId) return
-    await apiRequest(`/conversations/${selectedId}/resolve`, { method: 'POST' })
+    setActionError('')
+    try {
+      await apiRequestOrThrow(`/conversations/${selectedId}/resolve`, { method: 'POST' }, 'Could not resolve this conversation.')
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not resolve this conversation.')
+    }
   }
 
   async function handleSendReply(e: React.FormEvent) {
     e.preventDefault()
     if (!reply.trim() || !selectedId || sending) return
-    setSending(true)
+    setSending(true); setActionError('')
     try {
-      await apiRequest(`/conversations/${selectedId}/messages`, {
+      await apiRequestOrThrow(`/conversations/${selectedId}/messages`, {
         method: 'POST',
         body: JSON.stringify({ content: reply.trim() }),
-      })
+      }, 'Could not send your reply.')
       setReply('')
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not send your reply.')
     } finally {
       setSending(false)
     }
@@ -197,6 +280,12 @@ export default function InboxPage() {
             </select>
           </div>
         )}
+        {realtimeError && (
+          <div role="alert" style={{ padding: '9px 10px', borderBottom: '1px solid var(--line)', color: 'var(--danger)', fontSize: 11.5 }}>
+            {realtimeError}{' '}
+            <button type="button" onClick={() => setSubscriptionVersion((value) => value + 1)} style={{ padding: 0, border: 0, color: 'inherit', background: 'none', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+          </div>
+        )}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {visibleConversations.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ink-mute)', gap: 8, padding: '0 24px', textAlign: 'center' }}>
@@ -206,7 +295,8 @@ export default function InboxPage() {
               {conversations.length > 0 && <button type="button" className="btn btn-ghost" onClick={() => { setFilter('all'); setAgentFilter('all') }}>Clear filters</button>}
             </div>
           ) : (
-            visibleConversations.map((conv) => (
+            <>
+            {visibleConversations.map((conv) => (
               <button
                 key={conv.id}
                 type="button"
@@ -254,7 +344,13 @@ export default function InboxPage() {
                   )}
                 </div>
               </button>
-            ))
+            ))}
+            {hasOlderConversations && filter === 'all' && agentFilter === 'all' && (
+              <button type="button" className="btn btn-ghost" onClick={() => void loadOlderConversations()} disabled={loadingOlderConversations} style={{ width: 'calc(100% - 20px)', justifyContent: 'center', margin: 10 }}>
+                {loadingOlderConversations ? 'Loading…' : 'Load older conversations'}
+              </button>
+            )}
+            </>
           )}
         </div>
       </div>
@@ -315,9 +411,15 @@ export default function InboxPage() {
           {selectedConv.summary && (
             <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: '12px 20px 0' }}>{selectedConv.summary}</p>
           )}
+          {actionError && <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', margin: '10px 20px 0' }}>{actionError}</p>}
 
           {/* Messages */}
           <div className={styles.messages} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {hasOlderMessages && (
+              <button type="button" className="btn btn-ghost" onClick={() => void loadOlderMessages()} disabled={loadingOlderMessages} style={{ alignSelf: 'center' }}>
+                {loadingOlderMessages ? 'Loading…' : 'Load older messages'}
+              </button>
+            )}
             {messages.map((msg) => (
               <div
                 key={msg.id}

@@ -23,6 +23,8 @@ export default function AgentSkills({ agentId }: { agentId: string }) {
       const res = await apiRequest(`/agents/${agentId}/skills`)
       if (res.ok) { const d = await res.json() as { skills: AgentSkillView[] }; setSkills(d.skills) }
       else setError('Could not load skills.')
+    } catch {
+      setError('Could not load skills.')
     } finally { setLoading(false) }
   }, [agentId])
 

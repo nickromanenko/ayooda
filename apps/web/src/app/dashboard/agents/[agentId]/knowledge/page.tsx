@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react'
 import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle, FileText, RotateCw } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
 import { Loading, EmptyState } from '@/components/dashboard/Loading'
@@ -129,10 +129,13 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
   }
 
   async function handleDelete(id: string) {
+    if (!window.confirm('Delete this knowledge source and its indexed content?')) return
     setDeletingId(id)
     try {
-      await apiRequest(`/agents/${agentId}/knowledge/${id}`, { method: 'DELETE' })
+      await apiRequestOrThrow(`/agents/${agentId}/knowledge/${id}`, { method: 'DELETE' }, 'Failed to delete this knowledge source.')
       setDocs((prev) => prev.filter((d) => d.id !== id))
+    } catch (error) {
+      setSyncConfigError(error instanceof Error ? error.message : 'Failed to delete this knowledge source.')
     } finally {
       setDeletingId(null)
     }
@@ -141,8 +144,10 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
   async function handleReindex(id: string) {
     setReindexingId(id)
     try {
-      await apiRequest(`/agents/${agentId}/knowledge/${id}/reindex`, { method: 'POST' })
+      await apiRequestOrThrow(`/agents/${agentId}/knowledge/${id}/reindex`, { method: 'POST' }, 'Failed to start reindexing.')
       await fetchDocs()
+    } catch (error) {
+      setSyncConfigError(error instanceof Error ? error.message : 'Failed to start reindexing.')
     } finally {
       setReindexingId(null)
     }

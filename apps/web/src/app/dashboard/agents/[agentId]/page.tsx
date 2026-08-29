@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Loader2, Star, Trash2, MessagesSquare } from 'lucide-react'
 import { validateAgentImage, type AgentDoc } from '@ayooda/shared'
-import { apiRequest } from '@/lib/api'
+import { apiRequestOrThrow } from '@/lib/api'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import { Loading } from '@/components/dashboard/Loading'
 import ModelPicker from '@/components/dashboard/ModelPicker'
@@ -22,10 +22,15 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
-    const res = await apiRequest(`/agents/${agentId}`)
-    if (res.ok) setAgent(await res.json() as AgentDoc)
-    else setError('Could not load this agent.')
-    setLoading(false)
+    setLoading(true); setError('')
+    try {
+      const res = await apiRequestOrThrow(`/agents/${agentId}`, {}, 'Could not load this agent.')
+      setAgent(await res.json() as AgentDoc)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not load this agent.')
+    } finally {
+      setLoading(false)
+    }
   }, [agentId])
 
   useEffect(() => { void load() }, [load])
@@ -42,26 +47,27 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
     try {
       const form = new FormData()
       form.append('file', file)
-      const res = await apiRequest(`/agents/${agentId}/photo`, { method: 'POST', body: form })
-      const d = await res.json().catch(() => ({})) as { photoURL?: string; error?: string }
-      if (!res.ok) { setError(d.error ?? 'Could not upload the logo'); return }
+      const res = await apiRequestOrThrow(`/agents/${agentId}/photo`, { method: 'POST', body: form }, 'Could not upload the logo.')
+      const d = await res.json().catch(() => ({})) as { photoURL?: string }
       patch({ photoURL: d.photoURL ?? null })
-    } finally { setBusy(false) }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not upload the logo.') }
+    finally { setBusy(false) }
   }
 
   async function removeLogo() {
     setBusy(true)
     try {
-      await apiRequest(`/agents/${agentId}/photo`, { method: 'DELETE' })
+      await apiRequestOrThrow(`/agents/${agentId}/photo`, { method: 'DELETE' }, 'Could not remove the agent photo.')
       patch({ photoURL: null })
-    } finally { setBusy(false) }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not remove the agent photo.') }
+    finally { setBusy(false) }
   }
 
   async function save() {
     if (!agent) return
     setSaving(true); setError('')
     try {
-      const res = await apiRequest(`/agents/${agentId}`, {
+      await apiRequestOrThrow(`/agents/${agentId}`, {
         method: 'PUT',
         body: JSON.stringify({
           name: agent.name.trim(),
@@ -69,36 +75,38 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
           systemPrompt: agent.systemPrompt,
           llmModel: agent.llmModel,
         }),
-      })
-      const d = await res.json().catch(() => ({})) as { error?: string }
-      if (!res.ok) { setError(d.error ?? 'Could not save the agent'); return }
+      }, 'Could not save the agent.')
       await load()
-    } finally { setSaving(false) }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not save the agent.') }
+    finally { setSaving(false) }
   }
 
   async function makeDefault() {
     setBusy(true)
-    try { await apiRequest(`/agents/${agentId}/default`, { method: 'POST' }); await load() }
+    try { await apiRequestOrThrow(`/agents/${agentId}/default`, { method: 'POST' }, 'Could not make this the default agent.'); await load() }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not make this the default agent.') }
     finally { setBusy(false) }
   }
 
   async function remove() {
+    if (!window.confirm(`Delete ${agent?.name ?? 'this agent'} and all of its configuration? This cannot be undone.`)) return
     setBusy(true); setError('')
     try {
-      const res = await apiRequest(`/agents/${agentId}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({})) as { error?: string }
-        setError(d.error ?? 'Could not delete the agent')
-        return
-      }
+      await apiRequestOrThrow(`/agents/${agentId}`, { method: 'DELETE' }, 'Could not delete the agent.')
       router.push('/dashboard/agents')
-    } finally { setBusy(false) }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not delete the agent.') }
+    finally { setBusy(false) }
   }
 
   if (loading) {
     return <Loading />
   }
-  if (!agent) return <p style={errorText}>{error || 'Agent not found.'}</p>
+  if (!agent) return (
+    <div>
+      <p role="alert" style={errorText}>{error || 'Agent not found.'}</p>
+      {error && <button type="button" className="btn btn-ghost" onClick={() => void load()} style={{ marginTop: 12 }}>Retry</button>}
+    </div>
+  )
 
   return (
     <>

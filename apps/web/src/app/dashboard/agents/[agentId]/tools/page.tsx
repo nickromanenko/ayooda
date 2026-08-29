@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react'
 import { CheckCircle2, CircleDashed, ExternalLink, KeyRound, Loader2, PackagePlus, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import {
   TOOL_BUNDLES,
@@ -222,8 +222,11 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
   }
 
   async function remove(id: string) {
+    if (!window.confirm('Delete this tool?')) return
     setBusyId(id)
-    try { await apiRequest(`/agents/${agentId}/tools/${id}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
+    try { await apiRequestOrThrow(`/agents/${agentId}/tools/${id}`, { method: 'DELETE' }, 'Could not delete this tool.'); await load() }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not delete this tool.') }
+    finally { setBusyId('') }
   }
 
   if (loading) return <Loading />

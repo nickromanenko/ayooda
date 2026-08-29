@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Plus, Trash2, ArrowUp, ArrowDown, CheckCircle2, MessageSquareText, Route, UserRoundCheck, UserRoundPlus } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import type { WorkflowActionType, WorkflowRule, WorkflowTargets, WorkflowTrigger, TriggerType } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
@@ -154,8 +154,11 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
   }
 
   async function remove(id: string) {
+    if (!window.confirm('Delete this escalation rule?')) return
     setBusyId(id)
-    try { await apiRequest(`${base}/${id}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
+    try { await apiRequestOrThrow(`${base}/${id}`, { method: 'DELETE' }, 'Could not delete the rule.'); await load() }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not delete the rule.') }
+    finally { setBusyId('') }
   }
 
   async function move(index: number, dir: -1 | 1) {
@@ -164,8 +167,13 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
     if (j < 0 || j >= next.length) return
     ;[next[index], next[j]] = [next[j]!, next[index]!]
     setRules(next)
-    await apiRequest(`${base}/reorder`, { method: 'PUT', body: JSON.stringify({ orderedIds: next.map((r) => r.id) }) })
-    await load()
+    try {
+      await apiRequestOrThrow(`${base}/reorder`, { method: 'PUT', body: JSON.stringify({ orderedIds: next.map((r) => r.id) }) }, 'Could not reorder the rules.')
+      await load()
+    } catch (caught) {
+      setRules(rules)
+      setError(caught instanceof Error ? caught.message : 'Could not reorder the rules.')
+    }
   }
 
   const editorIncomplete = !!editor && (

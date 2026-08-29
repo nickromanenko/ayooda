@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Trash2, Plus, Plug } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import { MCP_TRANSPORT_LABELS, type McpServerDef, type McpTransportType, type McpServerAuthType } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
@@ -44,7 +44,10 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
   const load = useCallback(async () => {
     try {
       const res = await apiRequest(`/agents/${agentId}/mcp`)
-      if (res.ok) { const d = await res.json() as { servers: McpServerDef[] }; setServers(d.servers) }
+      if (!res.ok) throw new Error('Could not load MCP servers.')
+      const d = await res.json() as { servers: McpServerDef[] }; setServers(d.servers)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not load MCP servers.')
     } finally { setLoading(false) }
   }, [agentId])
   useEffect(() => { void load() }, [load])
@@ -87,8 +90,11 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
   }
 
   async function remove(id: string) {
+    if (!window.confirm('Delete this MCP server connection?')) return
     setBusyId(id)
-    try { await apiRequest(`/agents/${agentId}/mcp/${id}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
+    try { await apiRequestOrThrow(`/agents/${agentId}/mcp/${id}`, { method: 'DELETE' }, 'Could not delete this MCP server.'); await load() }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not delete this MCP server.') }
+    finally { setBusyId('') }
   }
 
   async function test(id: string) {

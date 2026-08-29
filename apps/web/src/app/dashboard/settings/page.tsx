@@ -82,9 +82,30 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!profileDirty && !workspaceDirty) return
-    const preventLeave = (event: BeforeUnloadEvent) => event.preventDefault()
+    const message = 'You have unsaved changes. Leave this page and discard them?'
+    const preventLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    const confirmDashboardNavigation = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const anchor = target.closest('a[href]')
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.target === '_blank' || anchor.hasAttribute('download')) return
+      const destination = new URL(anchor.href, window.location.href)
+      if (destination.href === window.location.href || destination.origin !== window.location.origin) return
+      if (!window.confirm(message)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+      }
+    }
     window.addEventListener('beforeunload', preventLeave)
-    return () => window.removeEventListener('beforeunload', preventLeave)
+    document.addEventListener('click', confirmDashboardNavigation, true)
+    return () => {
+      window.removeEventListener('beforeunload', preventLeave)
+      document.removeEventListener('click', confirmDashboardNavigation, true)
+    }
   }, [profileDirty, workspaceDirty])
 
   async function saveProfile(e: React.FormEvent) {

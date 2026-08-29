@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Activity, BellRing, Bot, CheckCircle2, CircleAlert, Globe2, Loader2, Mail, MessageSquare, RefreshCw, Save, Smartphone } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
 import styles from './page.module.css'
@@ -105,7 +105,8 @@ export default function ChannelReliabilityPage() {
   async function check(channelId: string) {
     setChecking((current) => new Set(current).add(channelId)); setError('')
     try {
-      await apiRequest(`/channels/${channelId}/diagnose`, { method: 'POST' })
+      await apiRequestOrThrow(`/channels/${channelId}/diagnose`, { method: 'POST' }, 'Connection check failed.')
+      await load()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Connection check failed.')
     } finally {

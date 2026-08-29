@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback } from 'react'
 import { Loader2, Copy, Check, Code, Send, Plus, Mail, Slack as SlackIcon, ExternalLink, Smartphone, X, RefreshCw } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import { Loading } from '@/components/dashboard/Loading'
 import { label, errorText, input } from '@/components/dashboard/ui'
@@ -83,6 +83,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [widgetBusy, setWidgetBusy] = useState(false)
+  const [widgetError, setWidgetError] = useState('')
   const [confirmWidgetRemoval, setConfirmWidgetRemoval] = useState(false)
   const [botToken, setBotToken] = useState('')
   const [telegramError, setTelegramError] = useState('')
@@ -118,20 +119,23 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const sms = channels.find((c) => c.type === 'sms')
 
   async function createWidget() {
-    setWidgetBusy(true)
+    setWidgetBusy(true); setWidgetError('')
     try {
-      const res = await apiRequest(`${base}/web-widget`, { method: 'POST' })
-      if (res.ok) trackProductEvent('Channel Connected', { channel_type: 'web_widget', context: 'dashboard' })
+      await apiRequestOrThrow(`${base}/web-widget`, { method: 'POST' }, 'Could not create the website widget.')
+      trackProductEvent('Channel Connected', { channel_type: 'web_widget', context: 'dashboard' })
       await fetchChannels()
-    } finally { setWidgetBusy(false) }
+    } catch (caught) { setWidgetError(caught instanceof Error ? caught.message : 'Could not create the website widget.') }
+    finally { setWidgetBusy(false) }
   }
 
   async function removeWidget() {
-    setWidgetBusy(true)
+    setWidgetBusy(true); setWidgetError('')
     try {
-      await apiRequest(`${base}/web-widget`, { method: 'DELETE' })
+      await apiRequestOrThrow(`${base}/web-widget`, { method: 'DELETE' }, 'Could not remove the website widget.')
       await fetchChannels()
-    } finally { setWidgetBusy(false); setConfirmWidgetRemoval(false) }
+      setConfirmWidgetRemoval(false)
+    } catch (caught) { setWidgetError(caught instanceof Error ? caught.message : 'Could not remove the website widget.') }
+    finally { setWidgetBusy(false) }
   }
 
   function applyAppearance(next: Appearance) {
@@ -303,6 +307,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
         </div>
 
         <div style={{ padding: 20 }}>
+          {widgetError && <p role="alert" style={{ margin: '0 0 12px', color: 'var(--danger)', fontSize: 12 }}>{widgetError}</p>}
           {!widget ? (
             <>
               <p style={{ fontSize: 12.5, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 12 }}>

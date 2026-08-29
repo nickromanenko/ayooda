@@ -1,11 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore'
+import {
+  collection, query, orderBy, onSnapshot, Timestamp, limitToLast, getDocs, endBefore,
+  type DocumentData, type QueryDocumentSnapshot,
+} from 'firebase/firestore'
 import { ArrowLeft, Loader2, Send, Plus, Trash2, MessagesSquare, FileText, Bot, User } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { readSSE } from '@/lib/sse'
 import { Loading } from '@/components/dashboard/Loading'
 import { useWorkspace } from '@/hooks/useWorkspace'
@@ -44,6 +47,8 @@ interface Message {
   metadata?: { sources?: Array<{ docId: string; source: string; score: number }> }
 }
 
+const MESSAGE_PAGE_SIZE = 100
+
 function formatRelative(ts: TsJSON | null): string {
   if (!ts) return ''
   const date = new Date(ts._seconds * 1000)
@@ -72,23 +77,41 @@ function CopilotPageInner() {
   const [agents, setAgents] = useState<AgentPickerItem[]>([])
   const [threads, setThreads] = useState<ThreadRow[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [liveMessages, setLiveMessages] = useState<Message[]>([])
+  const [olderMessages, setOlderMessages] = useState<Message[]>([])
   const [pendingAgentId, setPendingAgentId] = useState('')
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [pending, setPending] = useState('')
   const [error, setError] = useState('')
+  const [realtimeError, setRealtimeError] = useState('')
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
+  const [hasOlderMessages, setHasOlderMessages] = useState(false)
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
+  const [subscriptionVersion, setSubscriptionVersion] = useState(0)
   const [mobileComposeOpen, setMobileComposeOpen] = useState(() => Boolean(searchParams.get('agent')))
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messageCursorRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null)
 
   const workspaceId = workspace?.id
   const uid = user?.uid
+  const messages = useMemo(() => {
+    const merged = new Map<string, Message>()
+    for (const item of [...olderMessages, ...liveMessages]) merged.set(item.id, item)
+    return [...merged.values()].sort((a, b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0))
+  }, [liveMessages, olderMessages])
+  const clearMessages = useCallback(() => { setLiveMessages([]); setOlderMessages([]); setHasOlderMessages(false) }, [])
 
   const loadThreads = useCallback(async () => {
-    const res = await apiRequest('/copilot/threads')
-    if (res.ok) { const d = await res.json() as { threads: ThreadRow[] }; setThreads(d.threads) }
+    try {
+      const res = await apiRequest('/copilot/threads')
+      if (!res.ok) throw new Error('Could not load Copilot threads.')
+      const d = await res.json() as { threads: ThreadRow[] }
+      setThreads(d.threads)
+    } catch {
+      setError('Could not load Copilot threads. Check your connection and try again.')
+    }
   }, [])
 
   useEffect(() => {
@@ -98,7 +121,10 @@ function CopilotPageInner() {
         // Members can't reach the owner-only /agents routes, so the picker uses
         // /copilot/agents — a smaller, member-readable view of the same list.
         const [agentsRes] = await Promise.all([apiRequest('/copilot/agents'), loadThreads()])
-        if (agentsRes.ok && !cancelled) { const d = await agentsRes.json() as { agents: AgentPickerItem[] }; setAgents(d.agents) }
+        if (!agentsRes.ok) throw new Error('Could not load agents.')
+        if (!cancelled) { const d = await agentsRes.json() as { agents: AgentPickerItem[] }; setAgents(d.agents) }
+      } catch {
+        if (!cancelled) setError('Copilot could not be loaded. Check your connection and try again.')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -110,8 +136,8 @@ function CopilotPageInner() {
   // until the user actually sends; there is deliberately no create-thread route.
   useEffect(() => {
     const agent = searchParams.get('agent')
-    if (agent) { setPendingAgentId(agent); setActiveThreadId(null); setMessages([]) }
-  }, [searchParams])
+    if (agent) { setPendingAgentId(agent); setActiveThreadId(null); clearMessages() }
+  }, [searchParams, clearMessages])
 
   // Once agents are known, default the picker to the workspace's default agent
   // so a first-time visitor isn't staring at an empty select — but only if
@@ -123,14 +149,20 @@ function CopilotPageInner() {
   }, [agents, pendingAgentId])
 
   useEffect(() => {
-    if (!workspaceId || !uid || !activeThreadId) { setMessages([]); return }
+    if (!workspaceId || !uid || !activeThreadId) { clearMessages(); return }
+    setOlderMessages([])
+    setRealtimeError('')
     const q = query(
       collection(db, `workspaces/${workspaceId}/copilotUsers/${uid}/threads/${activeThreadId}/messages`),
       orderBy('createdAt', 'asc'),
+      limitToLast(MESSAGE_PAGE_SIZE + 1),
     )
     const unsub = onSnapshot(q, (snap) => {
-      const msgs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Message))
-      setMessages(msgs)
+      const page = snap.docs.slice(-MESSAGE_PAGE_SIZE)
+      messageCursorRef.current = page[0] ?? null
+      setHasOlderMessages(snap.docs.length > MESSAGE_PAGE_SIZE)
+      const msgs = page.map((d) => ({ id: d.id, ...d.data() } as Message))
+      setLiveMessages(msgs)
       // Hand the streamed buffer over to the persisted message atomically: clear
       // `pending` only once Firestore confirms the assistant's reply landed —
       // not on the SSE `done` event. Clearing on `done` left a gap on a brand
@@ -138,17 +170,35 @@ function CopilotPageInner() {
       // still empty when `pending` was cleared) and could double-render on a
       // continuing thread (persisted message arriving a few ms before `done`).
       if (msgs[msgs.length - 1]?.role === 'assistant') setPending('')
-    })
+    }, () => setRealtimeError('Live messages could not be loaded. Check your connection and try again.'))
     return unsub
-  }, [workspaceId, uid, activeThreadId])
+  }, [workspaceId, uid, activeThreadId, subscriptionVersion, clearMessages])
+
+  async function loadOlderMessages() {
+    if (!workspaceId || !uid || !activeThreadId || !messageCursorRef.current || loadingOlderMessages) return
+    setLoadingOlderMessages(true); setRealtimeError('')
+    try {
+      const snap = await getDocs(query(
+        collection(db, `workspaces/${workspaceId}/copilotUsers/${uid}/threads/${activeThreadId}/messages`),
+        orderBy('createdAt', 'asc'), endBefore(messageCursorRef.current), limitToLast(MESSAGE_PAGE_SIZE + 1),
+      ))
+      const page = snap.docs.slice(-MESSAGE_PAGE_SIZE)
+      messageCursorRef.current = page[0] ?? messageCursorRef.current
+      setHasOlderMessages(snap.docs.length > MESSAGE_PAGE_SIZE)
+      setOlderMessages((current) => [...page.map((d) => ({ id: d.id, ...d.data() } as Message)), ...current])
+    } catch {
+      setRealtimeError('Older messages could not be loaded.')
+    } finally { setLoadingOlderMessages(false) }
+  }
 
   useEffect(() => {
+    if (loadingOlderMessages) return
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, pending])
+  }, [messages, pending, loadingOlderMessages])
 
   function startNewThread() {
     setActiveThreadId(null)
-    setMessages([])
+    clearMessages()
     setError('')
     setMobileComposeOpen(true)
   }
@@ -156,16 +206,21 @@ function CopilotPageInner() {
   function selectThread(t: ThreadRow) {
     setActiveThreadId(t.id)
     setPendingAgentId(t.agentId)
+    clearMessages()
     setError('')
+    setRealtimeError('')
     setMobileComposeOpen(true)
   }
 
   async function removeThread(id: string) {
+    if (!window.confirm('Delete this Copilot thread?')) return
     setBusyId(id)
     try {
-      await apiRequest(`/copilot/threads/${id}`, { method: 'DELETE' })
-      if (activeThreadId === id) { setActiveThreadId(null); setMessages([]) }
+      await apiRequestOrThrow(`/copilot/threads/${id}`, { method: 'DELETE' }, 'Could not delete this thread.')
+      if (activeThreadId === id) { setActiveThreadId(null); clearMessages() }
       await loadThreads()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not delete this thread.')
     } finally {
       setBusyId('')
     }
@@ -188,6 +243,7 @@ function CopilotPageInner() {
       if (!res.ok) {
         const d = await res.json().catch(() => ({})) as { error?: string }
         setError(d.error ?? 'Could not send the message')
+        setInput((current) => current || text)
         return
       }
 
@@ -216,6 +272,7 @@ function CopilotPageInner() {
       })
     } catch {
       setError('Connection lost')
+      setInput((current) => current || text)
       void loadThreads()
     } finally {
       setStreaming(false)
@@ -271,23 +328,28 @@ function CopilotPageInner() {
                 <div
                   key={t.id}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+                    display: 'flex', alignItems: 'center',
                     borderBottom: '1px solid var(--line)',
                     borderLeft: isActive ? '2px solid var(--control-primary)' : '2px solid transparent',
                     background: isActive ? 'var(--control-selected)' : 'transparent',
-                    cursor: 'pointer',
                   }}
-                  onClick={() => selectThread(t)}
                 >
-                  <AgentAvatar name={agent?.name ?? 'Agent'} photoURL={agent?.photoURL ?? null} seed={t.agentId} size={28} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12.5, color: 'var(--ink-dim)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</p>
-                    <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: '2px 0 0' }}>{formatRelative(t.updatedAt)}</p>
-                  </div>
+                  <button
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => selectThread(t)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, padding: '10px 6px 10px 14px', border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <AgentAvatar name={agent?.name ?? 'Agent'} photoURL={agent?.photoURL ?? null} seed={t.agentId} size={28} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-faint)', marginTop: 2 }}>{formatRelative(t.updatedAt)}</span>
+                    </span>
+                  </button>
                   <button
                     type="button"
                     aria-label="Delete thread"
-                    onClick={(e) => { e.stopPropagation(); void removeThread(t.id) }}
+                    onClick={() => void removeThread(t.id)}
                     disabled={busyId === t.id}
                     style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', background: 'none', border: 'none', borderRadius: 10, cursor: 'pointer', color: 'var(--ink-faint)', padding: 0, flexShrink: 0 }}
                   >
@@ -311,9 +373,20 @@ function CopilotPageInner() {
             <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>{activeAgent?.name ?? 'New thread'}</p>
           </div>
 
-          {error && <p style={{ fontSize: 12, color: 'var(--danger)', margin: '12px 20px 0' }}>{error}</p>}
+          {error && <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', margin: '12px 20px 0' }}>{error}</p>}
+          {realtimeError && (
+            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 20px 0', fontSize: 12, color: 'var(--danger)' }}>
+              <span>{realtimeError}</span>
+              <button type="button" className="btn btn-ghost" onClick={() => setSubscriptionVersion((value) => value + 1)} style={{ padding: '4px 8px', minHeight: 30 }}>Retry</button>
+            </div>
+          )}
 
           <div className={styles.messages} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {hasOlderMessages && (
+              <button type="button" className="btn btn-ghost" disabled={loadingOlderMessages} onClick={() => void loadOlderMessages()} style={{ alignSelf: 'center', minHeight: 36, padding: '6px 12px' }}>
+                {loadingOlderMessages ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Loading…</> : 'Load older messages'}
+              </button>
+            )}
             {messages.map((msg) => (
               <div
                 key={msg.id}

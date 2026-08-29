@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2, Copy, Check, Trash2, UserPlus } from 'lucide-react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
 import { card, label, input as baseInput } from '@/components/dashboard/ui'
@@ -50,12 +50,17 @@ export default function TeamPage() {
     } finally { setInviting(false) }
   }
   async function revoke(e: string) {
-    setBusyId('invite:' + e)
-    try { await apiRequest(`/team/invite/${encodeURIComponent(e)}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
+    setBusyId('invite:' + e); setError('')
+    try { await apiRequestOrThrow(`/team/invite/${encodeURIComponent(e)}`, { method: 'DELETE' }, 'Could not revoke this invitation.'); await load() }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not revoke this invitation.') }
+    finally { setBusyId('') }
   }
   async function remove(uid: string) {
-    setBusyId('member:' + uid)
-    try { await apiRequest(`/team/member/${uid}`, { method: 'DELETE' }); await load() } finally { setBusyId('') }
+    if (!window.confirm('Remove this teammate from the workspace?')) return
+    setBusyId('member:' + uid); setError('')
+    try { await apiRequestOrThrow(`/team/member/${uid}`, { method: 'DELETE' }, 'Could not remove this teammate.'); await load() }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not remove this teammate.') }
+    finally { setBusyId('') }
   }
 
   if (loading) return <Loading />
