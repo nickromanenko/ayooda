@@ -273,8 +273,8 @@ function CopilotPageInner() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
                     borderBottom: '1px solid var(--line)',
-                    borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-                    background: isActive ? 'var(--accent-soft)' : 'transparent',
+                    borderLeft: isActive ? '2px solid var(--control-primary)' : '2px solid transparent',
+                    background: isActive ? 'var(--control-selected)' : 'transparent',
                     cursor: 'pointer',
                   }}
                   onClick={() => selectThread(t)}
@@ -387,7 +387,7 @@ function CopilotPageInner() {
               style={{
                 flex: 1, resize: 'none', borderRadius: 12,
                 border: '1px solid var(--line-2)', padding: '8px 12px',
-                fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink)',
+                fontSize: 13, background: 'var(--control-surface)', color: 'var(--ink)',
                 maxHeight: 112, fontFamily: 'var(--font-ui)',
               }}
               onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
@@ -397,8 +397,8 @@ function CopilotPageInner() {
               type="submit"
               disabled={streaming || !input.trim()}
               style={{
-                padding: 10, borderRadius: 12, background: 'var(--accent)', border: 'none',
-                color: '#1a0e08', cursor: 'pointer', flexShrink: 0,
+                padding: 10, borderRadius: 12, background: 'var(--control-primary)', border: 'none',
+                color: 'var(--control-primary-text)', cursor: 'pointer', flexShrink: 0,
                 opacity: streaming || !input.trim() ? 0.5 : 1, transition: 'opacity .15s',
               }}
             >

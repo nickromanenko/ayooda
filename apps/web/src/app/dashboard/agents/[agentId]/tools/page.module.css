@@ -351,12 +351,12 @@
   padding: 0 14px 0 16px;
   border: 0;
   border-radius: 10px;
-  background: var(--accent);
-  color: #1a0e08;
+  background: var(--control-primary);
+  color: var(--control-primary-text);
   cursor: pointer;
   font-size: 11px;
   font-weight: 620;
-  box-shadow: 0 0 0 1px rgba(245, 165, 36, 0.3), 0 5px 14px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--control-primary) 24%, transparent), 0 5px 14px rgba(0, 0, 0, 0.12);
   transition-property: background-color, box-shadow, opacity, scale;
   transition-duration: 150ms;
   transition-timing-function: ease-out;
@@ -365,8 +365,8 @@
 .oauthButton:hover:not(:disabled),
 .oauthButton:focus-visible {
   outline: none;
-  background: var(--accent-2);
-  box-shadow: 0 0 0 1px rgba(245, 165, 36, 0.5), 0 0 0 4px rgba(245, 165, 36, 0.1), 0 8px 18px rgba(0, 0, 0, 0.18);
+  background: var(--control-primary-hover);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--control-primary) 28%, transparent), 0 0 0 4px color-mix(in srgb, var(--control-primary) 10%, transparent), 0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
 .oauthButton:active:not(:disabled) {

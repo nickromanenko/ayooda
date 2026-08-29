@@ -110,7 +110,7 @@ async function loadOverview() {
 }
 
 const panelStyle: React.CSSProperties = {
-  background: 'var(--panel)', border: '1px solid var(--line)',
+  background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)',
   borderRadius: 'var(--r-md)', padding: 24, marginBottom: 24,
 }
 const eyebrow: React.CSSProperties = {
@@ -161,7 +161,7 @@ export default async function DashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
         {stats.map((stat) => (
-          <div key={stat.label} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: '18px 20px' }}>
+          <div key={stat.label} style={{ background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)', borderRadius: 'var(--r-md)', padding: '18px 20px' }}>
             <div style={{ width: 34, height: 34, borderRadius: 10, background: `color-mix(in oklab, ${stat.accent} 15%, transparent)`, border: `1px solid color-mix(in oklab, ${stat.accent} 25%, transparent)`, display: 'grid', placeItems: 'center', marginBottom: 12, color: stat.accent }}>
               <stat.icon size={16} />
             </div>

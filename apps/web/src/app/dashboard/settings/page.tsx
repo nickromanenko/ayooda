@@ -9,7 +9,7 @@ import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 14px',
   borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)',
-  background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14,
+  background: 'var(--control-surface)', color: 'var(--ink)', fontSize: 14,
   fontFamily: 'var(--font-ui)', boxSizing: 'border-box',
 }
 const labelStyle: React.CSSProperties = {
@@ -20,7 +20,7 @@ const fieldLabelStyle: React.CSSProperties = {
   ...labelStyle, textTransform: 'none', fontFamily: 'var(--font-ui)', letterSpacing: 0, fontSize: 13,
 }
 const cardStyle: React.CSSProperties = {
-  background: 'var(--panel)', border: '1px solid var(--line)',
+  background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)',
   borderRadius: 'var(--r-md)', padding: 24, marginBottom: 20,
 }
 

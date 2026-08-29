@@ -11,7 +11,7 @@
   padding: 8px 12px;
   border: 1px solid var(--line-2);
   border-radius: var(--r-sm);
-  background: var(--bg-2);
+  background: var(--control-surface);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -22,8 +22,8 @@
 
 .trigger:hover:not(:disabled),
 .trigger:focus-visible {
-  border-color: rgba(124, 92, 255, 0.58);
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--line-2));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent);
 }
 
 .trigger:focus-visible {
@@ -106,10 +106,7 @@
   padding: 8px;
   border-radius: 18px;
   background: var(--panel);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    0 12px 24px rgba(0, 0, 0, 0.22),
-    0 24px 60px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-card);
   animation: popover-in 150ms cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -183,13 +180,13 @@
   padding: 0 12px;
   border: 1px solid var(--line-2);
   border-radius: 10px;
-  background: var(--bg-2);
+  background: var(--control-surface);
   color: var(--ink-mute);
 }
 
 .searchField:focus-within {
-  border-color: rgba(124, 92, 255, 0.64);
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.11);
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--line-2));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent);
 }
 
 .searchField input {
@@ -208,14 +205,14 @@
   border: 1px solid var(--line-2);
   border-radius: 10px;
   outline: none;
-  background: var(--bg-2);
+  background: var(--control-surface);
   color: var(--ink);
   font-size: 12px;
 }
 
 .providerSelect:focus {
-  border-color: rgba(124, 92, 255, 0.64);
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.11);
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--line-2));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 11%, transparent);
 }
 
 .modelList {

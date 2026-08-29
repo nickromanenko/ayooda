@@ -32,9 +32,9 @@
 }
 
 .viewSwitch .viewSwitchActive {
-  background: var(--panel-2);
-  color: var(--ink);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  background: var(--control-selected);
+  color: var(--control-selected-text);
+  box-shadow: 0 1px 4px rgba(36, 42, 49, 0.1);
 }
 
 .actionSummary {
@@ -84,9 +84,9 @@
 }
 
 .actionCardSelected {
-  border-color: rgba(124, 92, 255, 0.68);
-  background: rgba(124, 92, 255, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.12);
+  border-color: color-mix(in srgb, var(--control-primary) 64%, transparent);
+  background: var(--control-selected);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--control-primary) 10%, transparent);
 }
 
 .actionCard > span:last-child {

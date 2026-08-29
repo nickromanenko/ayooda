@@ -7,7 +7,7 @@ import { Loading } from '@/components/dashboard/Loading'
 import { muted } from '@/components/dashboard/ui'
 
 const card: React.CSSProperties = {
-  background: 'var(--panel)', border: '1px solid var(--line)',
+  background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)',
   borderRadius: 'var(--r-md)', padding: 16, marginBottom: 12,
 }
 

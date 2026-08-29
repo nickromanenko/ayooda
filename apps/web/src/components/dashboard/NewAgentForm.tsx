@@ -110,9 +110,9 @@ export default function NewAgentForm({
                   textAlign: 'left',
                   padding: '12px 14px',
                   borderRadius: 'var(--r-sm)',
-                  border: `1px solid ${selected ? 'var(--accent, #6366f1)' : 'var(--line-2)'}`,
-                  background: selected ? 'rgba(99,102,241,0.08)' : 'var(--bg-2)',
-                  color: 'var(--ink)',
+                  border: `1px solid ${selected ? 'var(--control-primary)' : 'var(--line-2)'}`,
+                  background: selected ? 'var(--control-selected)' : 'var(--control-surface)',
+                  color: selected ? 'var(--control-selected-text)' : 'var(--ink)',
                   cursor: 'pointer',
                 }}
               >

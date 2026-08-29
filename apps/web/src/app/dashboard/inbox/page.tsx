@@ -172,8 +172,8 @@ export default function InboxPage() {
               style={{
                 minHeight: 40, fontSize: 11.5, fontFamily: 'var(--font-mono)', padding: '0 10px', borderRadius: 20, cursor: 'pointer',
                 border: '1px solid var(--line)', textTransform: 'capitalize',
-                background: filter === f ? 'var(--accent-soft)' : 'transparent',
-                color: filter === f ? 'var(--accent)' : 'var(--ink-mute)',
+                background: filter === f ? 'var(--control-selected)' : 'transparent',
+                color: filter === f ? 'var(--control-selected-text)' : 'var(--ink-mute)',
               }}
             >
               {f}
@@ -213,9 +213,9 @@ export default function InboxPage() {
                 style={{
                   width: '100%', textAlign: 'left', padding: '12px 16px',
                   borderBottom: '1px solid var(--line)',
-                  borderLeft: selectedId === conv.id ? '2px solid var(--accent)' : '2px solid transparent',
-                  background: selectedId === conv.id ? 'var(--accent-soft)' : 'transparent',
-                  cursor: 'pointer', transition: 'background .15s',
+                  borderLeft: selectedId === conv.id ? '2px solid var(--control-primary)' : '2px solid transparent',
+                  background: selectedId === conv.id ? 'var(--control-selected)' : 'transparent',
+                  cursor: 'pointer', transitionProperty: 'background-color', transitionDuration: '150ms',
                 }}
                 onMouseEnter={e => { if (selectedId !== conv.id) (e.currentTarget as HTMLButtonElement).style.background = 'var(--panel-2)' }}
                 onMouseLeave={e => { if (selectedId !== conv.id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
@@ -287,7 +287,7 @@ export default function InboxPage() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
                     padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
-                    background: 'var(--accent)', color: '#1a0e08', border: 'none', cursor: 'pointer',
+                    background: 'var(--control-primary)', color: 'var(--control-primary-text)', border: 'none', cursor: 'pointer',
                     opacity: takingOver ? 0.5 : 1, transition: 'opacity .15s',
                   }}
                 >
@@ -301,8 +301,8 @@ export default function InboxPage() {
                   onClick={() => void handleResolve()}
                   style={{
                     padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
-                    background: 'var(--panel-2)', color: 'var(--ink-dim)',
-                    border: '1px solid var(--line)', cursor: 'pointer',
+                    background: 'var(--control-secondary)', color: 'var(--ink-dim)',
+                    border: 'none', boxShadow: 'var(--shadow-control)', cursor: 'pointer',
                   }}
                 >
                   Mark resolved
@@ -345,9 +345,9 @@ export default function InboxPage() {
                   borderTopRightRadius: msg.role === 'user' ? 4 : 16,
                   borderTopLeftRadius: msg.role !== 'user' ? 4 : 16,
                   background: msg.role === 'user' ? 'var(--panel-2)'
-                    : msg.role === 'operator' ? 'var(--accent)'
+                    : msg.role === 'operator' ? 'var(--control-primary)'
                     : 'var(--panel)',
-                  color: msg.role === 'operator' ? '#1a0e08' : 'var(--ink-dim)',
+                  color: msg.role === 'operator' ? 'var(--control-primary-text)' : 'var(--ink-dim)',
                   border: msg.role === 'assistant' ? '1px solid var(--line)' : 'none',
                 }}>
                   {msg.content}
@@ -376,7 +376,7 @@ export default function InboxPage() {
                 style={{
                   flex: 1, resize: 'none', borderRadius: 12,
                   border: '1px solid var(--line-2)', padding: '8px 12px',
-                  fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink)',
+                  fontSize: 13, background: 'var(--control-surface)', color: 'var(--ink)',
                   maxHeight: 112, fontFamily: 'var(--font-ui)',
                 }}
                 onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
@@ -386,8 +386,8 @@ export default function InboxPage() {
                 type="submit"
                 disabled={sending || !reply.trim()}
                 style={{
-                  padding: 10, borderRadius: 12, background: 'var(--accent)', border: 'none',
-                  color: '#1a0e08', cursor: 'pointer', flexShrink: 0,
+                  padding: 10, borderRadius: 12, background: 'var(--control-primary)', border: 'none',
+                  color: 'var(--control-primary-text)', cursor: 'pointer', flexShrink: 0,
                   opacity: sending || !reply.trim() ? 0.5 : 1, transition: 'opacity .15s',
                 }}
               >

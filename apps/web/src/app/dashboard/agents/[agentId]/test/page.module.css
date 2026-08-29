@@ -112,18 +112,19 @@
   cursor: pointer;
 }
 
-.switchOn { background: var(--accent); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+.switchOn { background: var(--control-primary); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
 .visuallyHidden:focus-visible + .switch { box-shadow: 0 0 0 3px var(--accent-soft), inset 0 0 0 1px var(--accent); }
 .switchKnob {
   width: 16px;
   height: 16px;
   display: block;
   border-radius: 50%;
-  background: var(--ink);
+  background: var(--toggle-knob);
+  box-shadow: 0 1px 3px rgba(36, 42, 49, .18);
   transform: translateX(0);
   transition: transform 180ms cubic-bezier(.2, 0, 0, 1);
 }
-.switchOn .switchKnob { transform: translateX(14px); background: #1a0e08; }
+.switchOn .switchKnob { transform: translateX(14px); background: var(--toggle-knob); }
 
 .warning {
   margin: 9px 0 0;
@@ -235,7 +236,7 @@
 }
 .bubble { max-width: 82%; padding: 9px 11px; border-radius: 12px; color: var(--ink-dim); font-size: 12px; line-height: 1.55; white-space: pre-wrap; text-wrap: pretty; }
 .assistantBubble { border-bottom-left-radius: 4px; background: var(--panel); box-shadow: 0 0 0 1px var(--line); white-space: normal; }
-.userBubble { border-bottom-right-radius: 4px; background: var(--accent); color: #1a0e08; }
+.userBubble { border-bottom-right-radius: 4px; background: var(--control-primary); color: var(--control-primary-text); }
 .escalatedBubble { box-shadow: 0 0 0 1px rgba(245, 165, 36, .32); }
 
 .markdown { min-width: 0; }

@@ -43,7 +43,7 @@ function Tile({ icon: Icon, accent, value, name, sub }: {
   icon: typeof MessageSquare; accent: string; value: string; name: string; sub?: string
 }) {
   return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: '16px 18px' }}>
+    <div style={{ background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)', borderRadius: 'var(--r-md)', padding: '16px 18px' }}>
       <div style={{
         width: 30, height: 30, borderRadius: 9, marginBottom: 10, color: accent,
         background: `color-mix(in oklab, ${accent} 15%, transparent)`,

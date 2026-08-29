@@ -37,7 +37,7 @@ interface Channel {
 }
 
 const panel: React.CSSProperties = {
-  background: 'var(--panel)', border: '1px solid var(--line)',
+  background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)',
   borderRadius: 'var(--r-md)', overflow: 'hidden', marginBottom: 16,
 }
 const head: React.CSSProperties = {

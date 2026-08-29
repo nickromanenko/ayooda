@@ -164,7 +164,7 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r-sm);
   outline: none;
-  background: var(--bg-2);
+  background: var(--control-surface);
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -174,8 +174,8 @@
 }
 
 .keyInput:focus {
-  border-color: rgba(124, 92, 255, 0.75);
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.13);
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line-2));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
 }
 
 .keyInput:disabled {

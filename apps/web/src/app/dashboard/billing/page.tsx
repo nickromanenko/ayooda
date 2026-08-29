@@ -28,9 +28,9 @@ const TIER_VIZ: Record<string, TierViz> = {
     border: '#60a5fa', textColor: '#fff', Icon: Sparkles, blurb: 'For getting started',
   },
   core: {
-    gradient: 'linear-gradient(135deg, #f5a524 0%, #b45309 100%)',
+    gradient: 'linear-gradient(135deg, #bd7415 0%, #89520c 100%)',
     gradientSoft: 'linear-gradient(180deg, rgba(245,165,36,0.14) 0%, transparent 70%)',
-    border: 'var(--accent)', textColor: '#1a0e08', Icon: Zap, featured: true, blurb: 'For growing teams',
+    border: 'var(--accent-text)', textColor: '#fff', Icon: Zap, featured: true, blurb: 'For growing teams',
   },
   max: {
     gradient: 'linear-gradient(135deg, #c084fc 0%, #7c3aed 100%)',

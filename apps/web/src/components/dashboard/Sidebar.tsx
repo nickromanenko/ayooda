@@ -126,10 +126,10 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
     display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start',
     gap: 10, padding: collapsed ? '10px 0' : '8px 12px', borderRadius: 'var(--r-sm)',
     fontSize: 13.5, fontWeight: active ? 500 : 400,
-    color: active ? 'var(--ink)' : 'var(--ink-mute)',
-    background: active ? 'var(--accent-soft)' : 'transparent',
-    border: active ? '1px solid rgba(245,165,36,0.18)' : '1px solid transparent',
-    textDecoration: 'none', transition: 'background .15s, color .15s',
+    color: active ? 'var(--control-selected-text)' : 'var(--ink-mute)',
+    background: active ? 'var(--control-selected)' : 'transparent',
+    border: '1px solid transparent',
+    textDecoration: 'none', transitionProperty: 'background-color, color', transitionDuration: '150ms', transitionTimingFunction: 'ease-out',
   })
 
   const hoverIn = (e: React.MouseEvent<HTMLElement>, active: boolean) => {
@@ -269,8 +269,8 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
           >
             <div style={{
               width: 24, height: 24, borderRadius: 50,
-              background: 'var(--accent)', display: 'grid', placeItems: 'center',
-              fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: '#1a0e08',
+              background: 'var(--control-primary)', display: 'grid', placeItems: 'center',
+              fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--control-primary-text)',
               flexShrink: 0,
             }}>
               {user?.displayName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
@@ -291,7 +291,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
               gap: 10, padding: collapsed ? '8px 0' : '8px 12px', borderRadius: 'var(--r-sm)',
               fontSize: 13.5, color: 'var(--ink-mute)',
               width: '100%', boxSizing: 'border-box',
-              transition: 'background .15s, color .15s',
+              transitionProperty: 'background-color, color', transitionDuration: '150ms', transitionTimingFunction: 'ease-out',
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.color = 'var(--ink)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-mute)' }}
@@ -313,7 +313,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
             gap: 10, padding: collapsed ? '10px 0' : '10px 12px', borderRadius: 'var(--r-sm)',
             fontSize: 13.5, color: 'var(--ink-mute)',
             width: '100%', boxSizing: 'border-box',
-            transition: 'background .15s, color .15s',
+            transitionProperty: 'background-color, color', transitionDuration: '150ms', transitionTimingFunction: 'ease-out',
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.color = 'var(--ink)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-mute)' }}

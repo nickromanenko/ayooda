@@ -182,7 +182,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
       )}
 
       {/* Add URL */}
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 20, marginBottom: 20 }}>
+      <div style={{ background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)', borderRadius: 'var(--r-md)', padding: 20, marginBottom: 20 }}>
         <p style={{ fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }}>Add a website URL</p>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ position: 'relative', flex: 1 }}>
@@ -197,7 +197,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
               style={{
                 width: '100%', paddingLeft: 36, paddingRight: 12, paddingTop: 9, paddingBottom: 9,
                 borderRadius: 'var(--r-sm)', border: `1px solid ${urlError ? 'var(--danger)' : 'var(--line-2)'}`,
-                background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14,
+                background: 'var(--control-surface)', color: 'var(--ink)', fontSize: 14,
                 fontFamily: 'var(--font-ui)', boxSizing: 'border-box',
               }}
               onFocus={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--accent)')}
@@ -240,7 +240,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
       ) : docs.length === 0 ? (
         <EmptyState icon={<Globe size={32} />} title="No knowledge added yet." hint="Add your website above to get started." />
       ) : (
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
           {docs.map((doc, i) => {
             const cfg = STATUS_CONFIG[doc.status]
             return (
@@ -277,7 +277,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                       onChange={(e) => void handleSyncInterval(doc.id, e.target.value)}
                       style={{
                         minWidth: 92, padding: '5px 24px 5px 8px', borderRadius: 8,
-                        border: '1px solid var(--line-2)', background: 'var(--bg-2)',
+                        border: '1px solid var(--line-2)', background: 'var(--control-surface)',
                         color: 'var(--ink-dim)', fontSize: 12, fontFamily: 'var(--font-mono)',
                         opacity: savingSyncId === doc.id ? 0.55 : 1,
                       }}

@@ -4,7 +4,8 @@ import type { CSSProperties } from 'react'
 
 export const card: CSSProperties = {
   background: 'var(--panel)',
-  border: '1px solid var(--line)',
+  border: 0,
+  boxShadow: 'var(--shadow-soft)',
   borderRadius: 'var(--r-md)',
   padding: 24,
   marginBottom: 20,
@@ -24,7 +25,7 @@ export const input: CSSProperties = {
   padding: '10px 14px',
   borderRadius: 'var(--r-sm)',
   border: '1px solid var(--line-2)',
-  background: 'var(--bg-2)',
+  background: 'var(--control-surface)',
   color: 'var(--ink)',
   fontSize: 14,
   boxSizing: 'border-box',
