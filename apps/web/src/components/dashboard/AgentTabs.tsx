@@ -72,7 +72,7 @@ export default function AgentTabs({ agentId }: { agentId: string }) {
             <div style={{ minWidth: 0 }}>
               <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>
                 {agent.name}
-                {agent.isDefault && <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent)', marginLeft: 8 }}>· default</span>}
+                {agent.isDefault && <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--accent-text)', marginLeft: 8 }}>· default</span>}
               </h1>
               <p style={{ fontSize: 12.5, color: 'var(--ink-mute)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {agent.description || agent.llmModel}
@@ -88,6 +88,7 @@ export default function AgentTabs({ agentId }: { agentId: string }) {
         )}
       </div>
 
+      <div className="agent-tabs-wrap">
       <nav className="agent-tabs-nav" aria-label="Agent settings" style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--line)', overflowX: 'auto', scrollBehavior: 'smooth' }}>
         {TABS.map((t) => {
           const on = active(t.slug)
@@ -114,6 +115,7 @@ export default function AgentTabs({ agentId }: { agentId: string }) {
           )
         })}
       </nav>
+      </div>
     </div>
   )
 }

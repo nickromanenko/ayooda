@@ -6,6 +6,7 @@ import { MessageSquare, BookOpen, Bot, Zap, Radio, ChevronRight } from 'lucide-r
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin'
 import { GetStartedStep } from '@/components/dashboard/GetStartedStep'
 import { BillingBanner } from '@/components/dashboard/BillingBanner'
+import { PageHeader } from '@/components/dashboard/DashboardPrimitives'
 
 export const dynamic = 'force-dynamic'
 
@@ -113,7 +114,7 @@ const panelStyle: React.CSSProperties = {
   borderRadius: 'var(--r-md)', padding: 24, marginBottom: 24,
 }
 const eyebrow: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+  fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em',
   textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16,
 }
 
@@ -156,12 +157,7 @@ export default async function DashboardPage() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       <BillingBanner />
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)' }}>Overview</h1>
-        <p style={{ fontSize: 14, color: 'var(--ink-mute)', marginTop: 4 }}>
-          Your support agents at a glance
-        </p>
-      </div>
+      <PageHeader title="Overview" description="Your support agents at a glance" />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
         {stats.map((stat) => (
@@ -171,7 +167,7 @@ export default async function DashboardPage() {
             </div>
             <p style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)' }}>{stat.value}</p>
             <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 2 }}>{stat.label}</p>
-            {stat.sub && <p style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 2 }}>{stat.sub}</p>}
+            {stat.sub && <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 2 }}>{stat.sub}</p>}
           </div>
         ))}
       </div>
@@ -191,13 +187,13 @@ export default async function DashboardPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>
                     {a.name}
-                    {a.isDefault && <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}> · default</span>}
+                    {a.isDefault && <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--accent-text)' }}> · default</span>}
                   </p>
                   <p style={{ fontSize: 11.5, color: 'var(--ink-mute)', margin: 0 }}>
                     {a.indexedDocs} doc{a.indexedDocs === 1 ? '' : 's'} indexed
                   </p>
                 </div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontFamily: 'var(--font-mono)', color: a.channels.length ? 'var(--mint)' : 'var(--ink-mute)', flexShrink: 0 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'var(--font-mono)', color: a.channels.length ? 'var(--mint)' : 'var(--ink-mute)', flexShrink: 0 }}>
                   <Radio size={12} />
                   {a.channels.length ? a.channels.join(' · ') : 'not deployed'}
                 </span>
@@ -218,7 +214,7 @@ export default async function DashboardPage() {
                 <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {conv.lastMessage || 'New conversation'}
                 </span>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--ink-mute)', flexShrink: 0 }}>{conv.status}</span>
+                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-mute)', flexShrink: 0 }}>{conv.status}</span>
               </Link>
             ))}
           </div>

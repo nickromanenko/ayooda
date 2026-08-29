@@ -49,7 +49,7 @@ const icon: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
 }
 const pill = (on: boolean): React.CSSProperties => ({
-  fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
+  fontSize: 12, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20,
   background: on ? 'rgba(52,211,153,0.15)' : 'var(--panel-2)',
   color: on ? 'var(--mint)' : 'var(--ink-mute)', flexShrink: 0, whiteSpace: 'nowrap',
 })
@@ -69,9 +69,9 @@ function WidgetMetrics({ stats }: { stats?: Channel['stats'] }) {
   const feedbackTotal = (stats.feedback?.helpful ?? 0) + (stats.feedback?.unhelpful ?? 0)
   const helpfulRate = feedbackTotal ? Math.round((stats.feedback?.helpful ?? 0) / feedbackTotal * 100) : null
   return <div style={{ marginTop: 12, paddingTop: 11, borderTop: '1px solid var(--line)' }}>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}><span style={{ color: 'var(--ink-mute)', fontSize: 10.5 }}>Widget engagement</span><select aria-label="Analytics time range" value={range} onChange={(event) => setRange(event.target.value as '7' | '30' | 'all')} style={{ minHeight: 36, border: '1px solid var(--line)', borderRadius: 8, padding: '0 8px', background: 'var(--panel)', color: 'var(--ink-dim)', fontSize: 11 }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">All time</option></select></div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>{[{ label: 'Config loads', value: period.loads }, { label: 'Visible', value: period.visible }, { label: 'Opens', value: period.open }, { label: 'Conversations', value: period.conversations }].map((metric) => <div key={metric.label}><strong style={{ display: 'block', color: 'var(--ink)', font: '600 14px var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{metric.value.toLocaleString()}</strong><span style={{ color: 'var(--ink-faint)', fontSize: 10.5 }}>{metric.label}</span></div>)}</div>
-    <p style={{ margin: '9px 0 0', color: 'var(--ink-faint)', fontSize: 10.5, fontVariantNumeric: 'tabular-nums' }}>Open rate {openRate}% · Conversation rate {conversationRate}%{helpfulRate === null ? '' : ` · Helpful answers ${helpfulRate}% (${feedbackTotal})`}</p>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}><span style={{ color: 'var(--ink-mute)', fontSize: 11.5 }}>Widget engagement</span><select aria-label="Analytics time range" value={range} onChange={(event) => setRange(event.target.value as '7' | '30' | 'all')} style={{ minHeight: 36, border: '1px solid var(--line)', borderRadius: 8, padding: '0 8px', background: 'var(--panel)', color: 'var(--ink-dim)', fontSize: 12 }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">All time</option></select></div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>{[{ label: 'Config loads', value: period.loads }, { label: 'Visible', value: period.visible }, { label: 'Opens', value: period.open }, { label: 'Conversations', value: period.conversations }].map((metric) => <div key={metric.label}><strong style={{ display: 'block', color: 'var(--ink)', font: '600 14px var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{metric.value.toLocaleString()}</strong><span style={{ color: 'var(--ink-faint)', fontSize: 11.5 }}>{metric.label}</span></div>)}</div>
+    <p style={{ margin: '9px 0 0', color: 'var(--ink-faint)', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>Open rate {openRate}% · Conversation rate {conversationRate}%{helpfulRate === null ? '' : ` · Helpful answers ${helpfulRate}% (${feedbackTotal})`}</p>
   </div>
 }
 
@@ -291,10 +291,10 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       <div style={panel}>
         <div style={head}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <div style={icon}><Code size={16} style={{ color: 'var(--accent)' }} /></div>
+            <div style={icon}><Code size={16} style={{ color: 'var(--accent-text)' }} /></div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>Website widget</p>
-              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
                 {widget ? 'A floating chat bubble on your site' : 'Not created yet'}
               </p>
             </div>
@@ -315,9 +315,9 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
           ) : (
             <>
               <div style={{ marginBottom: 16, padding: '11px 13px', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--bg-2)' }}>
-                <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 12 }}><div><p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>{widget.lastSeenAt ? `Installation detected${widget.lastSeenOrigin ? ` on ${widget.lastSeenOrigin}` : ''}.` : 'Waiting to detect the first page load.'}</p><p style={{ margin: '3px 0 0', fontSize: 11, color: 'var(--ink-mute)', fontVariantNumeric: 'tabular-nums' }}>{widget.lastSeenAt ? `Last seen ${new Date(widget.lastSeenAt).toLocaleString()}` : 'Install the code below, then reload your website.'}</p></div><button type="button" onClick={() => void fetchChannels()} aria-label="Check installation again" className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', flexShrink: 0 }}><RefreshCw size={13} /></button></div>
-                {Boolean(widget.observedDomains?.length) && <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--ink-faint)' }}>Observed on: {widget.observedDomains!.join(', ')}</p>}
-                <div style={{ display: 'flex', gap: 12, marginTop: 9, flexWrap: 'wrap' }}><a href={`/dashboard/agents/${agentId}/test`} style={{ color: 'var(--accent)', fontSize: 11.5, textDecoration: 'none' }}>Open test chat →</a><details><summary style={{ color: 'var(--ink-mute)', fontSize: 11.5, cursor: 'pointer' }}>Installation troubleshooting</summary><p style={{ maxWidth: 560, margin: '7px 0 0', color: 'var(--ink-faint)', fontSize: 11, lineHeight: 1.5 }}>If detection does not appear, check the browser console and allow Ayooda’s CDN in <code style={{ fontFamily: 'var(--font-mono)' }}>script-src</code> and API origin in <code style={{ fontFamily: 'var(--font-mono)' }}>connect-src</code> in your Content Security Policy.</p></details></div>
+                <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 12 }}><div><p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink)' }}>{widget.lastSeenAt ? `Installation detected${widget.lastSeenOrigin ? ` on ${widget.lastSeenOrigin}` : ''}.` : 'Waiting to detect the first page load.'}</p><p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--ink-mute)', fontVariantNumeric: 'tabular-nums' }}>{widget.lastSeenAt ? `Last seen ${new Date(widget.lastSeenAt).toLocaleString()}` : 'Install the code below, then reload your website.'}</p></div><button type="button" onClick={() => void fetchChannels()} aria-label="Check installation again" className="btn btn-ghost" style={{ width: 40, height: 40, padding: 0, display: 'grid', placeItems: 'center', flexShrink: 0 }}><RefreshCw size={13} /></button></div>
+                {Boolean(widget.observedDomains?.length) && <p style={{ margin: '8px 0 0', fontSize: 11.5, color: 'var(--ink-faint)' }}>Observed on: {widget.observedDomains!.join(', ')}</p>}
+                <div style={{ display: 'flex', gap: 12, marginTop: 9, flexWrap: 'wrap' }}><a href={`/dashboard/agents/${agentId}/test`} style={{ color: 'var(--accent-text)', fontSize: 11.5, textDecoration: 'none' }}>Open test chat →</a><details><summary style={{ color: 'var(--ink-mute)', fontSize: 11.5, cursor: 'pointer' }}>Installation troubleshooting</summary><p style={{ maxWidth: 560, margin: '7px 0 0', color: 'var(--ink-faint)', fontSize: 12, lineHeight: 1.5 }}>If detection does not appear, check the browser console and allow Ayooda’s CDN in <code style={{ fontFamily: 'var(--font-mono)' }}>script-src</code> and API origin in <code style={{ fontFamily: 'var(--font-mono)' }}>connect-src</code> in your Content Security Policy.</p></details></div>
                 <WidgetMetrics stats={widget.stats} />
               </div>
               <p style={label}>Embed code</p>
@@ -353,41 +353,41 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
               <details style={{ marginTop: 20, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
                 <summary style={{ padding: '14px 16px', cursor: 'pointer', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600 }}>
                   Installation guides
-                  <span style={{ marginLeft: 8, color: 'var(--ink-mute)', fontSize: 11, fontWeight: 400 }}>HTML · Next.js · Angular</span>
+                  <span style={{ marginLeft: 8, color: 'var(--ink-mute)', fontSize: 12, fontWeight: 400 }}>HTML · Next.js · Angular</span>
                 </summary>
                 <div style={{ borderTop: '1px solid var(--line)', padding: '4px 16px 16px' }}>
                   <div style={{ paddingTop: 14 }}>
                     <p style={{ ...label, marginBottom: 5 }}>HTML or multi-page website</p>
                     <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, lineHeight: 1.6 }}>
-                      Paste the script inside <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>&lt;head&gt;</code> or before <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>&lt;/body&gt;</code> on every page where the widget should appear.
+                      Paste the script inside <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-text)' }}>&lt;head&gt;</code> or before <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-text)' }}>&lt;/body&gt;</code> on every page where the widget should appear.
                     </p>
                   </div>
 
                   <div style={{ paddingTop: 16 }}>
                     <p style={{ ...label, marginBottom: 5 }}>Next.js</p>
                     <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 8px', lineHeight: 1.6 }}>
-                      Add this once to <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>app/layout.tsx</code>. Next.js keeps it loaded during client-side navigation.
+                      Add this once to <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-text)' }}>app/layout.tsx</code>. Next.js keeps it loaded during client-side navigation.
                     </p>
-                    <pre style={{ background: 'var(--bg)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', fontSize: 11, borderRadius: 8, padding: 12, border: '1px solid var(--line-2)', overflowX: 'auto', lineHeight: 1.55, margin: 0 }}>{`import Script from 'next/script'
+                    <pre style={{ background: 'var(--bg)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', fontSize: 12, borderRadius: 8, padding: 12, border: '1px solid var(--line-2)', overflowX: 'auto', lineHeight: 1.55, margin: 0 }}>{`import Script from 'next/script'
 
 <Script
   src="https://cdn.ayooda.live/widget.js"
   data-agent-id="${widget.id}"
   strategy="afterInteractive"
 />`}</pre>
-                    <p style={{ fontSize: 11, color: 'var(--ink-mute)', margin: '7px 0 0', lineHeight: 1.5 }}>
-                      Using the Pages Router? Put the same <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>Script</code> component in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5 }}>pages/_app.tsx</code>.
+                    <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '7px 0 0', lineHeight: 1.5 }}>
+                      Using the Pages Router? Put the same <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>Script</code> component in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>pages/_app.tsx</code>.
                     </p>
                   </div>
 
                   <div style={{ paddingTop: 16 }}>
                     <p style={{ ...label, marginBottom: 5 }}>Angular</p>
                     <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, lineHeight: 1.6 }}>
-                      Paste the script once before <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>&lt;/body&gt;</code> in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>src/index.html</code>. It stays mounted across Angular Router navigation.
+                      Paste the script once before <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-text)' }}>&lt;/body&gt;</code> in <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent-text)' }}>src/index.html</code>. It stays mounted across Angular Router navigation.
                     </p>
                   </div>
 
-                  <p style={{ fontSize: 11, color: 'var(--ink-mute)', margin: '16px 0 0', paddingTop: 12, borderTop: '1px solid var(--line)', lineHeight: 1.55 }}>
+                  <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '16px 0 0', paddingTop: 12, borderTop: '1px solid var(--line)', lineHeight: 1.55 }}>
                     For any single-page app, install the widget only once in the root layout—do not add it to individual routes.
                   </p>
                 </div>
@@ -443,10 +443,10 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       <div style={panel}>
         <div style={head}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <div style={icon}><Send size={16} style={{ color: 'var(--accent)' }} /></div>
+            <div style={icon}><Send size={16} style={{ color: 'var(--accent-text)' }} /></div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>Telegram</p>
-              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
                 {telegram ? `Connected as @${telegram.telegram?.botUsername}` : 'Not connected'}
               </p>
             </div>
@@ -459,7 +459,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
             <>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 16 }}>
                 This agent answers on{' '}
-                <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent)' }}>
+                <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent-text)' }}>
                   @{telegram.telegram?.botUsername}
                 </code>.
               </p>
@@ -511,10 +511,10 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       <div style={panel}>
         <div style={head}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <div style={icon}><Mail size={16} style={{ color: 'var(--accent)' }} /></div>
+            <div style={icon}><Mail size={16} style={{ color: 'var(--accent-text)' }} /></div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>Email</p>
-              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
                 {email ? `Answers as ${email.config?.fromAddress}` : 'Not connected'}
               </p>
             </div>
@@ -526,7 +526,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
           {email ? (
             <>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 16 }}>
-                Inbound mail to <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent)' }}>{email.config?.inboxAddress}</code> is answered by this agent.
+                Inbound mail to <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--panel-2)', padding: '1px 5px', borderRadius: 4, color: 'var(--accent-text)' }}>{email.config?.inboxAddress}</code> is answered by this agent.
               </p>
               <button type="button" onClick={() => void disconnectEmail()} disabled={emailBusy} className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 16px', fontSize: 12.5 }}>
                 {emailBusy && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
@@ -557,7 +557,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
               {emailWebhookUrl && (
                 <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)' }}>
                   <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: '0 0 6px' }}>Paste this webhook URL into Resend&apos;s inbound email settings:</p>
-                  <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{emailWebhookUrl}</pre>
+                  <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--accent-text)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{emailWebhookUrl}</pre>
                 </div>
               )}
             </>
@@ -574,10 +574,10 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       <div style={panel}>
         <div style={head}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <div style={icon}><SlackIcon size={16} style={{ color: 'var(--accent)' }} /></div>
+            <div style={icon}><SlackIcon size={16} style={{ color: 'var(--accent-text)' }} /></div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0, textWrap: 'balance' }}>Slack</p>
-              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2, textWrap: 'pretty' }}>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2, textWrap: 'pretty' }}>
                 {slack ? `Connected to ${slack.slack?.teamName}` : 'Not connected'}
               </p>
             </div>
@@ -594,7 +594,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
               <div style={{ marginBottom: 16, padding: '14px 16px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', boxShadow: 'inset 0 0 0 1px var(--line)' }}>
                 <p style={{ ...label, marginBottom: 7 }}>Events API request URL</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <code style={{ flex: 1, minWidth: 0, color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11.5, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                  <code style={{ flex: 1, minWidth: 0, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontSize: 11.5, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
                     {slack.webhookUrl ?? slackWebhookUrl}
                   </code>
                   <button
@@ -674,10 +674,10 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
       <div style={panel}>
         <div style={head}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <div style={icon}><Smartphone size={16} style={{ color: 'var(--accent)' }} /></div>
+            <div style={icon}><Smartphone size={16} style={{ color: 'var(--accent-text)' }} /></div>
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0, textWrap: 'balance' }}>SMS via Twilio</p>
-              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2, textWrap: 'pretty' }}>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2, textWrap: 'pretty' }}>
                 {sms ? `Connected on ${sms.twilio?.fromNumber}` : 'Not connected'}
               </p>
             </div>
@@ -694,7 +694,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
               <div style={{ marginBottom: 16, padding: '14px 16px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)', boxShadow: 'inset 0 0 0 1px var(--line)' }}>
                 <p style={{ ...label, marginBottom: 7 }}>Incoming-message webhook</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <code style={{ flex: 1, minWidth: 0, color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11.5, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                  <code style={{ flex: 1, minWidth: 0, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontSize: 11.5, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
                     {sms.webhookUrl ?? smsWebhookUrl}
                   </code>
                   <button

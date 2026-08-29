@@ -17,7 +17,7 @@ export function GetStartedStep({ number, title, description, href, done }: {
       <span style={{
         flexShrink: 0, width: 24, height: 24, borderRadius: 50,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 11, fontWeight: 700, marginTop: 1,
+        fontSize: 12, fontWeight: 700, marginTop: 1,
         background: done ? 'var(--mint)' : 'var(--accent-soft)',
         border: done ? 'none' : '1px solid rgba(245,165,36,0.25)',
         color: done ? '#081a10' : 'var(--accent)',

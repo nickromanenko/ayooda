@@ -97,7 +97,7 @@
   flex: 0 0 auto;
   border-radius: 10px;
   background: rgba(124, 92, 255, 0.13);
-  color: var(--accent);
+  color: var(--accent-text);
   box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.12);
 }
 

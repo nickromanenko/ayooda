@@ -251,11 +251,11 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
           {tools.map((t) => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--line)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>{t.name} <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{t.method}</span></p>
+                <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>{t.name} <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-mute)' }}>{t.method}</span></p>
                 <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.urlTemplate}</p>
               </div>
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, background: 'var(--bg-2)', color: t.kind === 'write' ? 'var(--accent)' : 'var(--ink-mute)' }}>{t.kind}{t.kind === 'write' && !t.writeEnabled ? ' · off' : ''}</span>
-              {!t.enabled && <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>disabled</span>}
+              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, background: 'var(--bg-2)', color: t.kind === 'write' ? 'var(--accent)' : 'var(--ink-mute)' }}>{t.kind}{t.kind === 'write' && !t.writeEnabled ? ' · off' : ''}</span>
+              {!t.enabled && <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}>disabled</span>}
               <button type="button" onClick={() => startEdit(t)} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13 }}>Edit</button>
               <button type="button" onClick={() => void remove(t.id)} disabled={busyId === t.id} aria-label="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', padding: 6 }}>
                 {busyId === t.id ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}
@@ -327,7 +327,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
                 onChange={(e) => setPicker({ ...picker, setup: { ...picker.setup, [f.key]: e.target.value } })}
                 style={input}
               />
-              {f.help && <p style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 4 }}>{f.help}</p>}
+              {f.help && <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 4 }}>{f.help}</p>}
             </div>
           ))}
           <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 8 }}>You&apos;ll add the secret next: <strong style={{ color: 'var(--ink-dim)' }}>{picker.template.secretLabel}</strong></p>

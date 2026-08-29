@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Activity, BellRing, Bot, CheckCircle2, CircleAlert, Globe2, Loader2, Mail, MessageSquare, RefreshCw, Save, Smartphone } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
+import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
 import styles from './page.module.css'
 
 type Status = 'healthy' | 'failing' | 'unchecked' | 'inactive'
@@ -46,18 +48,21 @@ export default function ChannelReliabilityPage() {
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [alerts, setAlerts] = useState<AlertSettingsResponse | null>(null)
   const [savingAlerts, setSavingAlerts] = useState(false)
   const [alertNotice, setAlertNotice] = useState('')
 
   const load = useCallback(async () => {
+    setLoadError('')
     try {
       const response = await apiRequest('/channels/reliability')
       const body = await response.json().catch(() => ({})) as ReliabilityResponse & { error?: string }
       if (!response.ok) throw new Error(body.error ?? 'Could not load channel health.')
       setData(body)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not load channel health.')
+      setData(null)
+      setLoadError(caught instanceof Error ? caught.message : 'Could not load channel health.')
     } finally {
       setLoading(false)
     }
@@ -116,28 +121,23 @@ export default function ChannelReliabilityPage() {
   }
 
   if (loading) return <Loading />
-  const summary = data?.summary ?? { total: 0, healthy: 0, failing: 0, unchecked: 0 }
+  const summary = data?.summary
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Channel health</h1>
-          <p className={styles.lede}>Check provider credentials, spot delivery failures, and inspect recent inbound and outbound activity across every deployed agent.</p>
-        </div>
-        <button className={styles.button} type="button" onClick={() => void checkAll()} disabled={!data?.channels.length || checking.size > 0}>
+      <PageHeader title="Channel health" description="Check provider credentials, spot delivery failures, and inspect recent inbound and outbound activity across every deployed agent." action={<button className={styles.button} type="button" onClick={() => void checkAll()} disabled={!data?.channels.length || checking.size > 0}>
           {checking.size > 0 ? <Loader2 size={15} className={styles.spin} /> : <Activity size={15} />}
           {checking.size > 0 ? `Checking ${checking.size}…` : 'Run all checks'}
-        </button>
-      </header>
+        </button>} />
 
-      {error && <div className={styles.notice} role="alert">{error}</div>}
+      {loadError && <Notice title="Channel health unavailable" action={<button type="button" className="btn btn-ghost" onClick={() => { setLoading(true); void load() }}>Retry</button>}>We could not retrieve live channel status. Existing channels and deliveries are unaffected.</Notice>}
+      {error && <Notice title="Action could not be completed">{error}</Notice>}
 
-      <section className={styles.summary} aria-label="Channel health summary">
+      {summary && <section className={styles.summary} aria-label="Channel health summary">
         {[['Connected', summary.total], ['Healthy', summary.healthy], ['Needs attention', summary.failing], ['Not checked', summary.unchecked]].map(([label, value]) => (
           <div className={styles.metric} key={String(label)}><p className={styles.metricValue}>{value}</p><p className={styles.metricLabel}>{label}</p></div>
         ))}
-      </section>
+      </section>}
 
       {alerts && <section className={styles.alertPanel} aria-labelledby="alert-settings-title">
         <div className={styles.alertHeader}>
@@ -190,7 +190,7 @@ export default function ChannelReliabilityPage() {
         </div>
       </section>}
 
-      {!data?.channels.length ? <div className={styles.empty}>No channels are connected yet. Deploy an agent to start monitoring delivery health.</div> : (
+      {data && !data.channels.length ? <div className={styles.empty}><p>No channels are connected yet. Deploy an agent to start monitoring delivery health.</p><Link href="/dashboard/agents" className="btn btn-primary">Choose an agent to deploy</Link></div> : data ? (
         <section className={styles.grid} aria-label="Connected channels">
           {data.channels.map((channel) => {
             const Icon = providerIcons[channel.type as keyof typeof providerIcons] ?? Activity
@@ -235,7 +235,7 @@ export default function ChannelReliabilityPage() {
             )
           })}
         </section>
-      )}
+      ) : null}
     </div>
   )
 }

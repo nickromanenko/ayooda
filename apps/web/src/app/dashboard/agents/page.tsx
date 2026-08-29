@@ -8,8 +8,9 @@ import { apiRequest } from '@/lib/api'
 import type { AgentDoc } from '@ayooda/shared'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import NewAgentForm from '@/components/dashboard/NewAgentForm'
-import { Loading } from '@/components/dashboard/Loading'
-import { card, label, muted } from '@/components/dashboard/ui'
+import { EmptyState, Loading } from '@/components/dashboard/Loading'
+import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
+import { card, label } from '@/components/dashboard/ui'
 
 export default function AgentsPage() {
   const router = useRouter()
@@ -17,11 +18,18 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
   const [notice, setNotice] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const load = useCallback(async () => {
+    setLoading(true)
+    setLoadError('')
     try {
       const res = await apiRequest('/agents')
-      if (res.ok) { const d = await res.json() as { agents: AgentDoc[] }; setAgents(d.agents) }
+      if (!res.ok) throw new Error('Could not load your agents.')
+      const d = await res.json() as { agents: AgentDoc[] }
+      setAgents(d.agents)
+    } catch {
+      setLoadError('Your agents could not be loaded. Your existing agents have not been changed.')
     } finally { setLoading(false) }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -38,28 +46,26 @@ export default function AgentsPage() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto' }}>
-      <div className="dashboard-page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Agents</h1>
-          <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>
-            Open an agent to set its persona, knowledge, tools, escalation rules and where it&apos;s deployed.
-          </p>
-        </div>
-        {!showNew && (
+      <PageHeader
+        title="Agents"
+        description="Open an agent to set its persona, knowledge, tools, escalation rules and where it’s deployed."
+        action={!showNew && (
           <button type="button" onClick={() => { setShowNew(true); setNotice('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px', flexShrink: 0, whiteSpace: 'nowrap' }}>
             <Plus size={14} /> New agent
           </button>
         )}
-      </div>
+      />
+
+      {loadError && <Notice title="Agents unavailable" action={<button type="button" className="btn btn-ghost" onClick={() => void load()}>Retry</button>}>{loadError}</Notice>}
 
       {notice && <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 12 }}>{notice}</p>}
 
       {showNew && <NewAgentForm onCreated={handleCreated} onCancel={() => setShowNew(false)} />}
 
-      {!showNew && (
+      {!showNew && !loadError && (
         <div style={card}>
           <p style={label}>Your agents</p>
-          {agents.length === 0 && <p style={muted}>No agents yet.</p>}
+          {agents.length === 0 && <EmptyState title="No agents yet" hint="Create your first agent to start adding knowledge and deploying support channels." action={<button type="button" className="btn btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> Create agent</button>} />}
           {agents.map((a) => (
             <Link
               key={a.id}
@@ -70,7 +76,7 @@ export default function AgentsPage() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>
                   {a.name}
-                  {a.isDefault && <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}> · default</span>}
+                  {a.isDefault && <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--accent-text)' }}> · default</span>}
                 </p>
                 <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {a.description || a.llmModel}

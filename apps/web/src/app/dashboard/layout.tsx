@@ -34,7 +34,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       .get()).empty
 
     return (
-      <div className={styles.shell}>
+      <div className={`${styles.shell} dashboard-shell`}>
         <Sidebar role={role} hasAgentAccess={hasAgentAccess} />
         <div className={styles.content}>
           <main className={styles.main}>{children}</main>

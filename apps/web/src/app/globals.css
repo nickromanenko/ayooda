@@ -16,11 +16,12 @@
   --ink: #f4f4f0;
   --ink-dim: #c9c9c1;
   --ink-mute: #8c8c84;
-  --ink-faint: #5a5a54;
+  --ink-faint: #82827a;
 
   /* Accent — amber */
   --accent: #f5a524;
   --accent-2: #ffd27a;
+  --accent-text: #f5a524;
   --accent-soft: rgba(245, 165, 36, 0.14);
 
   /* Secondary accents */
@@ -43,10 +44,12 @@
   --shadow-soft: 0 1px 0 rgba(255,255,255,0.04) inset, 0 10px 40px rgba(0,0,0,0.35);
   --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 20px 60px rgba(0,0,0,0.45);
   --shadow-control: 0 0 0 1px var(--line), 0 2px 8px rgba(0,0,0,0.18);
+  --image-outline: rgba(255, 255, 255, .1);
 
   /* Fonts — set by next/font, fallbacks here. Montserrat everywhere. */
   --font-sans: var(--font-montserrat, "Montserrat"), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: var(--font-montserrat, "Montserrat"), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-ui: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -63,10 +66,11 @@
   --ink: #1c1b18;
   --ink-dim: #4c4941;
   --ink-mute: #716d62;
-  --ink-faint: #938e82;
+  --ink-faint: #756f64;
 
   --accent: #d9860b;
   --accent-2: #b96c00;
+  --accent-text: #8a5100;
   --accent-soft: rgba(217, 134, 11, 0.13);
 
   --blue: #3f63bd;
@@ -81,6 +85,7 @@
   --shadow-soft: 0 0 0 1px rgba(0,0,0,0.04), 0 10px 34px rgba(54,45,28,0.10);
   --shadow-card: 0 0 0 1px rgba(0,0,0,0.05), 0 20px 54px rgba(54,45,28,0.13);
   --shadow-control: 0 0 0 1px rgba(0,0,0,0.08), 0 2px 8px rgba(54,45,28,0.10);
+  --image-outline: rgba(0, 0, 0, .1);
 }
 
 /* Tailwind theme bridge */
@@ -596,7 +601,70 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   to { transform: rotate(360deg); }
 }
 
+@keyframes dashboard-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
 /* ─── Dashboard overrides ─── */
+.dashboard-shell,
+.dashboard-shell button,
+.dashboard-shell input,
+.dashboard-shell select,
+.dashboard-shell textarea {
+  font-family: var(--font-ui);
+}
+
+.dashboard-shell .btn {
+  min-height: 40px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+}
+
+.dashboard-shell .btn:not(:disabled):hover { transform: translateY(-1px); }
+.dashboard-shell .btn:disabled {
+  opacity: .62;
+  color: var(--ink-mute);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.dashboard-shell .btn-primary:disabled {
+  color: rgba(26, 14, 8, .72);
+  background: color-mix(in srgb, var(--accent) 72%, var(--panel));
+}
+
+.dashboard-field {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  background: var(--bg-2);
+  font: 14px/1.4 var(--font-ui);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition-property: border-color, box-shadow, outline-color, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.dashboard-field:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line-2));
+  outline-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.dashboard-field:disabled {
+  color: var(--ink-mute);
+  background: var(--panel-2);
+  cursor: not-allowed;
+}
+
+.dashboard-accent-text { color: var(--accent-text); }
+.dashboard-tabular { font-variant-numeric: tabular-nums; }
+
 .dash-sidebar {
   background: var(--panel);
   border-right: 1px solid var(--line);
@@ -629,6 +697,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   scrollbar-width: none;
   scroll-snap-type: x proximity;
 }
+.agent-tabs-wrap { position: relative; }
 .agent-tabs-nav::-webkit-scrollbar { display: none; }
 .agent-tab-link {
   min-height: 44px;
@@ -639,7 +708,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .agent-back-link { min-height: 40px; }
 
 @media (max-width: 760px) {
-  .agent-tabs-nav { margin-inline: -16px; padding-inline: 16px; }
+  .dashboard-shell .btn { min-height: 44px; }
+  .dashboard-field { min-height: 44px; }
+  .agent-tabs-wrap::after { content: ''; position: absolute; inset: 0 0 1px auto; width: 34px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--bg-2)); }
+  .agent-tabs-nav { margin-inline: -16px; padding-inline: 16px 42px; }
   .agent-heading { margin-bottom: 12px !important; }
   .dashboard-page-header { align-items: stretch !important; flex-direction: column; }
   .dashboard-page-header > .btn { width: 100%; justify-content: center; }

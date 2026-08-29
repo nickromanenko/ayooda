@@ -378,7 +378,7 @@
   justify-content: center;
   flex: 0 0 auto;
   border-radius: 8px;
-  color: var(--accent);
+  color: var(--accent-text);
   background: rgba(124, 92, 255, 0.12);
 }
 

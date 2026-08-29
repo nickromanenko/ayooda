@@ -129,11 +129,11 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>
                   {s.name}
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-mute)', marginLeft: 8 }}>{MCP_TRANSPORT_LABELS[s.transport]}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-mute)', marginLeft: 8 }}>{MCP_TRANSPORT_LABELS[s.transport]}</span>
                 </p>
                 <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.url}</p>
               </div>
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, background: s.enabled ? 'rgba(52,211,153,0.15)' : 'var(--panel-2)', color: s.enabled ? 'var(--mint)' : 'var(--ink-mute)', flexShrink: 0 }}>{s.enabled ? 'on' : 'off'}</span>
+              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, background: s.enabled ? 'rgba(52,211,153,0.15)' : 'var(--panel-2)', color: s.enabled ? 'var(--mint)' : 'var(--ink-mute)', flexShrink: 0 }}>{s.enabled ? 'on' : 'off'}</span>
               <button type="button" onClick={() => void test(s.id)} disabled={testId === s.id} className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '6px 12px', fontSize: 13, flexShrink: 0 }}>
                 {testId === s.id ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Plug size={13} />} Test
               </button>

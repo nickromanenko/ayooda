@@ -429,7 +429,7 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
               <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>{p.displayName || p.email}</p>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0 }}>{p.email}</p>
             </div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--ink-mute)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-mute)' }}>
               <Lock size={11} /> owner
             </span>
           </div>
@@ -438,7 +438,7 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
         {members.length === 0 ? (
           <p style={{ ...muted, marginTop: 12, marginBottom: 0 }}>
             No other people in this workspace yet.{' '}
-            <Link href="/dashboard/team" style={{ color: 'var(--accent)' }}>Invite someone →</Link>
+            <Link href="/dashboard/team" style={{ color: 'var(--accent-text)' }}>Invite someone →</Link>
           </p>
         ) : members.map((p) => (
           <label

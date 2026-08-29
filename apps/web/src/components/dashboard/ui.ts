@@ -27,7 +27,6 @@ export const input: CSSProperties = {
   background: 'var(--bg-2)',
   color: 'var(--ink)',
   fontSize: 14,
-  outline: 'none',
   boxSizing: 'border-box',
 }
 

@@ -20,6 +20,8 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { useWorkspace } from '@/hooks/useWorkspace'
+import { apiRequest } from '@/lib/api'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import styles from './Sidebar.module.css'
 
@@ -27,13 +29,13 @@ import styles from './Sidebar.module.css'
 // they are reached through that agent's tabs rather than as siblings here.
 const navItems = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
-  { label: 'Inbox', href: '/dashboard/inbox', icon: MessageSquare },
+  { label: 'Inbox', href: '/dashboard/inbox', icon: MessageSquare, badge: 'inbox' as const },
   { label: 'Copilot', href: '/dashboard/copilot', icon: MessagesSquare },
   { label: 'Agents', href: '/dashboard/agents', icon: Bot },
 ]
 
 const bottomItems = [
-  { label: 'Channel health', href: '/dashboard/channels', icon: Activity },
+  { label: 'Channel health', href: '/dashboard/channels', icon: Activity, badge: 'channels' as const },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Team', href: '/dashboard/team', icon: Users },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
@@ -66,8 +68,29 @@ function setCollapsedPersisted(next: boolean) {
 export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'member'; hasAgentAccess?: boolean }) {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
+  const { workspace } = useWorkspace()
   const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsedSnapshot, getCollapsedServerSnapshot)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [badges, setBadges] = useState({ inbox: 0, channels: 0 })
+
+  useEffect(() => {
+    if (!workspace?.id) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const [inboxRes, channelsRes] = await Promise.all([
+          apiRequest('/conversations?status=waiting'),
+          apiRequest('/channels/reliability'),
+        ])
+        const inboxBody = inboxRes.ok ? await inboxRes.json() as unknown[] : null
+        const channelsBody = channelsRes.ok ? await channelsRes.json() as { summary?: { failing?: number } } : null
+        if (!cancelled) setBadges({ inbox: inboxBody?.length ?? 0, channels: channelsBody?.summary?.failing ?? 0 })
+      } catch { /* badges are supplementary; navigation still works without them */ }
+    }
+    void refresh()
+    const timer = setInterval(() => void refresh(), 60_000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [workspace?.id])
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -120,32 +143,41 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
     e.currentTarget.style.color = 'var(--ink-mute)'
   }
 
-  const renderLink = (item: { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean }) => {
+  const badgeCount = (item: { badge?: 'inbox' | 'channels' }) => item.badge ? badges[item.badge] : 0
+
+  const renderLink = (item: { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean; badge?: 'inbox' | 'channels' }) => {
     const active = isActive(item)
+    const count = badgeCount(item)
+    const accessibleLabel = count > 0 ? `${item.label}, ${count} ${item.badge === 'inbox' ? 'waiting' : 'need attention'}` : item.label
     return (
       <Link
         key={item.href}
         href={item.href}
-        title={collapsed ? item.label : undefined}
-        aria-label={item.label}
+        className={styles.desktopNavLink}
+        data-tooltip={collapsed ? accessibleLabel : undefined}
+        aria-label={accessibleLabel}
+        aria-current={active ? 'page' : undefined}
         style={itemStyle(active)}
         onMouseEnter={(e) => hoverIn(e, active)}
         onMouseLeave={(e) => hoverOut(e, active)}
       >
         <item.icon size={15} strokeWidth={active ? 2 : 1.5} style={{ flexShrink: 0 }} />
         {!collapsed && item.label}
+        {count > 0 && <span className={styles.navBadge} data-collapsed={collapsed}>{collapsed ? '' : count > 99 ? '99+' : count}</span>}
       </Link>
     )
   }
 
   const accountName = user?.displayName ?? user?.email ?? 'Account'
 
-  const mobileLink = (item: { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean }) => {
+  const mobileLink = (item: { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean; badge?: 'inbox' | 'channels' }) => {
     const active = isActive(item)
+    const count = badgeCount(item)
     return (
       <Link key={item.href} href={item.href} className={styles.mobileNavLink} data-active={active} aria-current={active ? 'page' : undefined} onClick={() => setMobileOpen(false)}>
         <item.icon size={18} strokeWidth={active ? 2 : 1.5} />
         {item.label}
+        {count > 0 && <span className={styles.navBadge}>{count > 99 ? '99+' : count}</span>}
       </Link>
     )
   }
@@ -221,6 +253,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
 
       {/* Bottom */}
       <div style={{ padding: '8px 8px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {!collapsed && <p className={styles.navSectionLabel}>Workspace</p>}
         {visibleBottom.map(renderLink)}
 
         <ThemeToggle className="dashboard-theme-toggle" showLabel={!collapsed} />
@@ -237,7 +270,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
             <div style={{
               width: 24, height: 24, borderRadius: 50,
               background: 'var(--accent)', display: 'grid', placeItems: 'center',
-              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: '#1a0e08',
+              fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: '#1a0e08',
               flexShrink: 0,
             }}>
               {user?.displayName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}

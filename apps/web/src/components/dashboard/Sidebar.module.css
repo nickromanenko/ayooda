@@ -1,6 +1,33 @@
 .desktopSidebar { display: flex; }
 .mobileHeader, .mobileBackdrop, .mobileDrawer { display: none; }
 
+.desktopNavLink { position: relative; }
+.desktopNavLink[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 60;
+  top: 50%;
+  left: calc(100% + 9px);
+  min-width: max-content;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: var(--bg);
+  background: var(--ink);
+  box-shadow: var(--shadow-soft);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition-property: opacity, transform;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+.desktopNavLink[data-tooltip]:hover::after, .desktopNavLink[data-tooltip]:focus-visible::after { opacity: 1; transform: translate(0, -50%); }
+.navBadge { min-width: 20px; height: 20px; margin-left: auto; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px; color: #1a0e08; background: var(--accent); font: 700 10px var(--font-mono); font-variant-numeric: tabular-nums; }
+.navBadge[data-collapsed='true'] { position: absolute; top: 5px; right: 5px; width: 7px; min-width: 7px; height: 7px; padding: 0; box-shadow: 0 0 0 2px var(--panel); }
+.navSectionLabel { margin: 2px 10px 5px; color: var(--ink-faint); font: 600 10px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
+
 @media (max-width: 760px) {
   .desktopSidebar { display: none !important; }
 

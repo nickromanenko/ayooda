@@ -5,6 +5,7 @@ import { Check, Sparkles, Zap, Rocket, ArrowRight, CreditCard } from 'lucide-rea
 import { apiRequest } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import { Loading } from '@/components/dashboard/Loading'
+import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
 
 interface PlanDef { tier: string; name: string; priceUsd: number; conversationCap: number }
 interface BillingData {
@@ -39,7 +40,7 @@ const TIER_VIZ: Record<string, TierViz> = {
 }
 const vizFor = (tier: string | null | undefined): TierViz => (tier && TIER_VIZ[tier]) || TIER_VIZ.core
 
-const eyebrow: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)' }
+const eyebrow: CSSProperties = { fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)' }
 
 export default function BillingPage() {
   const [data, setData] = useState<BillingData | null>(null)
@@ -135,11 +136,7 @@ export default function BillingPage() {
 
   return (
     <div style={{ maxWidth: 880, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 22 }}>
-        <div style={eyebrow}><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Billing</div>
-        <h1 className="display" style={{ fontSize: 32, margin: '10px 0 0' }}>Your plan &amp; usage</h1>
-      </div>
+      <PageHeader eyebrow="Billing" title="Your plan & usage" description="Review plan status, included conversations, and projected overage costs." />
 
       {justPaid && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 'var(--r-md)', background: 'rgba(139,227,181,0.10)', border: '1px solid rgba(139,227,181,0.3)', marginBottom: 20 }}>
@@ -150,9 +147,7 @@ export default function BillingPage() {
         </div>
       )}
 
-      {error && (
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)', fontSize: 13, marginBottom: 20 }}>{error}</div>
-      )}
+      {error && <Notice title="Billing action failed">{error}</Notice>}
 
       {/* Current status */}
       <div style={{
@@ -192,7 +187,7 @@ export default function BillingPage() {
             <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? 'var(--danger)' : activeViz.gradient, transition: 'width .4s ease' }} />
           </div>
           {data.overageCount > 0 && (
-            <p style={{ fontSize: 13, color: 'var(--accent)', marginTop: 10 }}>
+            <p style={{ fontSize: 13, color: 'var(--accent-text)', marginTop: 10 }}>
               {data.overageCount.toLocaleString()} over your plan — an estimated <strong>${data.estOverageUsd.toFixed(2)}</strong> this period ($0.05 each).
             </p>
           )}
@@ -214,7 +209,7 @@ export default function BillingPage() {
               boxShadow: current ? `0 0 0 3px color-mix(in oklab, ${viz.border} 22%, transparent)` : 'none',
             }}>
               {viz.featured && !current && (
-                <span style={{ position: 'absolute', top: -10, right: 16, padding: '3px 10px', borderRadius: 999, background: viz.gradient, color: viz.textColor, fontSize: 10.5, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em' }}>MOST POPULAR</span>
+                <span style={{ position: 'absolute', top: -10, right: 16, padding: '3px 10px', borderRadius: 999, background: viz.gradient, color: viz.textColor, fontSize: 11.5, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em' }}>MOST POPULAR</span>
               )}
               <div style={{ width: 40, height: 40, borderRadius: 11, background: viz.gradient, display: 'grid', placeItems: 'center', marginBottom: 14 }}>
                 <viz.Icon size={20} color={viz.textColor} />
@@ -226,7 +221,7 @@ export default function BillingPage() {
                 <span style={{ fontSize: 13, color: 'var(--ink-mute)' }}> / mo</span>
               </p>
               <p style={{ fontSize: 12.5, color: 'var(--ink-dim)', display: 'flex', alignItems: 'center', gap: 7, margin: '10px 0 18px' }}>
-                <Check size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                <Check size={14} style={{ color: 'var(--accent-text)', flexShrink: 0 }} />
                 {p.conversationCap.toLocaleString()} conversations / month
               </p>
               <button type="button" onClick={() => void upgrade(p.tier)} disabled={busy === p.tier || current}

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Loader2, Copy, Check, Trash2, UserPlus } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
+import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
 import { card, label, input as baseInput } from '@/components/dashboard/ui'
 
 interface Member { uid: string; email: string; displayName: string; role: string }
@@ -22,11 +23,18 @@ export default function TeamPage() {
   const [inviteLink, setInviteLink] = useState('')
   const [copied, setCopied] = useState(false)
   const [busyId, setBusyId] = useState('')
+  const [loadError, setLoadError] = useState(false)
 
   const load = useCallback(async () => {
+    setLoading(true)
+    setLoadError(false)
     try {
       const res = await apiRequest('/team')
-      if (res.ok) { const d = await res.json() as { members: Member[]; invites: Invite[] }; setMembers(d.members); setInvites(d.invites) }
+      if (!res.ok) throw new Error('Could not load the team.')
+      const d = await res.json() as { members: Member[]; invites: Invite[] }
+      setMembers(d.members); setInvites(d.invites)
+    } catch {
+      setLoadError(true)
     } finally { setLoading(false) }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -54,17 +62,16 @@ export default function TeamPage() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--ink)', margin: 0, fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>Team</h1>
-        <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 4 }}>Invite teammates to help answer conversations.</p>
-      </div>
+      <PageHeader title="Team" description="Invite teammates to help answer conversations." />
+
+      {loadError && <Notice title="Team unavailable" action={<button type="button" className="btn btn-ghost" onClick={() => void load()}>Retry</button>}>We could not retrieve your members and invitations. Nothing has been changed.</Notice>}
 
       {/* Invite */}
-      <div style={card}>
+      {!loadError && <div style={card}>
         <p style={label}>Invite a teammate</p>
         <div style={{ display: 'flex', gap: 8 }}>
-          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} placeholder="teammate@company.com" style={input} />
-          <button type="button" onClick={() => void invite()} disabled={inviting || !email.trim()} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: inviting || !email.trim() ? 0.5 : 1 }}>
+          <input className="dashboard-field" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} placeholder="teammate@company.com" style={input} />
+          <button type="button" onClick={() => void invite()} disabled={inviting || !email.trim()} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 18px' }}>
             <UserPlus size={14} /> {inviting ? 'Inviting…' : 'Invite'}
           </button>
         </div>
@@ -73,17 +80,17 @@ export default function TeamPage() {
           <div style={{ marginTop: 12 }}>
             <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 6 }}>Share this link with them (they join when they sign up with the invited email):</p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input readOnly value={inviteLink} style={{ ...input, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
+              <input className="dashboard-field" readOnly value={inviteLink} style={{ ...input, fontFamily: 'var(--font-mono)', fontSize: 12 }} />
               <button type="button" onClick={() => { void navigator.clipboard.writeText(inviteLink); setCopied(true); setTimeout(() => setCopied(false), 2000) }} className="btn btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 14px' }}>
                 {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Members */}
-      <div style={card}>
+      {!loadError && <div style={card}>
         <p style={label}>Members</p>
         {members.map((m) => (
           <div key={m.uid} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--line)' }}>
@@ -91,7 +98,7 @@ export default function TeamPage() {
               <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>{m.displayName || m.email}</p>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0 }}>{m.email}</p>
             </div>
-            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, background: 'var(--bg-2)', color: m.role === 'owner' ? 'var(--accent)' : 'var(--ink-mute)' }}>{m.role}</span>
+            <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, background: 'var(--bg-2)', color: m.role === 'owner' ? 'var(--accent-text)' : 'var(--ink-mute)' }}>{m.role}</span>
             {m.role !== 'owner' && (
               <button type="button" onClick={() => void remove(m.uid)} disabled={busyId === 'member:' + m.uid} aria-label="Remove" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', padding: 6 }}>
                 {busyId === 'member:' + m.uid ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}
@@ -99,7 +106,7 @@ export default function TeamPage() {
             )}
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Pending invites */}
       {invites.length > 0 && (

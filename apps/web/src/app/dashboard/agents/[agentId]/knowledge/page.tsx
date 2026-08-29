@@ -46,9 +46,9 @@ const STATUS_CONFIG: Record<KnowledgeDocStatus, { icon: React.ReactNode; label: 
     style: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
   },
   processing: {
-    icon: <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />,
+    icon: <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-text)' }} />,
     label: 'Indexing',
-    style: { background: 'var(--accent-soft)', color: 'var(--accent)' },
+    style: { background: 'var(--accent-soft)', color: 'var(--accent-text)' },
   },
   indexed: {
     icon: <CheckCircle2 size={12} />,
@@ -187,7 +187,8 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <Globe size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-mute)', pointerEvents: 'none' }} />
-            <input
+              <input
+                className="dashboard-field"
               type="url"
               value={urlInput}
               onChange={(e) => { setUrlInput(e.target.value); setUrlError('') }}
@@ -197,7 +198,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                 width: '100%', paddingLeft: 36, paddingRight: 12, paddingTop: 9, paddingBottom: 9,
                 borderRadius: 'var(--r-sm)', border: `1px solid ${urlError ? 'var(--danger)' : 'var(--line-2)'}`,
                 background: 'var(--bg-2)', color: 'var(--ink)', fontSize: 14,
-                outline: 'none', fontFamily: 'var(--font-sans)', boxSizing: 'border-box',
+                fontFamily: 'var(--font-ui)', boxSizing: 'border-box',
               }}
               onFocus={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--accent)')}
               onBlur={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--line-2)')}
@@ -248,20 +249,20 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 13, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{doc.source}</p>
                   {doc.status === 'indexed' && (
-                    <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>{doc.chunkCount} chunks indexed</p>
+                    <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>{doc.chunkCount} chunks indexed</p>
                   )}
                   {doc.status === 'error' && doc.errorMessage && (
-                    <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.errorMessage}</p>
+                    <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.errorMessage}</p>
                   )}
                   {doc.type === 'webpage' && doc.autoSyncEnabled && doc.syncIntervalHours && (
-                    <p style={{ fontSize: 11, color: doc.syncError ? 'var(--danger)' : 'var(--ink-mute)', marginTop: 2 }}>
+                    <p style={{ fontSize: 12, color: doc.syncError ? 'var(--danger)' : 'var(--ink-mute)', marginTop: 2 }}>
                       Auto-sync {SYNC_INTERVAL_LABELS[doc.syncIntervalHours].toLowerCase()}
                       {formatTimestamp(doc.nextSyncAt) ? ` · Next ${formatTimestamp(doc.nextSyncAt)}` : ''}
                       {doc.syncError ? ` · Last attempt failed` : ''}
                     </p>
                   )}
                   {doc.type === 'webpage' && !doc.autoSyncEnabled && formatTimestamp(doc.lastSyncedAt) && (
-                    <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+                    <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
                       Last synced {formatTimestamp(doc.lastSyncedAt)}
                     </p>
                   )}
@@ -277,7 +278,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                       style={{
                         minWidth: 92, padding: '5px 24px 5px 8px', borderRadius: 8,
                         border: '1px solid var(--line-2)', background: 'var(--bg-2)',
-                        color: 'var(--ink-dim)', fontSize: 11, fontFamily: 'var(--font-mono)',
+                        color: 'var(--ink-dim)', fontSize: 12, fontFamily: 'var(--font-mono)',
                         opacity: savingSyncId === doc.id ? 0.55 : 1,
                       }}
                     >
@@ -288,7 +289,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                     </select>
                   </div>
                 )}
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, flexShrink: 0, ...cfg.style }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, flexShrink: 0, ...cfg.style }}>
                   {cfg.icon} {cfg.label}
                 </span>
                 {(doc.status === 'indexed' || doc.status === 'error') && (

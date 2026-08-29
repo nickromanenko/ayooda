@@ -46,6 +46,7 @@ export default function AgentAvatar({
     flexShrink: 0,
     objectFit: 'cover',
     display: 'block',
+    boxShadow: '0 0 0 1px var(--image-outline)',
   }
 
   if (photoURL) {

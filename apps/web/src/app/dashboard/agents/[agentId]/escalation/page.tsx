@@ -209,7 +209,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
                 <button type="button" onClick={() => void move(i, 1)} disabled={i === rules.length - 1} aria-label="Down" style={{ background: 'none', border: 'none', cursor: i === rules.length - 1 ? 'default' : 'pointer', color: 'var(--ink-mute)', opacity: i === rules.length - 1 ? 0.3 : 1, padding: 0 }}><ArrowDown size={13} /></button>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>{r.name}{!r.enabled && <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}> · disabled</span>}</p>
+                <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>{r.name}{!r.enabled && <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}> · disabled</span>}</p>
                 <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0 }}>{triggerSummary(r.trigger)}</p>
                 <p className={styles.actionSummary}>{actionSummary(r, targets)}</p>
               </div>

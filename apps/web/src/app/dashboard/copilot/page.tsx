@@ -227,7 +227,7 @@ function CopilotPageInner() {
   const canCompose = Boolean(activeThreadId || pendingAgentId)
 
   if (loading) {
-    return <Loading />
+    return <div className={styles.root}><div className={styles.list} style={{ width: 300, flexShrink: 0, background: 'var(--panel)', boxShadow: 'inset -1px 0 var(--line)' }}><Loading label="Loading threads…" pad="24px 16px" /></div><div style={{ flex: 1 }}><Loading label="Preparing Copilot…" pad="72px 24px" /></div></div>
   }
 
   return (
@@ -236,7 +236,7 @@ function CopilotPageInner() {
       <div className={styles.list} data-compose-open={mobileComposeOpen} style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
           <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>Copilot</h1>
-          <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>Chat with your team&apos;s agents</p>
+          <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>Chat with your team&apos;s agents</p>
         </div>
 
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
@@ -282,7 +282,7 @@ function CopilotPageInner() {
                   <AgentAvatar name={agent?.name ?? 'Agent'} photoURL={agent?.photoURL ?? null} seed={t.agentId} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 12.5, color: 'var(--ink-dim)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</p>
-                    <p style={{ fontSize: 11, color: 'var(--ink-faint)', margin: '2px 0 0' }}>{formatRelative(t.updatedAt)}</p>
+                    <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: '2px 0 0' }}>{formatRelative(t.updatedAt)}</p>
                   </div>
                   <button
                     type="button"
@@ -348,7 +348,7 @@ function CopilotPageInner() {
                 {msg.role === 'assistant' && msg.metadata?.sources && msg.metadata.sources.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginLeft: 32 }}>
                     {msg.metadata.sources.map((s, i) => (
-                      <span key={`${s.docId}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--ink-mute)', border: '1px solid var(--line-2)', borderRadius: 20, padding: '2px 8px' }}>
+                      <span key={`${s.docId}-${i}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-mute)', border: '1px solid var(--line-2)', borderRadius: 20, padding: '2px 8px' }}>
                         <FileText size={10} /> {s.source}
                       </span>
                     ))}
@@ -376,6 +376,7 @@ function CopilotPageInner() {
             style={{ background: 'var(--panel)', borderTop: '1px solid var(--line)', padding: '12px 16px', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}
           >
             <textarea
+              className="dashboard-field"
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -387,7 +388,7 @@ function CopilotPageInner() {
                 flex: 1, resize: 'none', borderRadius: 12,
                 border: '1px solid var(--line-2)', padding: '8px 12px',
                 fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink)',
-                outline: 'none', maxHeight: 112, fontFamily: 'var(--font-sans)',
+                maxHeight: 112, fontFamily: 'var(--font-ui)',
               }}
               onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
               onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--line-2)')}

@@ -32,7 +32,7 @@ interface Message {
 }
 
 const STATUS_STYLE: Record<Conversation['status'], React.CSSProperties> = {
-  bot: { background: 'var(--accent-soft)', color: 'var(--accent)' },
+  bot: { background: 'var(--accent-soft)', color: 'var(--accent-text)' },
   waiting: { background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' },
   human: { background: 'rgba(245,165,36,0.18)', color: 'var(--accent-2)' },
   resolved: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
@@ -143,7 +143,7 @@ export default function InboxPage() {
     (id ? agents.find((a) => a.id === id)?.name : undefined) ?? 'Unassigned'
 
   if (wsLoading) {
-    return <Loading />
+    return <div className={styles.root}><div className={styles.list} style={{ width: 280, flexShrink: 0, background: 'var(--panel)', boxShadow: 'inset -1px 0 var(--line)' }}><Loading label="Loading conversations…" pad="24px 16px" /></div><div style={{ flex: 1 }}><Loading label="Preparing your inbox…" pad="72px 24px" /></div></div>
   }
 
   const visibleConversations = conversations
@@ -156,7 +156,7 @@ export default function InboxPage() {
       <div className={styles.list} data-thread-open={Boolean(selectedId)} style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--line)', background: 'var(--panel)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
           <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>Inbox</h1>
-          <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+          <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
             {visibleConversations.length === conversations.length
               ? `${conversations.length} conversations`
               : `${visibleConversations.length} of ${conversations.length} conversations`}
@@ -167,9 +167,10 @@ export default function InboxPage() {
             <button
               key={f}
               type="button"
+              aria-pressed={filter === f}
               onClick={() => setFilter(f)}
               style={{
-                fontSize: 11, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, cursor: 'pointer',
+                minHeight: 40, fontSize: 11.5, fontFamily: 'var(--font-mono)', padding: '0 10px', borderRadius: 20, cursor: 'pointer',
                 border: '1px solid var(--line)', textTransform: 'capitalize',
                 background: filter === f ? 'var(--accent-soft)' : 'transparent',
                 color: filter === f ? 'var(--accent)' : 'var(--ink-mute)',
@@ -186,7 +187,7 @@ export default function InboxPage() {
               value={agentFilter}
               onChange={(e) => setAgentFilter(e.target.value)}
               style={{
-                width: '100%', fontSize: 11.5, padding: '5px 8px', borderRadius: 'var(--r-sm)',
+                width: '100%', minHeight: 40, fontSize: 12, padding: '5px 8px', borderRadius: 'var(--r-sm)',
                 border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)',
               }}
             >
@@ -199,8 +200,9 @@ export default function InboxPage() {
           {visibleConversations.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--ink-mute)', gap: 8, padding: '0 24px', textAlign: 'center' }}>
               <MessageSquare size={28} style={{ opacity: 0.3 }} />
-              <p style={{ fontSize: 13, margin: 0 }}>No conversations yet.</p>
-              <p style={{ fontSize: 12, margin: 0, color: 'var(--ink-faint)' }}>They&apos;ll appear here when visitors start chatting.</p>
+              <p style={{ fontSize: 13, margin: 0 }}>{conversations.length ? 'No conversations match these filters.' : 'No conversations yet.'}</p>
+              <p style={{ fontSize: 12.5, margin: 0, color: 'var(--ink-faint)' }}>{conversations.length ? 'Clear the filters to see every conversation.' : 'They’ll appear here when visitors start chatting.'}</p>
+              {conversations.length > 0 && <button type="button" className="btn btn-ghost" onClick={() => { setFilter('all'); setAgentFilter('all') }}>Clear filters</button>}
             </div>
           ) : (
             visibleConversations.map((conv) => (
@@ -222,16 +224,16 @@ export default function InboxPage() {
                   <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
                     {conv.visitorId.slice(0, 8)}…
                   </span>
-                  <span style={{ fontSize: 10, color: 'var(--ink-faint)', flexShrink: 0 }}>{formatTime(conv.updatedAt)}</span>
+                  <span style={{ fontSize: 11.5, color: 'var(--ink-faint)', flexShrink: 0 }}>{formatTime(conv.updatedAt)}</span>
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--ink-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '0 0 6px' }}>{conv.lastMessage}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 10, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, ...STATUS_STYLE[conv.status] }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, ...STATUS_STYLE[conv.status] }}>
                     {conv.status}
                   </span>
                   <span
                     style={{
-                      fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--ink-faint)',
+                      fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--ink-faint)',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
                     }}
                     title={`Answered by ${agentName(conv.agentId)}`}
@@ -241,7 +243,7 @@ export default function InboxPage() {
                   {typeof conv.score === 'number' && (
                     <span
                       style={{
-                        fontSize: 11, fontFamily: 'var(--font-mono)', padding: '2px 6px',
+                        fontSize: 12, fontFamily: 'var(--font-mono)', padding: '2px 6px',
                         borderRadius: 'var(--r-sm)', border: '1px solid var(--line-2)', color: 'var(--ink-mute)',
                       }}
                       title="Conversation score"
@@ -268,12 +270,12 @@ export default function InboxPage() {
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>
                 Visitor {selectedConv.visitorId.slice(0, 8)}…
               </p>
-              <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>
+              <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
                 Status: <span style={{ textTransform: 'capitalize' }}>{selectedConv.status}</span>
                 {' · '}Agent: {agentName(selectedConv.agentId)}
               </p>
               {selectedConv.status === 'waiting' && selectedConv.escalationReason && (
-                <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>Escalated: {selectedConv.escalationReason}</p>
+                <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Escalated: {selectedConv.escalationReason}</p>
               )}
             </div>
             <div className={styles.threadActions} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -335,7 +337,7 @@ export default function InboxPage() {
                   {msg.role === 'user'
                     ? <User size={12} style={{ color: 'var(--ink-mute)' }} />
                     : msg.role === 'operator'
-                      ? <User size={12} style={{ color: 'var(--accent)' }} />
+                      ? <User size={12} style={{ color: 'var(--accent-text)' }} />
                       : <Bot size={12} style={{ color: 'var(--ai)' }} />}
                 </div>
                 <div style={{
@@ -362,7 +364,8 @@ export default function InboxPage() {
               className={styles.reply}
               style={{ background: 'var(--panel)', borderTop: '1px solid var(--line)', padding: '12px 16px', display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}
             >
-              <textarea
+            <textarea
+              className="dashboard-field"
                 rows={1}
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
@@ -374,7 +377,7 @@ export default function InboxPage() {
                   flex: 1, resize: 'none', borderRadius: 12,
                   border: '1px solid var(--line-2)', padding: '8px 12px',
                   fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink)',
-                  outline: 'none', maxHeight: 112, fontFamily: 'var(--font-sans)',
+                  maxHeight: 112, fontFamily: 'var(--font-ui)',
                 }}
                 onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
                 onBlur={e => (e.currentTarget.style.borderColor = 'var(--line-2)')}
@@ -396,7 +399,7 @@ export default function InboxPage() {
             <div style={{ background: 'var(--panel)', borderTop: '1px solid var(--line)', padding: '12px 16px', flexShrink: 0 }}>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', margin: 0 }}>
                 The bot is handling this conversation.{' '}
-                <button type="button" onClick={() => void handleTakeover()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontWeight: 500, padding: 0, fontSize: 12 }}>
+                <button type="button" onClick={() => void handleTakeover()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-text)', fontWeight: 500, padding: 0, fontSize: 12 }}>
                   Take over
                 </button>{' '}
                 to reply.

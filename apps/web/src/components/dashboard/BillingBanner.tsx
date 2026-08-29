@@ -23,7 +23,7 @@ export function BillingBanner() {
   if (!msg) return null
   return (
     <Link href="/dashboard/billing" style={{ display: 'block', padding: '12px 16px', borderRadius: 'var(--r-md)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', color: 'var(--ink)', fontSize: 13, marginBottom: 20, textDecoration: 'none' }}>
-      {msg} <span style={{ color: 'var(--accent)' }}>Go to billing →</span>
+      {msg} <span style={{ color: 'var(--accent-text)' }}>Go to billing →</span>
     </Link>
   )
 }

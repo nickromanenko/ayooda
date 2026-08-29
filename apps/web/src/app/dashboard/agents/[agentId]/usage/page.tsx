@@ -54,7 +54,7 @@ function Tile({ icon: Icon, accent, value, name, sub }: {
       </div>
       <p style={{ fontFamily: 'var(--font-display)', fontSize: 25, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)', fontVariantNumeric: 'tabular-nums' }}>{value}</p>
       <p style={{ fontSize: 12.5, color: 'var(--ink-mute)', marginTop: 2 }}>{name}</p>
-      {sub && <p style={{ fontSize: 11, color: 'var(--ink-faint)', marginTop: 2 }}>{sub}</p>}
+      {sub && <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 2 }}>{sub}</p>}
     </div>
   )
 }
@@ -101,7 +101,7 @@ function ConfidenceTrend({ points, threshold }: { points: Usage['confidence']['t
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--ink-faint)', marginTop: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--ink-faint)', marginTop: 6 }}>
         <span>{points[0]?.date.slice(5)}</span>
         <span>{points.at(-1)?.date.slice(5)}</span>
       </div>
@@ -273,7 +273,7 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
         {c.total === 0 ? (
           <p style={{ ...muted, margin: 0 }}>
             No conversations yet. Once this agent is{' '}
-            <Link href={`/dashboard/agents/${agentId}/deploy`} style={{ color: 'var(--accent)' }}>deployed</Link>
+            <Link href={`/dashboard/agents/${agentId}/deploy`} style={{ color: 'var(--accent-text)' }}>deployed</Link>
             {' '}and answering, its results appear here.
           </p>
         ) : (
@@ -281,15 +281,15 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
             total={c.total}
             segments={[
               { label: 'Automated', value: c.automated, color: 'var(--mint)' },
-              { label: 'Handed off', value: c.handedOff, color: 'var(--accent)' },
+              { label: 'Handed off', value: c.handedOff, color: 'var(--accent-text)' },
               { label: 'Still open', value: unresolved, color: 'var(--line-2)' },
             ]}
           />
         )}
         {c.waiting > 0 && (
-          <p style={{ fontSize: 12, color: 'var(--accent)', marginTop: 12, marginBottom: 0 }}>
+          <p style={{ fontSize: 12, color: 'var(--accent-text)', marginTop: 12, marginBottom: 0 }}>
             {c.waiting} waiting on a human right now —{' '}
-            <Link href="/dashboard/inbox" style={{ color: 'var(--accent)' }}>open the inbox</Link>
+            <Link href="/dashboard/inbox" style={{ color: 'var(--accent-text)' }}>open the inbox</Link>
           </p>
         )}
       </div>
@@ -339,7 +339,7 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
               <Bar
                 total={u.workspace.includedCap}
                 segments={[
-                  { label: 'This agent', value: c.thisPeriod!, color: 'var(--accent)' },
+                  { label: 'This agent', value: c.thisPeriod!, color: 'var(--accent-text)' },
                   {
                     label: 'Other agents',
                     value: Math.max(0, u.workspace.periodConversations - c.thisPeriod!),
@@ -362,7 +362,7 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
         ) : (
           <p style={{ ...muted, margin: 0 }}>
             No active plan.{' '}
-            <Link href="/dashboard/billing" style={{ color: 'var(--accent)' }}>Choose one →</Link>
+            <Link href="/dashboard/billing" style={{ color: 'var(--accent-text)' }}>Choose one →</Link>
           </p>
         )}
       </div>
