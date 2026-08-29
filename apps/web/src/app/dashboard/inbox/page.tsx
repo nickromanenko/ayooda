@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, MessageSquare, User, Bot, Send } from 'lucide-react
 import { db } from '@/lib/firebase'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
+import MarkdownMessage from '@/components/dashboard/MarkdownMessage'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import styles from './page.module.css'
 
@@ -327,30 +328,27 @@ export default function InboxPage() {
                   marginLeft: msg.role === 'user' ? 'auto' : undefined,
                 }}
               >
-                <div style={{
+                <div className={styles.messageAvatar} style={{
                   width: 24, height: 24, borderRadius: '50%',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2,
-                  background: msg.role === 'user' ? 'var(--panel-2)'
+                  background: msg.role === 'user' ? 'var(--control-selected)'
                     : msg.role === 'operator' ? 'var(--accent-soft)'
                     : 'rgba(99,102,241,0.15)',
                 }}>
                   {msg.role === 'user'
-                    ? <User size={12} style={{ color: 'var(--ink-mute)' }} />
+                    ? <User size={12} style={{ color: 'var(--control-selected-text)' }} />
                     : msg.role === 'operator'
                       ? <User size={12} style={{ color: 'var(--accent-text)' }} />
                       : <Bot size={12} style={{ color: 'var(--ai)' }} />}
                 </div>
-                <div style={{
-                  padding: '8px 12px', borderRadius: 16, fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap',
-                  borderTopRightRadius: msg.role === 'user' ? 4 : 16,
-                  borderTopLeftRadius: msg.role !== 'user' ? 4 : 16,
-                  background: msg.role === 'user' ? 'var(--panel-2)'
-                    : msg.role === 'operator' ? 'var(--control-primary)'
-                    : 'var(--panel)',
-                  color: msg.role === 'operator' ? 'var(--control-primary-text)' : 'var(--ink-dim)',
-                  border: msg.role === 'assistant' ? '1px solid var(--line)' : 'none',
-                }}>
-                  {msg.content}
+                <div className={`${styles.messageBubble} ${
+                  msg.role === 'user' ? styles.userBubble
+                    : msg.role === 'operator' ? styles.operatorBubble
+                      : styles.assistantBubble
+                }`}>
+                  {msg.role === 'user'
+                    ? msg.content
+                    : <MarkdownMessage content={msg.content} className={styles.markdown} />}
                 </div>
               </div>
             ))}
