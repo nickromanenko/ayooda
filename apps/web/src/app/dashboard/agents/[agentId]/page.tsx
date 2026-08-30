@@ -9,6 +9,7 @@ import { apiRequestOrThrow } from '@/lib/api'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import { Loading } from '@/components/dashboard/Loading'
 import ModelPicker from '@/components/dashboard/ModelPicker'
+import AgentVersionHistory from './AgentVersionHistory'
 import { card, label, input, muted, errorText } from '@/components/dashboard/ui'
 
 export default function AgentInfoPage({ params }: { params: Promise<{ agentId: string }> }) {
@@ -16,16 +17,21 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
   const router = useRouter()
 
   const [agent, setAgent] = useState<AgentDoc | null>(null)
+  const [savedAgent, setSavedAgent] = useState<AgentDoc | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [historyRevision, setHistoryRevision] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
       const res = await apiRequestOrThrow(`/agents/${agentId}`, {}, 'Could not load this agent.')
-      setAgent(await res.json() as AgentDoc)
+      const loaded = await res.json() as AgentDoc
+      setAgent(loaded)
+      setSavedAgent(loaded)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load this agent.')
     } finally {
@@ -35,7 +41,23 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
 
   useEffect(() => { void load() }, [load])
 
+  const hasUnsavedChanges = Boolean(agent && savedAgent && (
+    agent.name !== savedAgent.name
+    || agent.description !== savedAgent.description
+    || agent.systemPrompt !== savedAgent.systemPrompt
+    || agent.llmModel !== savedAgent.llmModel
+    || agent.role !== savedAgent.role
+  ))
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [hasUnsavedChanges])
+
   function patch(next: Partial<AgentDoc>) {
+    setNotice('')
     setAgent((a) => (a ? { ...a, ...next } : a))
   }
 
@@ -65,7 +87,7 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
 
   async function save() {
     if (!agent) return
-    setSaving(true); setError('')
+    setSaving(true); setError(''); setNotice('')
     try {
       await apiRequestOrThrow(`/agents/${agentId}`, {
         method: 'PUT',
@@ -77,6 +99,8 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
         }),
       }, 'Could not save the agent.')
       await load()
+      setHistoryRevision((value) => value + 1)
+      setNotice('Agent saved.')
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not save the agent.') }
     finally { setSaving(false) }
   }
@@ -111,6 +135,7 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
   return (
     <>
       {error && <p style={{ ...errorText, marginBottom: 12 }}>{error}</p>}
+      {notice && <p role="status" style={{ fontSize: 12.5, color: 'var(--success)', marginBottom: 12 }}>{notice}</p>}
 
       <div style={card}>
         <p style={label}>Identity</p>
@@ -148,14 +173,29 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
         <ModelPicker agentId={agentId} value={agent.llmModel} onChange={(llmModel) => patch({ llmModel })} />
 
         <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button type="button" onClick={() => void save()} disabled={saving || !agent.name.trim()} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: saving || !agent.name.trim() ? 0.6 : 1 }}>
-            {saving ? 'Saving…' : 'Save agent'}
+          <button type="button" onClick={() => void save()} disabled={saving || !agent.name.trim() || !hasUnsavedChanges} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: saving || !agent.name.trim() || !hasUnsavedChanges ? 0.6 : 1 }}>
+            {saving ? 'Saving…' : hasUnsavedChanges ? 'Save agent' : 'Saved'}
           </button>
           <Link href={`/dashboard/agents/${agent.id}/test`} className="btn btn-ghost" style={{ borderRadius: 'var(--r-sm)', padding: '10px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <MessagesSquare size={14} /> Test agent
           </Link>
+          <span role="status" style={{ marginLeft: 'auto', color: hasUnsavedChanges ? 'var(--accent-text)' : 'var(--ink-faint)', fontSize: 11.5 }}>
+            {hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
+          </span>
         </div>
       </div>
+
+      <AgentVersionHistory
+        agentId={agentId}
+        current={savedAgent ?? agent}
+        refreshKey={historyRevision}
+        onRestored={(restored) => {
+          setAgent(restored)
+          setSavedAgent(restored)
+          setNotice('Configuration restored. Your previous settings were preserved as an undo point.')
+          setHistoryRevision((value) => value + 1)
+        }}
+      />
 
       <div style={card}>
         <p style={label}>Manage</p>

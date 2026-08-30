@@ -25,6 +25,7 @@ service cloud.firestore {
         match /knowledge/{docId} { allow read, write: if false; }
         match /tools/{toolId} { allow read, write: if false; }
         match /workflowGraph/{docId} { allow read, write: if false; }
+        match /coreVersions/{versionId} { allow read, write: if false; }
       }
 
       // Escalation rules: API-managed, server-only.

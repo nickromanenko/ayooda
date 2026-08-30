@@ -9,6 +9,7 @@ import { gatewayKeyStatus, parseGatewayKeyBody, testGatewayKey } from '../lib/ll
 import { loadGatewayModelCatalog, recommendedGatewayModels, validateGatewayModelSelection } from '../lib/llm/model-catalog'
 import { customEndpointStatus, parseCustomEndpointBody, testCustomEndpoint } from '../lib/llm/custom-endpoint'
 import { buildAgentReadiness } from '../lib/agent-readiness'
+import { agentCoreSnapshot, changedCoreFields, isAgentCoreSnapshot, type AgentCoreSnapshot } from '../lib/agents/version-history'
 import { agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type GatewayModelCatalog, type WorkspaceRole } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
@@ -43,6 +44,22 @@ const denied = (status: 403 | 404) =>
 
 const DEFAULT_PROMPT = 'You are a helpful customer support agent. Answer questions based on the provided context.'
 const DEFAULT_MODEL = 'google/gemini-2.5-flash'
+const AGENT_VERSION_LIMIT = 20
+
+async function versionActor(uid: string): Promise<string> {
+  const snap = await adminDb.doc(`users/${uid}`).get()
+  const data = snap.data()
+  return String(data?.displayName || data?.email || 'Teammate')
+}
+
+async function trimAgentVersions(ref: FirebaseFirestore.DocumentReference) {
+  const snap = await ref.collection('coreVersions').orderBy('createdAt', 'desc').limit(AGENT_VERSION_LIMIT + 10).get()
+  const expired = snap.docs.slice(AGENT_VERSION_LIMIT)
+  if (!expired.length) return
+  const batch = adminDb.batch()
+  expired.forEach((doc) => batch.delete(doc.ref))
+  await batch.commit()
+}
 
 function toAgentDoc(id: string, d: DocumentData): AgentDoc {
   return {
@@ -126,6 +143,64 @@ agents.get('/:id/models', async (c) => {
     }
     return c.json(fallback)
   }
+})
+
+/** GET /agents/:id/versions — recent restorable core-configuration snapshots. */
+agents.get('/:id/versions', async (c) => {
+  const gate = await editableAgent(c)
+  if (!gate.ok) return c.json(denied(gate.status), gate.status)
+  const snap = await gate.ref.collection('coreVersions').orderBy('createdAt', 'desc').limit(AGENT_VERSION_LIMIT).get()
+  return c.json({
+    versions: snap.docs.flatMap((doc) => {
+      const data = doc.data()
+      if (!isAgentCoreSnapshot(data.snapshot)) return []
+      return [{
+        id: doc.id,
+        snapshot: data.snapshot,
+        changedFields: Array.isArray(data.changedFields) ? data.changedFields : [],
+        createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? null,
+        createdByName: typeof data.createdByName === 'string' ? data.createdByName : 'Teammate',
+        reason: data.reason === 'restore' ? 'restore' : 'save',
+      }]
+    }),
+  })
+})
+
+/** POST /agents/:id/versions/:versionId/restore — restore core settings and preserve an undo snapshot. */
+agents.post('/:id/versions/:versionId/restore', async (c) => {
+  const gate = await editableAgent(c)
+  if (!gate.ok) return c.json(denied(gate.status), gate.status)
+  const versionRef = gate.ref.collection('coreVersions').doc(c.req.param('versionId'))
+  const versionSnap = await versionRef.get()
+  if (!versionSnap.exists) return c.json({ error: 'Configuration version not found' }, 404)
+  const restore = versionSnap.data()!.snapshot
+  if (!isAgentCoreSnapshot(restore)) return c.json({ error: 'This configuration version cannot be restored' }, 409)
+  if (restore.role !== null && !isAgentRoleId(restore.role)) return c.json({ error: 'This version uses an unavailable agent role' }, 409)
+  const model = await validateGatewayModelSelection(restore.llmModel)
+  if (!model.ok) return c.json({ error: 'This version uses a model that is no longer available. Choose a current model instead.' }, 409)
+
+  const uid = c.get('uid')!
+  const actor = await versionActor(uid)
+  await adminDb.runTransaction(async (transaction) => {
+    const currentSnap = await transaction.get(gate.ref)
+    if (!currentSnap.exists) throw new Error('Agent not found')
+    const current = agentCoreSnapshot(currentSnap.data()!)
+    const changedFields = changedCoreFields(current, restore)
+    if (!changedFields.length) return
+    transaction.set(gate.ref.collection('coreVersions').doc(), {
+      snapshot: current,
+      changedFields,
+      createdAt: new Date(),
+      createdBy: uid,
+      createdByName: actor,
+      reason: 'restore',
+      restoredFromVersionId: versionSnap.id,
+    })
+    transaction.update(gate.ref, { ...restore, updatedAt: new Date() })
+  })
+  await trimAgentVersions(gate.ref).catch((error) => console.warn('[agents] version cleanup failed:', error))
+  const after = await gate.ref.get()
+  return c.json(toAgentDoc(after.id, after.data()!))
 })
 
 /** GET /agents/:id/readiness — actionable launch checks derived from current configuration. */
@@ -217,7 +292,32 @@ agents.put('/:id', async (c) => {
   if (body.systemPrompt !== undefined) update.systemPrompt = body.systemPrompt
   if (body.llmModel !== undefined) update.llmModel = body.llmModel
 
-  await ref.update(update)
+  const uid = c.get('uid')!
+  const actor = await versionActor(uid)
+  await adminDb.runTransaction(async (transaction) => {
+    const currentSnap = await transaction.get(ref)
+    if (!currentSnap.exists) throw new Error('Agent not found')
+    const current = agentCoreSnapshot(currentSnap.data()!)
+    const next: AgentCoreSnapshot = {
+      ...current,
+      ...(typeof update.name === 'string' ? { name: update.name } : {}),
+      ...(typeof update.description === 'string' ? { description: update.description } : {}),
+      ...(typeof update.systemPrompt === 'string' ? { systemPrompt: update.systemPrompt } : {}),
+      ...(typeof update.llmModel === 'string' ? { llmModel: update.llmModel } : {}),
+      ...(typeof update.role === 'string' ? { role: update.role } : {}),
+    }
+    const changedFields = changedCoreFields(current, next)
+    if (changedFields.length) transaction.set(ref.collection('coreVersions').doc(), {
+      snapshot: current,
+      changedFields,
+      createdAt: new Date(),
+      createdBy: uid,
+      createdByName: actor,
+      reason: 'save',
+    })
+    transaction.update(ref, update)
+  })
+  await trimAgentVersions(ref).catch((cleanupError) => console.warn('[agents] version cleanup failed:', cleanupError))
   const after = await ref.get()
   return c.json(toAgentDoc(after.id, after.data()!))
 })
@@ -274,7 +374,7 @@ agents.delete('/:id', requireOwner, async (c) => {
 
   // Delete the agent's own subcollections. Channels are not among them: the
   // guard above refuses to delete an agent that still has one attached.
-  for (const sub of ['tools', 'skills', 'workflowRules', 'workflowGraph']) {
+  for (const sub of ['tools', 'skills', 'workflowRules', 'workflowGraph', 'coreVersions']) {
     const subSnap = await adminDb.collection(`workspaces/${ws}/agents/${id}/${sub}`).get()
     for (const d of subSnap.docs) await d.ref.delete()
   }
