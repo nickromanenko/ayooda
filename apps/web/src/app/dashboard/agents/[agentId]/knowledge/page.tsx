@@ -1,335 +1,249 @@
 'use client'
 
-import { use, useState, useEffect, useCallback } from 'react'
-import { Globe, Loader2, CheckCircle2, XCircle, Trash2, Plus, AlertCircle, FileText, RotateCw } from 'lucide-react'
+import { use, useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertCircle, AlertTriangle, Check, CheckCircle2, Database, FileText, Globe, Loader2, Plus, RefreshCw, RotateCw, Search, ShieldCheck, Trash2, X, XCircle } from 'lucide-react'
+import type { KnowledgeDocStatus } from '@ayooda/shared'
 import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
-import { Loading, EmptyState } from '@/components/dashboard/Loading'
-import type { KnowledgeDocStatus } from '@ayooda/shared'
+import { EmptyState, Loading } from '@/components/dashboard/Loading'
+import { knowledgeDate, knowledgeHealth, summarizeKnowledge, type KnowledgeHealth, type KnowledgeTimestamp } from '@/lib/knowledge-health'
+import styles from './page.module.css'
 
 interface KnowledgeDoc {
   id: string
-  type: string
+  type: 'webpage' | 'file'
   source: string
   status: KnowledgeDocStatus
   chunkCount: number
   errorMessage: string | null
+  createdAt?: KnowledgeTimestamp
+  indexedAt?: KnowledgeTimestamp
   autoSyncEnabled?: boolean
   syncIntervalHours?: 24 | 168 | 720 | null
-  lastSyncedAt?: TimestampValue
-  nextSyncAt?: TimestampValue
+  lastSyncedAt?: KnowledgeTimestamp
+  nextSyncAt?: KnowledgeTimestamp
+  syncFailures?: number
   syncError?: string | null
 }
 
-type TimestampValue = string | { _seconds?: number; seconds?: number } | null
+type SourceFilter = 'all' | 'ready' | 'processing' | 'attention'
+const SYNC_INTERVAL_LABELS: Record<24 | 168 | 720, string> = { 24: 'Daily', 168: 'Weekly', 720: 'Monthly' }
+const HEALTH_LABEL: Record<KnowledgeHealth, string> = { ready: 'Ready', processing: 'Indexing', error: 'Failed', empty: 'No content', stale: 'Needs refresh' }
 
-const SYNC_INTERVAL_LABELS: Record<24 | 168 | 720, string> = {
-  24: 'Daily',
-  168: 'Weekly',
-  720: 'Monthly',
+function formatTimestamp(value: KnowledgeTimestamp | undefined): string | null {
+  const date = knowledgeDate(value)
+  return date ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date) : null
 }
 
-function formatTimestamp(value: TimestampValue | undefined): string | null {
-  if (!value) return null
-  const date = typeof value === 'string'
-    ? new Date(value)
-    : new Date((value._seconds ?? value.seconds ?? 0) * 1000)
-  if (Number.isNaN(date.getTime())) return null
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
-}
-
-const STATUS_CONFIG: Record<KnowledgeDocStatus, { icon: React.ReactNode; label: string; style: React.CSSProperties }> = {
-  pending: {
-    icon: <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />,
-    label: 'Queued',
-    style: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
-  },
-  processing: {
-    icon: <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-text)' }} />,
-    label: 'Indexing',
-    style: { background: 'var(--accent-soft)', color: 'var(--accent-text)' },
-  },
-  indexed: {
-    icon: <CheckCircle2 size={12} />,
-    label: 'Indexed',
-    style: { background: 'rgba(52,211,153,0.15)', color: 'var(--mint)' },
-  },
-  error: {
-    icon: <XCircle size={12} />,
-    label: 'Error',
-    style: { background: 'rgba(239,68,68,0.1)', color: 'var(--danger)' },
-  },
+function formatRelative(value: KnowledgeTimestamp | undefined): string | null {
+  const date = knowledgeDate(value)
+  if (!date) return null
+  const difference = date.getTime() - Date.now()
+  const absolute = Math.abs(difference)
+  const [amount, unit] = absolute >= 86_400_000
+    ? [Math.round(difference / 86_400_000), 'day' as const]
+    : absolute >= 3_600_000
+      ? [Math.round(difference / 3_600_000), 'hour' as const]
+      : [Math.round(difference / 60_000), 'minute' as const]
+  return new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }).format(amount, unit)
 }
 
 function hasActiveJobs(docs: KnowledgeDoc[]) {
-  return docs.some((d) => d.status === 'pending' || d.status === 'processing')
+  return docs.some((doc) => doc.status === 'pending' || doc.status === 'processing')
+}
+
+function HealthIcon({ health }: { health: KnowledgeHealth }) {
+  if (health === 'ready') return <CheckCircle2 size={12} />
+  if (health === 'processing') return <Loader2 size={12} className={styles.spin} />
+  if (health === 'error') return <XCircle size={12} />
+  return <AlertTriangle size={12} />
 }
 
 export default function AgentKnowledgePage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = use(params)
-
   const [docs, setDocs] = useState<KnowledgeDoc[]>([])
   const [loading, setLoading] = useState(true)
+  const [addOpen, setAddOpen] = useState(false)
   const [urlInput, setUrlInput] = useState('')
   const [adding, setAdding] = useState(false)
   const [urlError, setUrlError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [reindexingId, setReindexingId] = useState<string | null>(null)
+  const [retryingIssues, setRetryingIssues] = useState(false)
   const [savingSyncId, setSavingSyncId] = useState<string | null>(null)
-  const [syncConfigError, setSyncConfigError] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [filter, setFilter] = useState<SourceFilter>('all')
+  const [query, setQuery] = useState('')
 
   const fetchDocs = useCallback(async () => {
     try {
-      const res = await apiRequest(`/agents/${agentId}/knowledge`)
-      if (!res.ok) return
-      setDocs((await res.json()) as KnowledgeDoc[])
-    } catch {
-      // silently ignore polling errors
+      const response = await apiRequest(`/agents/${agentId}/knowledge`)
+      if (!response.ok) throw new Error('Could not load knowledge sources.')
+      setDocs(await response.json() as KnowledgeDoc[])
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : 'Could not load knowledge sources.')
     }
   }, [agentId])
 
-  useEffect(() => {
-    setLoading(true)
-    fetchDocs().finally(() => setLoading(false))
-  }, [fetchDocs])
-
+  useEffect(() => { setLoading(true); void fetchDocs().finally(() => setLoading(false)) }, [fetchDocs])
   useEffect(() => {
     if (!hasActiveJobs(docs)) return
-    const id = setInterval(fetchDocs, 4000)
-    return () => clearInterval(id)
+    const timer = window.setInterval(() => void fetchDocs(), 4_000)
+    return () => window.clearInterval(timer)
   }, [docs, fetchDocs])
+
+  const summary = useMemo(() => summarizeKnowledge(docs), [docs])
+  const visibleDocs = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return docs.filter((doc) => {
+      const health = knowledgeHealth(doc)
+      const matchesFilter = filter === 'all' || filter === health || (filter === 'attention' && ['error', 'empty', 'stale'].includes(health))
+      return matchesFilter && (!normalizedQuery || doc.source.toLowerCase().includes(normalizedQuery))
+    })
+  }, [docs, filter, query])
 
   async function handleAdd() {
     const trimmed = urlInput.trim()
     if (!trimmed) return
-    try { new URL(trimmed) } catch {
-      setUrlError('Please enter a valid URL including https://')
+    try {
+      const url = new URL(trimmed)
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error()
+    } catch {
+      setUrlError('Enter a complete website URL, including https://.')
       return
     }
-    setAdding(true)
-    setUrlError('')
+    setAdding(true); setUrlError('')
     try {
-      const res = await apiRequest(`/agents/${agentId}/knowledge/scrape`, {
-        method: 'POST',
-        body: JSON.stringify({ url: trimmed }),
-      })
-      if (!res.ok) {
-        const data = (await res.json()) as { error: string }
-        throw new Error(data.error ?? 'Failed to add URL')
+      const response = await apiRequest(`/agents/${agentId}/knowledge/scrape`, { method: 'POST', body: JSON.stringify({ url: trimmed }) })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string }
+        throw new Error(data.error ?? 'Could not add this website.')
       }
-      setUrlInput('')
+      setUrlInput(''); setAddOpen(false)
       trackProductEvent('Knowledge Source Added', { source_type: 'website', context: 'dashboard' })
       await fetchDocs()
-    } catch (err: unknown) {
-      setUrlError(err instanceof Error ? err.message : 'Failed to add URL')
-    } finally {
-      setAdding(false)
-    }
+    } catch (cause) {
+      setUrlError(cause instanceof Error ? cause.message : 'Could not add this website.')
+    } finally { setAdding(false) }
   }
 
-  async function handleDelete(id: string) {
-    if (!window.confirm('Delete this knowledge source and its indexed content?')) return
-    setDeletingId(id)
+  async function handleDelete(doc: KnowledgeDoc) {
+    if (!window.confirm(`Delete “${doc.source}” and all of its indexed content?`)) return
+    setDeletingId(doc.id); setActionError('')
     try {
-      await apiRequestOrThrow(`/agents/${agentId}/knowledge/${id}`, { method: 'DELETE' }, 'Failed to delete this knowledge source.')
-      setDocs((prev) => prev.filter((d) => d.id !== id))
-    } catch (error) {
-      setSyncConfigError(error instanceof Error ? error.message : 'Failed to delete this knowledge source.')
-    } finally {
-      setDeletingId(null)
-    }
+      await apiRequestOrThrow(`/agents/${agentId}/knowledge/${doc.id}`, { method: 'DELETE' }, 'Could not delete this source.')
+      setDocs((current) => current.filter((item) => item.id !== doc.id))
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : 'Could not delete this source.') }
+    finally { setDeletingId(null) }
   }
 
-  async function handleReindex(id: string) {
-    setReindexingId(id)
-    try {
-      await apiRequestOrThrow(`/agents/${agentId}/knowledge/${id}/reindex`, { method: 'POST' }, 'Failed to start reindexing.')
-      await fetchDocs()
-    } catch (error) {
-      setSyncConfigError(error instanceof Error ? error.message : 'Failed to start reindexing.')
-    } finally {
-      setReindexingId(null)
-    }
+  async function reindex(docId: string) {
+    await apiRequestOrThrow(`/agents/${agentId}/knowledge/${docId}/reindex`, { method: 'POST' }, 'Could not start indexing.')
   }
 
-  async function handleSyncInterval(id: string, value: string) {
-    setSavingSyncId(id)
-    setSyncConfigError('')
+  async function handleReindex(docId: string) {
+    setReindexingId(docId); setActionError('')
+    try { await reindex(docId); await fetchDocs() }
+    catch (cause) { setActionError(cause instanceof Error ? cause.message : 'Could not start indexing.') }
+    finally { setReindexingId(null) }
+  }
+
+  async function handleRetryIssues() {
+    const issueDocs = docs.filter((doc) => ['error', 'empty', 'stale'].includes(knowledgeHealth(doc)))
+    if (!issueDocs.length) return
+    setRetryingIssues(true); setActionError('')
+    let failures = 0
+    for (const doc of issueDocs) { try { await reindex(doc.id) } catch { failures++ } }
+    await fetchDocs()
+    if (failures) setActionError(`${failures} ${failures === 1 ? 'source' : 'sources'} could not be queued. Try them individually for details.`)
+    setRetryingIssues(false)
+  }
+
+  async function handleSyncInterval(docId: string, value: string) {
+    setSavingSyncId(docId); setActionError('')
     try {
-      const intervalHours = value ? Number(value) : null
-      const res = await apiRequest(`/agents/${agentId}/knowledge/${id}/sync`, {
-        method: 'PATCH',
-        body: JSON.stringify({ intervalHours }),
-      })
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: string }
-        throw new Error(data.error ?? 'Failed to update automatic syncing')
+      const response = await apiRequest(`/agents/${agentId}/knowledge/${docId}/sync`, { method: 'PATCH', body: JSON.stringify({ intervalHours: value ? Number(value) : null }) })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string }
+        throw new Error(data.error ?? 'Could not update automatic syncing.')
       }
       await fetchDocs()
-    } catch (err) {
-      setSyncConfigError(err instanceof Error ? err.message : 'Failed to update automatic syncing')
-    } finally {
-      setSavingSyncId(null)
-    }
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : 'Could not update automatic syncing.') }
+    finally { setSavingSyncId(null) }
   }
 
   return (
     <>
-      <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 0, marginBottom: 20 }}>
-        Pages and documents this agent can reference when answering questions. Website sources can refresh automatically.
-      </p>
-
-      {syncConfigError && (
-        <p role="alert" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--danger)', margin: '-8px 0 14px' }}>
-          <AlertCircle size={12} /> {syncConfigError}
-        </p>
-      )}
-
-      {/* Add URL */}
-      <div style={{ background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)', borderRadius: 'var(--r-md)', padding: 20, marginBottom: 20 }}>
-        <p style={{ fontSize: 12, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }}>Add a website URL</p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Globe size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-mute)', pointerEvents: 'none' }} />
-              <input
-                className="dashboard-field"
-              type="url"
-              value={urlInput}
-              onChange={(e) => { setUrlInput(e.target.value); setUrlError('') }}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAdd() } }}
-              placeholder="https://yourwebsite.com"
-              style={{
-                width: '100%', paddingLeft: 36, paddingRight: 12, paddingTop: 9, paddingBottom: 9,
-                borderRadius: 'var(--r-sm)', border: `1px solid ${urlError ? 'var(--danger)' : 'var(--line-2)'}`,
-                background: 'var(--control-surface)', color: 'var(--ink)', fontSize: 14,
-                fontFamily: 'var(--font-ui)', boxSizing: 'border-box',
-              }}
-              onFocus={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--accent)')}
-              onBlur={e => (e.currentTarget.style.borderColor = urlError ? 'var(--danger)' : 'var(--line-2)')}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleAdd()}
-            disabled={adding || !urlInput.trim()}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 'var(--r-sm)', opacity: adding || !urlInput.trim() ? 0.5 : 1, cursor: adding || !urlInput.trim() ? 'not-allowed' : 'pointer' }}
-          >
-            {adding ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={14} />}
-            {adding ? 'Adding…' : 'Add'}
-          </button>
-        </div>
-        {urlError && (
-          <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>
-            <AlertCircle size={12} /> {urlError}
-          </p>
-        )}
-        <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 8 }}>
-          We&apos;ll crawl the page and its linked pages (up to 25 pages).
-        </p>
-        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
-          <KnowledgeUpload
-            uploadPath={`/agents/${agentId}/knowledge/upload`}
-            onUploaded={() => {
-              trackProductEvent('Knowledge Source Added', { source_type: 'file', context: 'dashboard' })
-              void fetchDocs()
-            }}
-          />
-        </div>
+      <div className={styles.pageIntro}>
+        <p>Manage the information this agent uses to answer customers. Health checks highlight gaps before they affect conversations.</p>
+        <button type="button" className="btn btn-primary" onClick={() => setAddOpen((open) => !open)}>{addOpen ? <X size={14} /> : <Plus size={14} />}{addOpen ? 'Close' : 'Add knowledge'}</button>
       </div>
 
-      {/* Doc list */}
-      {loading ? (
-        <Loading pad="32px 0" />
-      ) : docs.length === 0 ? (
-        <EmptyState icon={<Globe size={32} />} title="No knowledge added yet." hint="Add your website above to get started." />
+      {actionError && <p className={styles.error} role="alert"><AlertCircle size={13} />{actionError}</p>}
+
+      {addOpen && (
+        <section className={styles.addPanel} aria-labelledby="add-knowledge-title">
+          <div className={styles.sectionHeading}><span className={styles.sectionIcon}><Plus size={15} /></span><div><h2 id="add-knowledge-title">Add knowledge</h2><p>Index a website or upload a document. New content stays out of answers until indexing completes.</p></div></div>
+          <div className={styles.urlField}>
+            <label htmlFor="knowledge-url">Website URL</label>
+            <div className={styles.urlRow}>
+              <div className={styles.inputShell} data-error={Boolean(urlError)}><Globe size={14} /><input id="knowledge-url" type="url" value={urlInput} onChange={(event) => { setUrlInput(event.target.value); setUrlError('') }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void handleAdd() } }} placeholder="https://docs.example.com" aria-describedby="knowledge-url-help" aria-invalid={Boolean(urlError)} /></div>
+              <button type="button" className="btn btn-primary" onClick={() => void handleAdd()} disabled={adding || !urlInput.trim()}>{adding ? <Loader2 size={14} className={styles.spin} /> : <Globe size={14} />}{adding ? 'Adding…' : 'Index website'}</button>
+            </div>
+            {urlError ? <small id="knowledge-url-help" className={styles.fieldError}><AlertCircle size={11} />{urlError}</small> : <small id="knowledge-url-help">We crawl the page and linked pages, up to 25 pages total.</small>}
+          </div>
+          <div className={styles.uploadDivider}><span>or upload a file</span></div>
+          <KnowledgeUpload uploadPath={`/agents/${agentId}/knowledge/upload`} onUploaded={() => { trackProductEvent('Knowledge Source Added', { source_type: 'file', context: 'dashboard' }); setAddOpen(false); void fetchDocs() }} />
+        </section>
+      )}
+
+      {!loading && docs.length > 0 && (
+        <section className={styles.healthPanel} aria-labelledby="knowledge-health-title">
+          <div className={styles.healthLead}>
+            <span className={`${styles.healthIcon} ${summary.issues ? styles.healthWarning : summary.processing ? styles.healthProgress : styles.healthReady}`}>{summary.issues ? <AlertTriangle size={18} /> : summary.processing ? <Loader2 size={18} className={styles.spin} /> : <ShieldCheck size={18} />}</span>
+            <div><h2 id="knowledge-health-title">{summary.issues ? 'Knowledge needs attention' : summary.processing ? 'Knowledge is updating' : 'Knowledge is ready'}</h2><p>{summary.issues ? `${summary.issues} ${summary.issues === 1 ? 'source has' : 'sources have'} stale, empty, or failed content.` : summary.processing ? `${summary.processing} ${summary.processing === 1 ? 'source is' : 'sources are'} currently being indexed.` : 'Every source is indexed and available to this agent.'}</p></div>
+            {summary.issues > 0 && <button type="button" className="btn btn-ghost" onClick={() => void handleRetryIssues()} disabled={retryingIssues}>{retryingIssues ? <Loader2 size={13} className={styles.spin} /> : <RefreshCw size={13} />}{retryingIssues ? 'Queuing…' : `Refresh ${summary.issues}`}</button>}
+          </div>
+          <div className={styles.readiness}><div><span>Readiness</span><strong>{summary.readiness}%</strong></div><div className={styles.progressTrack} aria-label={`${summary.readiness}% of knowledge sources ready`}><span style={{ width: `${summary.readiness}%` }} /></div></div>
+          <div className={styles.metrics}><div><Database size={13} /><span>Sources</span><strong>{summary.total}</strong></div><div><Check size={13} /><span>Ready</span><strong>{summary.ready}</strong></div><div><AlertTriangle size={13} /><span>Issues</span><strong>{summary.issues}</strong></div><div><FileText size={13} /><span>Chunks</span><strong>{summary.chunks.toLocaleString()}</strong></div></div>
+        </section>
+      )}
+
+      {loading ? <Loading pad="32px 0" /> : docs.length === 0 ? (
+        <button type="button" className={styles.emptyButton} onClick={() => setAddOpen(true)}><EmptyState icon={<Globe size={32} />} title="No knowledge added yet." hint="Add a website or document so this agent can answer with your information." /></button>
       ) : (
-        <div style={{ background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
-          {docs.map((doc, i) => {
-            const cfg = STATUS_CONFIG[doc.status]
-            return (
-              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i > 0 ? '1px solid var(--line)' : 'none' }}>
-                {doc.type === 'file' ? <FileText size={14} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} /> : <Globe size={14} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} />}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{doc.source}</p>
-                  {doc.status === 'indexed' && (
-                    <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>{doc.chunkCount} chunks indexed</p>
-                  )}
-                  {doc.status === 'error' && doc.errorMessage && (
-                    <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.errorMessage}</p>
-                  )}
-                  {doc.type === 'webpage' && doc.autoSyncEnabled && doc.syncIntervalHours && (
-                    <p style={{ fontSize: 12, color: doc.syncError ? 'var(--danger)' : 'var(--ink-mute)', marginTop: 2 }}>
-                      Auto-sync {SYNC_INTERVAL_LABELS[doc.syncIntervalHours].toLowerCase()}
-                      {formatTimestamp(doc.nextSyncAt) ? ` · Next ${formatTimestamp(doc.nextSyncAt)}` : ''}
-                      {doc.syncError ? ` · Last attempt failed` : ''}
-                    </p>
-                  )}
-                  {doc.type === 'webpage' && !doc.autoSyncEnabled && formatTimestamp(doc.lastSyncedAt) && (
-                    <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
-                      Last synced {formatTimestamp(doc.lastSyncedAt)}
-                    </p>
-                  )}
-                </div>
-                {doc.type === 'webpage' && (
-                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                    <select
-                      aria-label={`Automatic sync interval for ${doc.source}`}
-                      title="Automatic sync interval"
-                      value={doc.autoSyncEnabled && doc.syncIntervalHours ? String(doc.syncIntervalHours) : ''}
-                      disabled={savingSyncId === doc.id}
-                      onChange={(e) => void handleSyncInterval(doc.id, e.target.value)}
-                      style={{
-                        minWidth: 92, padding: '5px 24px 5px 8px', borderRadius: 8,
-                        border: '1px solid var(--line-2)', background: 'var(--control-surface)',
-                        color: 'var(--ink-dim)', fontSize: 12, fontFamily: 'var(--font-mono)',
-                        opacity: savingSyncId === doc.id ? 0.55 : 1,
-                      }}
-                    >
-                      <option value="">Auto-sync off</option>
-                      <option value="24">Daily</option>
-                      <option value="168">Weekly</option>
-                      <option value="720">Monthly</option>
-                    </select>
+        <section className={styles.sources} aria-labelledby="knowledge-sources-title">
+          <header className={styles.sourcesHeader}>
+            <div><h2 id="knowledge-sources-title">Sources</h2><p>{visibleDocs.length === docs.length ? `${docs.length} total` : `${visibleDocs.length} of ${docs.length}`}</p></div>
+            <div className={styles.filters} aria-label="Filter knowledge sources">{([['all', 'All'], ['ready', 'Ready'], ['processing', 'Indexing'], ['attention', 'Needs attention']] as const).map(([value, label]) => <button key={value} type="button" className={filter === value ? styles.filterActive : ''} onClick={() => setFilter(value)}>{label}{value === 'attention' && summary.issues > 0 ? <span>{summary.issues}</span> : null}</button>)}</div>
+            <label className={styles.search}><Search size={13} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources" aria-label="Search knowledge sources" />{query && <button type="button" onClick={() => setQuery('')} aria-label="Clear source search"><X size={12} /></button>}</label>
+          </header>
+
+          {visibleDocs.length === 0 ? <div className={styles.noResults}><Search size={18} /><p>No sources match this view.</p><button type="button" onClick={() => { setFilter('all'); setQuery('') }}>Clear filters</button></div> : (
+            <div className={styles.sourceList}>{visibleDocs.map((doc) => {
+              const health = knowledgeHealth(doc)
+              const lastIndexed = formatRelative(doc.indexedAt ?? doc.lastSyncedAt)
+              const exactIndexed = formatTimestamp(doc.indexedAt ?? doc.lastSyncedAt)
+              return (
+                <article key={doc.id} className={styles.sourceRow} data-health={health}>
+                  <span className={styles.sourceIcon}>{doc.type === 'file' ? <FileText size={15} /> : <Globe size={15} />}</span>
+                  <div className={styles.sourceCopy}>
+                    <div className={styles.sourceTitle}><strong title={doc.source}>{doc.source}</strong><span className={`${styles.badge} ${styles[`badge_${health}`]}`}><HealthIcon health={health} />{HEALTH_LABEL[health]}</span></div>
+                    <div className={styles.sourceMeta}><span>{doc.type === 'file' ? 'Document' : 'Website'}</span>{doc.chunkCount > 0 && <span>{doc.chunkCount.toLocaleString()} chunks</span>}{lastIndexed && <span title={exactIndexed ?? undefined}>Indexed {lastIndexed}</span>}{doc.type === 'webpage' && doc.autoSyncEnabled && doc.syncIntervalHours && <span>Syncs {SYNC_INTERVAL_LABELS[doc.syncIntervalHours].toLowerCase()}</span>}</div>
+                    {health === 'error' && <p className={styles.sourceError}>{doc.syncError || doc.errorMessage || 'Indexing failed. Try refreshing this source.'}{doc.syncFailures ? ` · ${doc.syncFailures} failed ${doc.syncFailures === 1 ? 'attempt' : 'attempts'}` : ''}</p>}
+                    {health === 'empty' && <p className={styles.sourceWarning}>No usable text was found. Check that this source contains readable content.</p>}
+                    {health === 'stale' && <p className={styles.sourceWarning}>This website has not been refreshed in over 30 days. Refresh it or enable automatic syncing.</p>}
+                    {doc.type === 'webpage' && doc.autoSyncEnabled && formatTimestamp(doc.nextSyncAt) && health !== 'error' && <p className={styles.nextSync}>Next sync {formatRelative(doc.nextSyncAt)} <span>· {formatTimestamp(doc.nextSyncAt)}</span></p>}
                   </div>
-                )}
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '3px 9px', borderRadius: 20, flexShrink: 0, ...cfg.style }}>
-                  {cfg.icon} {cfg.label}
-                </span>
-                {(doc.status === 'indexed' || doc.status === 'error') && (
-                  <button
-                    type="button"
-                    onClick={() => void handleReindex(doc.id)}
-                    disabled={reindexingId === doc.id}
-                    style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', opacity: reindexingId === doc.id ? 0.4 : 1, transition: 'color .15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-mute)')}
-                    aria-label={doc.type === 'webpage' ? 'Sync now' : 'Re-index'}
-                    title={doc.type === 'webpage' ? 'Sync now' : 'Re-index'}
-                  >
-                    {reindexingId === doc.id
-                      ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                      : <RotateCw size={14} />}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(doc.id)}
-                  disabled={deletingId === doc.id}
-                  style={{ flexShrink: 0, padding: 6, borderRadius: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', opacity: deletingId === doc.id ? 0.4 : 1, transition: 'color .15s' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--danger)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--ink-mute)')}
-                  aria-label="Delete"
-                >
-                  {deletingId === doc.id
-                    ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                    : <Trash2 size={14} />}
-                </button>
-              </div>
-            )
-          })}
-        </div>
+                  {doc.type === 'webpage' && <select className={styles.syncSelect} aria-label={`Automatic sync interval for ${doc.source}`} title="Automatic sync interval" value={doc.autoSyncEnabled && doc.syncIntervalHours ? String(doc.syncIntervalHours) : ''} disabled={savingSyncId === doc.id} onChange={(event) => void handleSyncInterval(doc.id, event.target.value)}><option value="">Auto-sync off</option><option value="24">Daily</option><option value="168">Weekly</option><option value="720">Monthly</option></select>}
+                  {(doc.status === 'indexed' || doc.status === 'error') && <button type="button" className={styles.iconButton} onClick={() => void handleReindex(doc.id)} disabled={reindexingId === doc.id} aria-label={doc.type === 'webpage' ? `Refresh ${doc.source}` : `Re-index ${doc.source}`} title={doc.type === 'webpage' ? 'Refresh now' : 'Re-index'}>{reindexingId === doc.id ? <Loader2 size={14} className={styles.spin} /> : <RotateCw size={14} />}</button>}
+                  <button type="button" className={`${styles.iconButton} ${styles.deleteButton}`} onClick={() => void handleDelete(doc)} disabled={deletingId === doc.id} aria-label={`Delete ${doc.source}`} title="Delete source">{deletingId === doc.id ? <Loader2 size={14} className={styles.spin} /> : <Trash2 size={14} />}</button>
+                </article>
+              )
+            })}</div>
+          )}
+        </section>
       )}
     </>
   )
