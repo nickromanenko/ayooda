@@ -41,6 +41,7 @@ import mcpRoutes from './routes/mcp'
 import internalRoutes from './routes/internal'
 import copilotRoutes from './routes/copilot'
 import sandboxRoutes from './routes/sandbox'
+import evaluationRoutes from './routes/evaluations'
 import connectorOAuthRoutes from './routes/connector-oauth'
 
 app.route('/auth', authRoutes)
@@ -63,6 +64,7 @@ app.route('/agents/:agentId/channels', agentChannelRoutes)
 app.route('/agents/:agentId/workflows', workflowRoutes)
 app.route('/agents/:agentId/usage', agentUsageRoutes)
 app.route('/agents/:agentId/sandbox', sandboxRoutes)
+app.route('/agents/:agentId/evaluations', evaluationRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)

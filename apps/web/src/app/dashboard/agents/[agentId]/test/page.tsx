@@ -22,6 +22,7 @@ import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import MarkdownMessage from '@/components/dashboard/MarkdownMessage'
 import { Loading } from '@/components/dashboard/Loading'
 import styles from './page.module.css'
+import EvaluationSuite from './EvaluationSuite'
 
 type Source = { docId: string; source: string; score: number }
 type SandboxMessage = {
@@ -215,6 +216,8 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
       <p className={styles.intro}>
         Test this agent with its real knowledge and workflow rules. Sandbox sessions stay out of the inbox, customer analytics, and conversation limits.
       </p>
+
+      <EvaluationSuite agentId={agentId} />
 
       <div className={styles.grid}>
         <aside className={styles.controlPanel}>
