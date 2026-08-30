@@ -5,6 +5,7 @@ import { requireAgent } from '../middleware/agent'
 import { shouldResetPeriod, checkEntitlement } from '../lib/billing/entitlement'
 import { averageTiming } from '../lib/analytics/timing'
 import { CONFIDENCE_TREND_DAYS, confidenceSummary, utcDateKey } from '../lib/analytics/confidence'
+import { periodTrends, USAGE_TREND_DAYS } from '../lib/analytics/period-trends'
 
 /**
  * Per-agent usage.
@@ -105,7 +106,8 @@ agentUsage.get('/', async (c) => {
   const confidenceStart = new Date(requestNow.getTime() - (CONFIDENCE_TREND_DAYS - 1) * 86_400_000)
   const confidenceStartKey = utcDateKey(confidenceStart)
 
-  const [totalAgg, resolvedAgg, takeoverAgg, waitingAgg, periodAgg, agentSnap, knowledgeSnap, channelsSnap, escalatedSnap, allTakeoversSnap, firstReplySnap, resolutionSnap, confidenceDailySnap] =
+  const trendStart = new Date(requestNow.getTime() - USAGE_TREND_DAYS * 2 * 86_400_000)
+  const [totalAgg, resolvedAgg, takeoverAgg, waitingAgg, periodAgg, agentSnap, knowledgeSnap, channelsSnap, escalatedSnap, allTakeoversSnap, firstReplySnap, resolutionSnap, confidenceDailySnap, trendSnap] =
     await Promise.all([
       mine.count().get(),
       mine.where('status', '==', 'resolved').count().get(),
@@ -143,6 +145,12 @@ agentUsage.get('/', async (c) => {
         .where('date', '>=', confidenceStartKey).orderBy('date', 'asc').limit(CONFIDENCE_TREND_DAYS).get()
         .catch((err: unknown) => {
           console.warn('[agent-usage] confidence trend unavailable:', err)
+          return null
+        }),
+      mine.where('createdAt', '>=', trendStart)
+        .select('createdAt', 'status', 'hadTakeover', 'firstReplyMs', 'score').get()
+        .catch((err: unknown) => {
+          console.warn('[agent-usage] period trends unavailable (index building?):', err)
           return null
         }),
     ])
@@ -223,6 +231,7 @@ agentUsage.get('/', async (c) => {
     handoffs,
     timing,
     confidence,
+    trends: trendSnap ? periodTrends(trendSnap.docs.map((doc) => doc.data()), requestNow) : null,
     csat,
     messages: {
       count: (agentUsageDoc.messageCount as number | undefined) ?? null,

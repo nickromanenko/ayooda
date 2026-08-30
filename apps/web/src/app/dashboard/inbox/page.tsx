@@ -60,6 +60,12 @@ interface Operator {
 
 type InboxFilter = 'all' | 'unread' | 'mine' | 'waiting' | 'human' | 'bot' | 'resolved'
 
+const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'unread', 'mine', 'waiting', 'human', 'bot', 'resolved']
+
+function isInboxFilter(value: string | null): value is InboxFilter {
+  return value !== null && INBOX_FILTERS.includes(value as InboxFilter)
+}
+
 const STATUS_STYLE: Record<Conversation['status'], React.CSSProperties> = {
   bot: { background: 'var(--accent-soft)', color: 'var(--accent-text)' },
   waiting: { background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' },
@@ -160,6 +166,32 @@ export default function InboxPage() {
   const conversationCursorRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null)
   const messageCursorRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null)
 
+  function updateFilterUrl(nextFilter: InboxFilter, nextAgentId: string) {
+    const url = new URL(window.location.href)
+    if (nextFilter === 'all') url.searchParams.delete('status')
+    else url.searchParams.set('status', nextFilter)
+    if (nextAgentId === 'all') url.searchParams.delete('agentId')
+    else url.searchParams.set('agentId', nextAgentId)
+    window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+  }
+
+  function changeFilter(nextFilter: InboxFilter) {
+    setFilter(nextFilter)
+    updateFilterUrl(nextFilter, agentFilter)
+  }
+
+  function changeAgentFilter(nextAgentId: string) {
+    setAgentFilter(nextAgentId)
+    updateFilterUrl(filter, nextAgentId)
+  }
+
+  function clearSearchAndFilters() {
+    setSearchInput('')
+    setFilter('all')
+    setAgentFilter('all')
+    updateFilterUrl('all', 'all')
+  }
+
   const workspaceId = workspace?.id
   const conversations = useMemo(() => {
     const merged = new Map<string, Conversation>()
@@ -176,6 +208,14 @@ export default function InboxPage() {
     ...messages.map((message) => ({ kind: 'message' as const, item: message })),
     ...notes.map((note) => ({ kind: 'note' as const, item: note })),
   ].sort((a, b) => (a.item.createdAt?.toMillis() ?? 0) - (b.item.createdAt?.toMillis() ?? 0)), [messages, notes])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const linkedFilter = params.get('status')
+    const linkedAgent = params.get('agentId')
+    if (isInboxFilter(linkedFilter)) setFilter(linkedFilter)
+    if (linkedAgent) setAgentFilter(linkedAgent)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -506,12 +546,12 @@ export default function InboxPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 4, padding: '8px 10px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
-          {(['all', 'unread', 'mine', 'waiting', 'human', 'bot', 'resolved'] as const).map((f) => (
+          {INBOX_FILTERS.map((f) => (
             <button
               key={f}
               type="button"
               aria-pressed={filter === f}
-              onClick={() => setFilter(f)}
+              onClick={() => changeFilter(f)}
               style={{
                 minHeight: 40, fontSize: 11.5, fontFamily: 'var(--font-mono)', padding: '0 10px', borderRadius: 20, cursor: 'pointer',
                 border: '1px solid var(--line)', textTransform: 'capitalize',
@@ -528,7 +568,7 @@ export default function InboxPage() {
             <select
               aria-label="Filter by agent"
               value={agentFilter}
-              onChange={(e) => setAgentFilter(e.target.value)}
+              onChange={(e) => changeAgentFilter(e.target.value)}
               style={{
                 width: '100%', minHeight: 40, fontSize: 12, padding: '5px 8px', borderRadius: 'var(--r-sm)',
                 border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)',
@@ -551,7 +591,7 @@ export default function InboxPage() {
               <MessageSquare size={28} style={{ opacity: 0.3 }} />
               <p style={{ fontSize: 13, margin: 0 }}>{searchResults || conversations.length ? 'No conversations match your search or filters.' : 'No conversations yet.'}</p>
               <p style={{ fontSize: 12.5, margin: 0, color: 'var(--ink-faint)' }}>{searchResults || conversations.length ? 'Clear the search and filters to see every conversation.' : 'They’ll appear here when visitors start chatting.'}</p>
-              {(searchResults || conversations.length > 0) && <button type="button" className="btn btn-ghost" onClick={() => { setSearchInput(''); setFilter('all'); setAgentFilter('all') }}>Clear search and filters</button>}
+              {(searchResults || conversations.length > 0) && <button type="button" className="btn btn-ghost" onClick={clearSearchAndFilters}>Clear search and filters</button>}
             </div>
           ) : (
             <>

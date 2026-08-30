@@ -6,6 +6,7 @@ import { Loader2, MessageSquare, Zap, Coins, BookOpen, Star, Download, Clock3, T
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, muted } from '@/components/dashboard/ui'
+import UsageDecisionLayer, { type UsageTrends } from './UsageDecisionLayer'
 
 interface Usage {
   conversations: { total: number; thisPeriod: number | null; resolved: number; automated: number; handedOff: number; waiting: number }
@@ -27,6 +28,7 @@ interface Usage {
   knowledge: { docs: number; indexed: number; chunks: number }
   channels: string[]
   workspace: { periodConversations: number; includedCap: number; periodStart: string | null; tier: string | null }
+  trends: UsageTrends | null
 }
 
 const nf = new Intl.NumberFormat('en-US')
@@ -180,6 +182,21 @@ export default function AgentUsagePage({ params }: { params: Promise<{ agentId: 
           Export CSV
         </button>
       </div>
+
+      <UsageDecisionLayer
+        input={{
+          agentId,
+          conversations: { total: u.conversations.total, resolved: u.conversations.resolved, waiting: u.conversations.waiting },
+          automationRate: u.automationRate,
+          handoffs: u.handoffs,
+          confidence: u.confidence,
+          csat: u.csat,
+          timing: { firstReply: u.timing.firstReply },
+          knowledge: { docs: u.knowledge.docs, indexed: u.knowledge.indexed },
+          workspace: { periodConversations: u.workspace.periodConversations, includedCap: u.workspace.includedCap },
+        }}
+        trends={u.trends}
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, marginBottom: 20 }}>
         <Tile

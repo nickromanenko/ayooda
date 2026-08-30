@@ -24,3 +24,10 @@ test('customer context supports exact conversation navigation', () => {
   assert.match(drawer, /onSelectConversation/)
   assert.match(overview, /inbox\?conversation=/)
 })
+
+test('Inbox accepts and preserves analytics deep-link filters', () => {
+  assert.match(inbox, /params\.get\('status'\)/)
+  assert.match(inbox, /params\.get\('agentId'\)/)
+  assert.match(inbox, /searchParams\.set\('status', nextFilter\)/)
+  assert.match(inbox, /searchParams\.set\('agentId', nextAgentId\)/)
+})
