@@ -11,7 +11,7 @@ import { customEndpointStatus, parseCustomEndpointBody, testCustomEndpoint } fro
 import { buildAgentReadiness } from '../lib/agent-readiness'
 import { agentCoreSnapshot, changedCoreFields, isAgentCoreSnapshot, type AgentCoreSnapshot } from '../lib/agents/version-history'
 import { parseDuplicateAgentInput, remapWorkflowAgentReferences } from '../lib/agents/duplicate'
-import { agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type GatewayModelCatalog, type WorkspaceRole } from '@ayooda/shared'
+import { agentRole, agentTemplate, isAgentRoleId, isAgentTemplateId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type GatewayModelCatalog, type WorkspaceRole } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
 agents.use('*', requireAuth)
@@ -91,7 +91,8 @@ agents.get('/', async (c) => {
 /** POST /agents — create a non-default agent with a fresh namespace. */
 agents.post('/', requireOwner, async (c) => {
   const ws = c.get('workspaceId')
-  const body = await c.req.json<{ name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string }>().catch(() => ({} as { name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string }))
+  const uid = c.get('uid')
+  const body = await c.req.json<{ name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string; templateId?: string }>().catch(() => ({} as { name?: string; description?: string; systemPrompt?: string; llmModel?: string; role?: string; templateId?: string }))
   const name = body.name?.trim()
   if (!name || name.length > 80) return c.json({ error: 'name is required (max 80 chars)' }, 400)
   if (body.llmModel !== undefined) {
@@ -99,10 +100,12 @@ agents.post('/', requireOwner, async (c) => {
     if (!model.ok) return c.json({ error: model.error }, model.reason === 'invalid' ? 400 : 503)
   }
   if (body.role !== undefined && !isAgentRoleId(body.role)) return c.json({ error: 'Invalid role' }, 400)
+  if (body.templateId !== undefined && !isAgentTemplateId(body.templateId)) return c.json({ error: 'Invalid agent template' }, 400)
+  const template = body.templateId ? agentTemplate(body.templateId) : undefined
 
   // The role's only job: seed the starting prompt so a freshly created agent is
   // already useful. An explicit systemPrompt in the body always wins.
-  const role = body.role ?? DEFAULT_AGENT_ROLE_ID
+  const role = body.role ?? template?.role ?? DEFAULT_AGENT_ROLE_ID
   const seededPrompt = agentRole(role)?.systemPrompt ?? DEFAULT_PROMPT
 
   const ref = adminDb.collection(`workspaces/${ws}/agents`).doc()
@@ -111,8 +114,8 @@ agents.post('/', requireOwner, async (c) => {
     name,
     photoURL: null,
     role,
-    description: body.description?.trim() ?? '',
-    systemPrompt: body.systemPrompt?.trim() || seededPrompt,
+    description: body.description?.trim() || template?.suggestedDescription || '',
+    systemPrompt: body.systemPrompt?.trim() || template?.systemPrompt || seededPrompt,
     llmModel: body.llmModel ?? DEFAULT_MODEL,
     knowledgeNamespace: agentNamespace(ws, ref.id),
     isDefault: false,
@@ -123,8 +126,47 @@ agents.post('/', requireOwner, async (c) => {
     usage: { messageCount: 0, tokenCount: 0, trackedSince: now },
     createdAt: now,
     updatedAt: now,
+    ...(template ? { templateId: template.id } : {}),
   }
-  await ref.set(doc)
+  if (!template) {
+    await ref.set(doc)
+  } else {
+    const batch = adminDb.batch()
+    batch.set(ref, doc)
+    template.skills.forEach((skill) => {
+      batch.set(ref.collection('skills').doc(skill.id), {
+        enabled: true,
+        config: skill.config,
+        createdAt: now,
+        updatedAt: now,
+      })
+    })
+    template.rules.forEach((rule, order) => {
+      batch.set(ref.collection('workflowRules').doc(`template-${rule.id}`), {
+        name: rule.name,
+        enabled: true,
+        order,
+        trigger: rule.trigger,
+        action: rule.action,
+        createdAt: now,
+        updatedAt: now,
+      })
+    })
+    template.tests.forEach((testCase) => {
+      batch.set(ref.collection('evaluationCases').doc(`template-${testCase.id}`), {
+        name: testCase.name,
+        prompt: testCase.prompt,
+        expectedIncludes: testCase.expectedIncludes,
+        forbiddenIncludes: testCase.forbiddenIncludes,
+        expectedOutcome: testCase.expectedOutcome,
+        enabled: true,
+        createdBy: uid,
+        createdAt: now,
+        updatedAt: now,
+      })
+    })
+    await batch.commit()
+  }
   return c.json(toAgentDoc(ref.id, doc))
 })
 

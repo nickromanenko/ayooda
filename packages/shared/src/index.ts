@@ -335,6 +335,7 @@ export function validateKnowledgeFile(
 export * from './plans'
 export * from './skills'
 export * from './agent-roles'
+export * from './agent-templates'
 export * from './mcp'
 
 export type ChatStreamEvent =

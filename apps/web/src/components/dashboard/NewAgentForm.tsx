@@ -1,18 +1,28 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Upload, X } from 'lucide-react'
+import { BookOpenCheck, Compass, Headphones, Loader2, Sparkles, TrendingUp, Upload, X } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import {
   AGENT_ROLES,
+  AGENT_TEMPLATES,
   DEFAULT_AGENT_ROLE_ID,
   MAX_AGENT_IMAGE_BYTES,
   validateAgentImage,
+  type AgentTemplateId,
   type AgentDoc,
 } from '@ayooda/shared'
 import AgentAvatar from './AgentAvatar'
 import { card, label, input } from './ui'
+import styles from './NewAgentForm.module.css'
+
+const TEMPLATE_ICONS = {
+  'support-desk': Headphones,
+  'sales-concierge': TrendingUp,
+  'onboarding-guide': Compass,
+  'knowledge-expert': BookOpenCheck,
+} satisfies Record<AgentTemplateId, typeof Headphones>
 
 /**
  * Creates an agent only on submit. The chosen logo is held in memory and
@@ -27,6 +37,7 @@ export default function NewAgentForm({
   onCreated: (agent: AgentDoc, warning?: string) => void
   onCancel: () => void
 }) {
+  const [templateId, setTemplateId] = useState<AgentTemplateId | ''>('support-desk')
   const [role, setRole] = useState<string>(DEFAULT_AGENT_ROLE_ID)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -35,6 +46,7 @@ export default function NewAgentForm({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const template = templateId ? AGENT_TEMPLATES.find((item) => item.id === templateId) : undefined
 
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview)
@@ -66,7 +78,11 @@ export default function NewAgentForm({
     try {
       const res = await apiRequest('/agents', {
         method: 'POST',
-        body: JSON.stringify({ name: trimmed, description: description.trim(), role }),
+        body: JSON.stringify({
+          name: trimmed,
+          description: description.trim(),
+          ...(templateId ? { templateId } : { role }),
+        }),
       })
       const agent = await res.json().catch(() => ({})) as AgentDoc & { error?: string }
       if (!res.ok) { setError(agent.error ?? 'Could not create the agent'); return }
@@ -86,49 +102,70 @@ export default function NewAgentForm({
         }
       }
       if (preview) URL.revokeObjectURL(preview)
-      trackProductEvent('Agent Created', { role, has_logo: Boolean(file) })
+      trackProductEvent('Agent Created', { role: template?.role ?? role, template_id: templateId || 'blank', has_logo: Boolean(file) })
       onCreated(agent, warning)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not create the agent. Please try again.')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <form onSubmit={submit} style={card}>
+    <form onSubmit={submit} style={card} className={styles.form}>
       <p style={label}>New agent</p>
 
       <div style={{ marginBottom: 20 }}>
-        <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginBottom: 10 }}>
-          What is this agent for? This sets its starting instructions — you can edit them any time.
+        <p className={styles.intro}>
+          Choose a proven starting point. Templates add editable instructions, safe workflows, built-in skills, and regression checks.
         </p>
-        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
-          {AGENT_ROLES.map((r) => {
-            const selected = r.id === role
+        <div className={styles.templateGrid}>
+          {AGENT_TEMPLATES.map((item) => {
+            const selected = item.id === templateId
+            const Icon = TEMPLATE_ICONS[item.id]
             return (
               <button
-                key={r.id}
+                key={item.id}
                 type="button"
-                onClick={() => setRole(r.id)}
+                onClick={() => setTemplateId(item.id)}
                 aria-pressed={selected}
-                style={{
-                  textAlign: 'left',
-                  padding: '12px 14px',
-                  borderRadius: 'var(--r-sm)',
-                  border: `1px solid ${selected ? 'var(--control-primary)' : 'var(--line-2)'}`,
-                  background: selected ? 'var(--control-selected)' : 'var(--control-surface)',
-                  color: selected ? 'var(--control-selected-text)' : 'var(--ink)',
-                  cursor: 'pointer',
-                }}
+                autoFocus={item.id === 'support-desk'}
+                className={styles.templateCard}
+                data-selected={selected}
               >
-                <span style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{r.label}</span>
-                <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-mute)', lineHeight: 1.4 }}>
-                  {r.description}
-                </span>
+                <span className={styles.templateIcon}><Icon size={17} /></span>
+                <span className={styles.templateCopy}><strong>{item.label}</strong><small>{item.description}</small></span>
               </button>
             )
           })}
+          <button type="button" onClick={() => setTemplateId('')} aria-pressed={!templateId} className={styles.templateCard} data-selected={!templateId}>
+            <span className={styles.templateIcon}><Sparkles size={17} /></span>
+            <span className={styles.templateCopy}><strong>Blank agent</strong><small>Choose only a role and configure everything yourself.</small></span>
+          </button>
         </div>
       </div>
+
+      {template ? (
+        <div className={styles.templateSummary} aria-live="polite">
+          <div><strong>{template.label} includes</strong><span>Everything remains editable after creation.</span></div>
+          <ul>{template.highlights.map((highlight) => <li key={highlight}>{highlight}</li>)}</ul>
+          <p>Knowledge, connections, channels, credentials, and deployment start empty.</p>
+        </div>
+      ) : (
+        <div className={styles.roleSection}>
+          <p className={styles.roleHeading}>What is this agent for? This sets only its starting instructions.</p>
+          <div className={styles.roleGrid}>
+            {AGENT_ROLES.map((item) => {
+              const selected = item.id === role
+              return (
+                <button key={item.id} type="button" onClick={() => setRole(item.id)} aria-pressed={selected} className={styles.roleCard} data-selected={selected}>
+                  <strong>{item.label}</strong><small>{item.description}</small>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
@@ -165,16 +202,15 @@ export default function NewAgentForm({
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <input
             style={input}
-            placeholder="Agent name — e.g. Amy"
+            placeholder={template ? `Agent name — e.g. ${template.suggestedName}` : 'Agent name — e.g. Amy'}
             value={name}
             maxLength={80}
             disabled={busy}
             onChange={(e) => setName(e.target.value)}
-            autoFocus
           />
           <input
             style={input}
-            placeholder="Short description (optional)"
+            placeholder={template?.suggestedDescription ?? 'Short description (optional)'}
             value={description}
             disabled={busy}
             onChange={(e) => setDescription(e.target.value)}
@@ -183,8 +219,7 @@ export default function NewAgentForm({
       </div>
 
       <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 16 }}>
-        PNG, JPG or WebP up to {Math.round(MAX_AGENT_IMAGE_BYTES / (1024 * 1024))} MB. Model, skills and
-        knowledge are configured after creation.
+        PNG, JPG or WebP up to {Math.round(MAX_AGENT_IMAGE_BYTES / (1024 * 1024))} MB. Model and knowledge are configured after creation.
       </p>
 
       {error && <p style={{ fontSize: 13, color: 'var(--danger)', marginBottom: 14 }}>{error}</p>}

@@ -11,7 +11,7 @@ export interface ProductEventMap {
   'Marketing CTA Clicked': { cta: string; destination: string; page: string }
   'Sign Up Completed': { method: AuthMethod }
   'Sign In Completed': { method: AuthMethod }
-  'Agent Created': { role: string; has_logo: boolean }
+  'Agent Created': { role: string; template_id: string; has_logo: boolean }
   'Knowledge Source Added': { source_type: 'website' | 'file'; context: AnalyticsContext }
   'Agent Test Started': { tools_enabled: boolean }
   'Channel Connected': {
