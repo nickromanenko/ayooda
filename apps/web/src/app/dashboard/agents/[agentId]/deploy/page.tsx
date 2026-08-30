@@ -7,6 +7,7 @@ import { trackProductEvent } from '@/lib/product-analytics'
 import { Loading } from '@/components/dashboard/Loading'
 import { label, errorText, input } from '@/components/dashboard/ui'
 import WidgetAppearance from '@/components/dashboard/WidgetAppearance'
+import LaunchReadiness from './LaunchReadiness'
 import {
   DEFAULT_WIDGET_APPEARANCE,
   type WidgetAppearance as Appearance,
@@ -102,10 +103,14 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
   const [smsBusy, setSmsBusy] = useState(false)
   const [smsWebhookUrl, setSmsWebhookUrl] = useState('')
   const [smsCopied, setSmsCopied] = useState(false)
+  const [readinessVersion, setReadinessVersion] = useState(0)
 
   const fetchChannels = useCallback(async () => {
     const res = await apiRequest(base)
-    if (res.ok) setChannels(await res.json() as Channel[])
+    if (res.ok) {
+      setChannels(await res.json() as Channel[])
+      setReadinessVersion((version) => version + 1)
+    }
   }, [base])
 
   useEffect(() => {
@@ -291,8 +296,11 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
         Where this agent reaches people. Each connection keeps its own identity, credentials, and conversation history.
       </p>
 
+      <LaunchReadiness agentId={agentId} refreshKey={readinessVersion} />
+
       {/* Web widget */}
-      <div style={panel}>
+      <div id="channels" />
+      <div id="website-widget" style={panel}>
         <div style={head}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <div style={icon}><Code size={16} style={{ color: 'var(--accent-text)' }} /></div>

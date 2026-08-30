@@ -8,6 +8,7 @@ import { decryptSecret, encryptSecret } from '../lib/crypto'
 import { gatewayKeyStatus, parseGatewayKeyBody, testGatewayKey } from '../lib/llm/gateway-key'
 import { loadGatewayModelCatalog, recommendedGatewayModels, validateGatewayModelSelection } from '../lib/llm/model-catalog'
 import { customEndpointStatus, parseCustomEndpointBody, testCustomEndpoint } from '../lib/llm/custom-endpoint'
+import { buildAgentReadiness } from '../lib/agent-readiness'
 import { agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type GatewayModelCatalog, type WorkspaceRole } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
@@ -125,6 +126,62 @@ agents.get('/:id/models', async (c) => {
     }
     return c.json(fallback)
   }
+})
+
+/** GET /agents/:id/readiness — actionable launch checks derived from current configuration. */
+agents.get('/:id/readiness', async (c) => {
+  const gate = await editableAgent(c)
+  if (!gate.ok) return c.json(denied(gate.status), gate.status)
+  const workspaceId = c.get('workspaceId')
+  const agentId = c.req.param('id')
+  const [knowledgeSnap, runSnap, channelSnap, graphSnap, ruleSnap] = await Promise.all([
+    gate.ref.collection('knowledge').get(),
+    gate.ref.collection('evaluationRuns').orderBy('createdAt', 'desc').limit(1).get(),
+    adminDb.collection(`workspaces/${workspaceId}/channels`).where('agentId', '==', agentId).get(),
+    gate.ref.collection('workflowGraph').doc('main').get(),
+    gate.ref.collection('workflowRules').where('enabled', '==', true).get(),
+  ])
+  const knowledgeRows = knowledgeSnap.docs.map((doc) => doc.data())
+  const staleCutoff = Date.now() - 30 * 86_400_000
+  const knowledgeIssue = (row: DocumentData) => {
+    const indexedAt = typeof row.indexedAt?.toDate === 'function' ? row.indexedAt.toDate() as Date : null
+    const stale = row.type === 'webpage' && row.status === 'indexed' && row.autoSyncEnabled !== true
+      && (!indexedAt || indexedAt.getTime() < staleCutoff)
+    return row.status === 'error' || row.syncError || (row.status === 'indexed' && Number(row.chunkCount) <= 0) || stale
+  }
+  const knowledgeReady = knowledgeRows.filter((row) => row.status === 'indexed' && Number(row.chunkCount) > 0 && !knowledgeIssue(row)).length
+  const knowledgeIssues = knowledgeRows.filter(knowledgeIssue).length
+  const latestRun = runSnap.docs[0]?.data()
+  const channels = channelSnap.docs.map((doc) => doc.data())
+  const widget = channels.find((channel) => channel.type === 'web_widget')
+  const liveChannels = channels.filter((channel) => channel.isActive !== false && (channel.type !== 'web_widget' || channel.lastSeenAt)).length
+  const graphHasHandoff = graphSnap.exists && Array.isArray(graphSnap.data()?.nodes)
+    && graphSnap.data()!.nodes.some((node: { kind?: string; action?: { type?: string } }) => node.kind === 'action' && ['escalate', 'assign_teammate'].includes(node.action?.type ?? ''))
+  const ruleHasHandoff = ruleSnap.docs.some((doc) => ['escalate', 'assign_teammate'].includes(doc.data().action?.type))
+  const custom = gate.data.customEndpoint as { baseURL?: unknown; modelId?: unknown } | undefined
+  const runtimeConfigured = Boolean(
+    (typeof custom?.baseURL === 'string' && typeof custom.modelId === 'string')
+    || gate.data.gatewayKey
+    || process.env.AI_GATEWAY_API_KEY,
+  )
+  return c.json(buildAgentReadiness({
+    agentId,
+    name: String(gate.data.name ?? ''),
+    systemPrompt: String(gate.data.systemPrompt ?? ''),
+    llmModel: String(gate.data.llmModel ?? ''),
+    runtimeConfigured,
+    knowledgeReady,
+    knowledgeTotal: knowledgeRows.length,
+    knowledgeIssues,
+    evaluationPassed: Number(latestRun?.passed ?? 0),
+    evaluationTotal: Number(latestRun?.total ?? 0),
+    liveChannels,
+    configuredChannels: channels.length,
+    widgetConfigured: Boolean(widget),
+    widgetInstalled: Boolean(widget?.lastSeenAt),
+    widgetDomains: Array.isArray(widget?.config?.allowedDomains) ? widget.config.allowedDomains.length : 0,
+    handoffConfigured: Boolean(graphHasHandoff || ruleHasHandoff),
+  }))
 })
 
 /** GET /agents/:id */
