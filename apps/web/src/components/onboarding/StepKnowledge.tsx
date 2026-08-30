@@ -53,6 +53,7 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
   const [adding, setAdding] = useState(false)
   const [urlError, setUrlError] = useState('')
   const [agentId, setAgentId] = useState('')
+  const [removingId, setRemovingId] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -92,8 +93,18 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
     if (e.key === 'Enter') { e.preventDefault(); void handleAddUrl() }
   }
 
-  function removeUrl(docId: string) {
-    setQueued(prev => prev.filter(q => q.docId !== docId))
+  async function removeSource(docId: string) {
+    if (!agentId || removingId) return
+    setRemovingId(docId); setUrlError('')
+    try {
+      const response = await apiRequest(`/agents/${agentId}/knowledge/${docId}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Could not remove this source')
+      setQueued((current) => current.filter((item) => item.docId !== docId))
+    } catch (cause) {
+      setUrlError(cause instanceof Error ? cause.message : 'Could not remove this source')
+    } finally {
+      setRemovingId(null)
+    }
   }
 
   return (
@@ -154,8 +165,8 @@ export function StepKnowledge({ onDone, onBack }: { onDone: () => void; onBack: 
                 <StatusIcon status={item.status} />
                 <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.url}</span>
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: STATUS_COLOR[item.status], flexShrink: 0 }}>{STATUS_LABEL[item.status]}</span>
-                <button type="button" onClick={() => removeUrl(item.docId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', padding: 2, display: 'flex' }}>
-                  <X size={13} />
+                <button type="button" aria-label={`Remove ${item.url}`} title="Remove source" disabled={removingId !== null} onClick={() => void removeSource(item.docId)} style={{ width: 40, height: 40, flexShrink: 0, background: 'none', border: 'none', borderRadius: '50%', cursor: removingId ? 'wait' : 'pointer', color: 'var(--ink-mute)', padding: 0, display: 'grid', placeItems: 'center', opacity: removingId && removingId !== item.docId ? 0.45 : 1 }}>
+                  {removingId === item.docId ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <X size={13} />}
                 </button>
               </li>
             ))}

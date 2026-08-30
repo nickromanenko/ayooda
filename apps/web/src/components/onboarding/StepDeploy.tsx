@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Check, Copy, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Check, Copy, Loader2, RefreshCw } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import type { IdentityData } from './StepIdentity'
@@ -10,29 +10,34 @@ export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDon
   const [embedCode, setEmbedCode] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const createChannel = useCallback(async () => {
+    setLoading(true); setError('')
+    try {
+      // Channels belong to an agent, so resolve the workspace's default agent
+      // (created during sign-up) before asking for its widget.
+      const agentsRes = await apiRequest('/agents')
+      if (!agentsRes.ok) throw new Error('Failed to load your agent')
+      const { agents } = (await agentsRes.json()) as { agents: { id: string; isDefault: boolean }[] }
+      const agentId = agents.find((a) => a.isDefault)?.id ?? agents[0]?.id
+      if (!agentId) throw new Error('No agent to deploy yet')
+
+      const res = await apiRequest(`/agents/${agentId}/channels/web-widget`, { method: 'POST' })
+      if (!res.ok) throw new Error('Failed to create widget channel')
+      const data = (await res.json()) as { embedCode: string }
+      setEmbedCode(data.embedCode)
+      trackProductEvent('Channel Connected', { channel_type: 'web_widget', context: 'onboarding' })
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    async function createChannel() {
-      try {
-        // Channels belong to an agent, so resolve the workspace's default agent
-        // (created during sign-up) before asking for its widget.
-        const agentsRes = await apiRequest('/agents')
-        if (!agentsRes.ok) throw new Error('Failed to load your agent')
-        const { agents } = (await agentsRes.json()) as { agents: { id: string; isDefault: boolean }[] }
-        const agentId = agents.find((a) => a.isDefault)?.id ?? agents[0]?.id
-        if (!agentId) throw new Error('No agent to deploy yet')
-
-        const res = await apiRequest(`/agents/${agentId}/channels/web-widget`, { method: 'POST' })
-        if (!res.ok) throw new Error('Failed to create widget channel')
-        const data = (await res.json()) as { embedCode: string }
-        setEmbedCode(data.embedCode)
-        trackProductEvent('Channel Connected', { channel_type: 'web_widget', context: 'onboarding' })
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Something went wrong')
-      }
-    }
-    createChannel()
-  }, [])
+    void createChannel()
+  }, [createChannel])
 
   async function handleCopy() {
     if (!embedCode) return
@@ -71,6 +76,8 @@ export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDon
           </pre>
           <button
             type="button" onClick={() => void handleCopy()}
+            aria-label={copied ? 'Embed code copied' : 'Copy embed code'}
+            title={copied ? 'Copied' : 'Copy embed code'}
             style={{
               position: 'absolute', top: 8, right: 8,
               width: 40, height: 40, padding: 0, borderRadius: 8, cursor: 'pointer',
@@ -84,8 +91,11 @@ export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDon
           </button>
         </div>
       ) : error ? (
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)', fontSize: 13 }}>
-          {error}
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger)', fontSize: 13 }}>
+          <span style={{ flex: 1 }}>{error}</span>
+          <button type="button" className="btn btn-ghost" onClick={() => void createChannel()} disabled={loading} style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <RefreshCw size={13} /> Retry
+          </button>
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--ink-mute)', padding: '16px 0' }}>
@@ -122,8 +132,9 @@ export function StepDeploy({ identity, onDone }: { identity: IdentityData; onDon
         className="btn btn-primary"
         style={{ justifyContent: 'center', borderRadius: 'var(--r-sm)', opacity: !embedCode ? 0.5 : 1, cursor: !embedCode ? 'not-allowed' : 'pointer' }}
       >
-        Go to dashboard →
+        Continue to dashboard →
       </button>
+      {embedCode && <p style={{ margin: '-14px 0 0', color: 'var(--ink-faint)', fontSize: 11.5, lineHeight: 1.45, textAlign: 'center' }}>The Overview checklist will keep this step open until the widget connects from your website for the first time.</p>}
     </div>
   )
 }

@@ -117,6 +117,10 @@ agentChannels.post('/web-widget', async (c) => {
 
   const existing = await channelOfType(workspaceId, agentId, 'web_widget')
   if (existing) {
+    // A previous onboarding attempt may have created the widget before the
+    // workspace completion flag was persisted. Keep this idempotent path able
+    // to repair that state so the user is not redirected back into onboarding.
+    await adminDb.doc(`workspaces/${workspaceId}`).update({ onboardingComplete: true })
     return c.json({ channelId: existing.id, embedCode: existing.data().embedCode })
   }
 

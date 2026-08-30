@@ -4,7 +4,7 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import Link from 'next/link'
 import { MessageSquare, BookOpen, Bot, Zap, Radio, ChevronRight } from 'lucide-react'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin'
-import { GetStartedStep } from '@/components/dashboard/GetStartedStep'
+import { ActivationChecklist, type ActivationStep } from '@/components/dashboard/ActivationChecklist'
 import { BillingBanner } from '@/components/dashboard/BillingBanner'
 import { PageHeader } from '@/components/dashboard/DashboardPrimitives'
 
@@ -17,6 +17,7 @@ interface AgentRow {
   indexedDocs: number
   chunks: number
   channels: string[]
+  configuredChannels: number
 }
 
 async function loadOverview() {
@@ -67,11 +68,30 @@ async function loadOverview() {
         indexedDocs: indexed.length,
         chunks: indexed.reduce((sum, d) => sum + ((d.chunkCount as number) ?? 0), 0),
         channels: channelsSnap.docs
-          .filter((c) => c.data().agentId === a.id)
+          .filter((c) => c.data().agentId === a.id && c.data().isActive !== false && (c.data().type !== 'web_widget' || c.data().lastSeenAt))
           .map((c) => channelLabel(c.data().type as string)),
+        configuredChannels: channelsSnap.docs.filter((c) => c.data().agentId === a.id).length,
       }
     })
     agents.sort((x, y) => (x.isDefault === y.isDefault ? x.name.localeCompare(y.name) : x.isDefault ? -1 : 1))
+
+    const activationAgent = agents[0]
+    const activationAgentDoc = activationAgent ? agentsSnap.docs.find((doc) => doc.id === activationAgent.id) : null
+    let evaluationPassed = false
+    let handoffConfigured = false
+    if (activationAgentDoc) {
+      const [runSnap, graphSnap, ruleSnap] = await Promise.all([
+        activationAgentDoc.ref.collection('evaluationRuns').orderBy('createdAt', 'desc').limit(1).get(),
+        activationAgentDoc.ref.collection('workflowGraph').doc('main').get(),
+        activationAgentDoc.ref.collection('workflowRules').where('enabled', '==', true).get(),
+      ])
+      const latestRun = runSnap.docs[0]?.data()
+      evaluationPassed = Number(latestRun?.total ?? 0) > 0 && Number(latestRun?.passed ?? 0) === Number(latestRun?.total ?? 0)
+      const graphHasHandoff = graphSnap.exists && Array.isArray(graphSnap.data()?.nodes)
+        && graphSnap.data()!.nodes.some((node: { kind?: string; action?: { type?: string } }) => node.kind === 'action' && ['escalate', 'assign_teammate'].includes(node.action?.type ?? ''))
+      const ruleHasHandoff = ruleSnap.docs.some((doc) => ['escalate', 'assign_teammate'].includes(doc.data().action?.type))
+      handoffConfigured = Boolean(graphHasHandoff || ruleHasHandoff)
+    }
 
     const totalConversations = totalConvAgg.data().count
     const resolved = resolvedAgg.data().count
@@ -91,7 +111,19 @@ async function loadOverview() {
       chunkCount,
       liveAgentCount,
       agents,
-      agentConfigured: agents.length > 0 && Boolean(agentsSnap.docs[0]?.data().description),
+      activation: {
+        agentName: activationAgent?.name ?? 'your first agent',
+        agentConfigured: Boolean(activationAgentDoc && (
+          String(activationAgentDoc.data().name ?? '') !== 'Support Agent'
+          || String(activationAgentDoc.data().description ?? '').trim()
+          || String(activationAgentDoc.data().systemPrompt ?? '') !== 'You are a helpful customer support agent. Answer questions based on the provided context.'
+        )),
+        knowledgeReady: (activationAgent?.indexedDocs ?? 0) > 0,
+        evaluationPassed,
+        handoffConfigured,
+        channelConfigured: (activationAgent?.configuredChannels ?? 0) > 0,
+        channelLive: (activationAgent?.channels.length ?? 0) > 0,
+      },
       recent: recentSnap.docs.map((d) => {
         const data = d.data()
         return {
@@ -153,11 +185,39 @@ export default async function DashboardPage() {
   ]
 
   const firstAgentId = o.agents[0]?.id
+  const activationBase = firstAgentId ? `/dashboard/agents/${firstAgentId}` : '/dashboard/agents'
+  const activationSteps: ActivationStep[] = [
+    {
+      id: 'identity', title: 'Configure identity', action: 'Configure', done: o.activation.agentConfigured,
+      description: 'Set a recognizable name, purpose, instructions, and model.', href: activationBase,
+    },
+    {
+      id: 'knowledge', title: 'Index trusted knowledge', action: 'Add knowledge', done: o.activation.knowledgeReady,
+      description: 'Give the agent at least one indexed source it can rely on.', href: firstAgentId ? `${activationBase}/knowledge` : activationBase,
+    },
+    {
+      id: 'tests', title: 'Pass regression tests', action: 'Create tests', done: o.activation.evaluationPassed,
+      description: 'Verify important answers and hand-off behavior before launch.', href: firstAgentId ? `${activationBase}/test` : activationBase,
+    },
+    {
+      id: 'handoff', title: 'Configure human hand-off', action: 'Set workflow', done: o.activation.handoffConfigured,
+      description: 'Give uncertain or sensitive requests a safe path to a teammate.', href: firstAgentId ? `${activationBase}/escalation` : activationBase,
+    },
+    {
+      id: 'channel', title: 'Launch a channel', action: o.activation.channelConfigured ? 'Finish installation' : 'Deploy', done: o.activation.channelLive,
+      description: o.activation.channelConfigured && !o.activation.channelLive
+        ? 'The channel is configured but has not received its first live connection.'
+        : 'Connect a customer channel and verify that it receives traffic.',
+      href: firstAgentId ? `${activationBase}/deploy` : activationBase,
+    },
+  ]
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       <BillingBanner />
       <PageHeader title="Overview" description="Your support agents at a glance" />
+
+      <ActivationChecklist agentName={o.activation.agentName} steps={activationSteps} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
         {stats.map((stat) => (
@@ -221,33 +281,6 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Get started */}
-      <div style={{ ...panelStyle, marginBottom: 0 }}>
-        <div style={eyebrow}>Get started</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <GetStartedStep
-            number={1}
-            title="Configure your agent"
-            description="Give your agent a name, avatar, and personality."
-            href={firstAgentId ? `/dashboard/agents/${firstAgentId}` : '/dashboard/agents'}
-            done={o.agentConfigured}
-          />
-          <GetStartedStep
-            number={2}
-            title="Add your knowledge base"
-            description="Paste your website URL or upload documents."
-            href={firstAgentId ? `/dashboard/agents/${firstAgentId}/knowledge` : '/dashboard/agents'}
-            done={o.indexedDocCount > 0}
-          />
-          <GetStartedStep
-            number={3}
-            title="Deploy the widget"
-            description="Copy a script tag and paste it into your website."
-            href={firstAgentId ? `/dashboard/agents/${firstAgentId}/deploy` : '/dashboard/agents'}
-            done={o.liveAgentCount > 0}
-          />
-        </div>
-      </div>
     </div>
   )
 }

@@ -1,0 +1,33 @@
+.panel { margin-bottom: 24px; overflow: hidden; border-radius: var(--r-md); background: var(--panel); box-shadow: var(--shadow-soft); }
+.summary { min-height: 82px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto 40px; align-items: center; gap: 12px; padding: 14px 16px 18px; position: relative; cursor: pointer; list-style: none; transition-property: background-color; transition-duration: 150ms; }
+.summary::-webkit-details-marker { display: none; }
+.summary:hover { background: var(--panel-2); }
+.summary:focus-visible { outline: 2px solid var(--control-focus); outline-offset: -2px; }
+.heroIcon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: var(--accent-soft); color: var(--accent-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
+.completeIcon { background: color-mix(in srgb, var(--mint) 11%, transparent); color: var(--mint); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint) 18%, transparent); }
+.summaryCopy { min-width: 0; }
+.summaryCopy strong { display: block; color: var(--ink); font-size: 15px; font-weight: 650; text-wrap: balance; }
+.summaryCopy small { display: block; margin-top: 3px; color: var(--ink-mute); font-size: 12px; line-height: 1.45; text-wrap: pretty; }
+.progressCopy { text-align: right; font-variant-numeric: tabular-nums; }
+.progressCopy strong { display: block; color: var(--ink); font: 600 16px var(--font-mono); }
+.progressCopy small { display: block; margin-top: 2px; color: var(--ink-faint); font-size: 10.5px; white-space: nowrap; }
+.chevron { justify-self: center; color: var(--ink-mute); transition-property: rotate; transition-duration: 170ms; transition-timing-function: cubic-bezier(.2, 0, 0, 1); }
+.panel[open] .chevron { rotate: 180deg; }
+.progressTrack { height: 3px; position: absolute; right: 0; bottom: 0; left: 0; overflow: hidden; background: var(--panel-2); }
+.progressTrack > span { height: 100%; display: block; border-radius: 0 999px 999px 0; background: var(--accent); transition-property: width; transition-duration: 220ms; }
+.steps { border-top: 1px solid var(--line); }
+.step { min-height: 72px; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 11px 16px; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; transition-property: background-color; transition-duration: 150ms; }
+.step:hover { background: var(--panel-2); }
+.step:focus-visible { outline: 2px solid var(--control-focus); outline-offset: -2px; }
+.step[data-next='true'] { background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+.stepIcon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: var(--ink-faint); box-shadow: inset 0 0 0 1px var(--line-2); }
+.step[data-complete='true'] .stepIcon { background: color-mix(in srgb, var(--mint) 12%, transparent); color: var(--mint); box-shadow: none; }
+.step[data-next='true'] .stepIcon { background: var(--accent-soft); color: var(--accent-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); }
+.stepCopy { min-width: 0; }
+.stepCopy strong { display: block; color: var(--ink-dim); font-size: 13px; font-weight: 600; text-wrap: balance; }
+.stepCopy small { display: block; margin-top: 3px; color: var(--ink-mute); font-size: 11.5px; line-height: 1.45; text-wrap: pretty; }
+.action { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 9px; color: var(--ink-mute); font-size: 11.5px; font-weight: 550; white-space: nowrap; }
+.step[data-next='true'] .action { color: var(--accent-text); }
+.note { margin: 0; padding: 10px 16px; color: var(--ink-faint); font-size: 10.5px; line-height: 1.45; text-align: center; text-wrap: pretty; }
+@media (prefers-reduced-motion: reduce) { .summary, .step, .chevron, .progressTrack > span { transition-duration: 0ms; } }
+@media (max-width: 620px) { .summary { grid-template-columns: 42px minmax(0, 1fr) 40px; }.progressCopy { display: none; }.step { grid-template-columns: 32px minmax(0, 1fr); }.action { grid-column: 2; justify-self: start; padding: 0; }.note { text-align: left; } }
