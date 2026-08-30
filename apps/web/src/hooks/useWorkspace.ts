@@ -10,6 +10,7 @@ export interface WorkspaceData {
   onboardingComplete: boolean
   agent: AgentConfig
   usage: { conversationCount: number; tokenCount: number }
+  role: 'owner' | 'member'
 }
 
 /**

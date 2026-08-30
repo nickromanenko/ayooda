@@ -3,18 +3,21 @@
 import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Loader2, Star, Trash2, MessagesSquare } from 'lucide-react'
+import { CopyPlus, Loader2, Star, Trash2, MessagesSquare } from 'lucide-react'
 import { validateAgentImage, type AgentDoc } from '@ayooda/shared'
 import { apiRequestOrThrow } from '@/lib/api'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import { Loading } from '@/components/dashboard/Loading'
 import ModelPicker from '@/components/dashboard/ModelPicker'
 import AgentVersionHistory from './AgentVersionHistory'
+import DuplicateAgentDialog from './DuplicateAgentDialog'
+import { useWorkspace } from '@/hooks/useWorkspace'
 import { card, label, input, muted, errorText } from '@/components/dashboard/ui'
 
 export default function AgentInfoPage({ params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = use(params)
   const router = useRouter()
+  const { workspace } = useWorkspace()
 
   const [agent, setAgent] = useState<AgentDoc | null>(null)
   const [savedAgent, setSavedAgent] = useState<AgentDoc | null>(null)
@@ -24,6 +27,7 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [historyRevision, setHistoryRevision] = useState(0)
+  const [duplicateOpen, setDuplicateOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -200,6 +204,11 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
       <div style={card}>
         <p style={label}>Manage</p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {workspace?.role === 'owner' && (
+            <button type="button" onClick={() => setDuplicateOpen(true)} disabled={busy} className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13 }}>
+              <CopyPlus size={13} /> Duplicate agent
+            </button>
+          )}
           {!agent.isDefault && (
             <button type="button" onClick={() => void makeDefault()} disabled={busy} className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13 }}>
               <Star size={13} /> Make default
@@ -217,6 +226,7 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
           )}
         </div>
       </div>
+      {duplicateOpen && <DuplicateAgentDialog source={savedAgent ?? agent} onClose={() => setDuplicateOpen(false)} />}
     </>
   )
 }

@@ -10,6 +10,7 @@ import { loadGatewayModelCatalog, recommendedGatewayModels, validateGatewayModel
 import { customEndpointStatus, parseCustomEndpointBody, testCustomEndpoint } from '../lib/llm/custom-endpoint'
 import { buildAgentReadiness } from '../lib/agent-readiness'
 import { agentCoreSnapshot, changedCoreFields, isAgentCoreSnapshot, type AgentCoreSnapshot } from '../lib/agents/version-history'
+import { parseDuplicateAgentInput, remapWorkflowAgentReferences } from '../lib/agents/duplicate'
 import { agentRole, isAgentRoleId, DEFAULT_AGENT_ROLE_ID, validateAgentImage, MAX_AGENT_IMAGE_BYTES, canEditAgent, type AgentDoc, type AgentAccessEntry, type GatewayModelCatalog, type WorkspaceRole } from '@ayooda/shared'
 
 const agents = new Hono<{ Variables: AuthVariables }>()
@@ -125,6 +126,80 @@ agents.post('/', requireOwner, async (c) => {
   }
   await ref.set(doc)
   return c.json(toAgentDoc(ref.id, doc))
+})
+
+/** POST /agents/:id/duplicate — create a reusable copy without customer data or deployment state. */
+agents.post('/:id/duplicate', requireOwner, async (c) => {
+  const workspaceId = c.get('workspaceId')!
+  const uid = c.get('uid')!
+  const sourceRef = adminDb.doc(`workspaces/${workspaceId}/agents/${c.req.param('id')}`)
+  const sourceSnap = await sourceRef.get()
+  if (!sourceSnap.exists) return c.json({ error: 'Agent not found' }, 404)
+  const source = sourceSnap.data()!
+  const parsed = parseDuplicateAgentInput(await c.req.json().catch(() => null), String(source.name ?? 'Agent'))
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+
+  const collections = [
+    ...(parsed.value.copyTools ? ['tools'] : []),
+    ...(parsed.value.copySkills ? ['skills'] : []),
+    ...(parsed.value.copyWorkflows ? ['workflowRules', 'workflowGraph'] : []),
+    ...(parsed.value.copyTests ? ['evaluationCases'] : []),
+  ]
+  const snapshots = await Promise.all(collections.map(async (name) => ({ name, snap: await sourceRef.collection(name).get() })))
+  const targetRef = adminDb.collection(`workspaces/${workspaceId}/agents`).doc()
+  const now = new Date()
+  const copied: Record<string, number> = {}
+
+  try {
+    let batch = adminDb.batch()
+    let operations = 0
+    for (const { name, snap } of snapshots) {
+      copied[name] = snap.size
+      for (const sourceDoc of snap.docs) {
+        const data = name === 'workflowRules' || name === 'workflowGraph'
+          ? remapWorkflowAgentReferences(sourceDoc.data(), sourceSnap.id, targetRef.id)
+          : { ...sourceDoc.data() }
+        delete data.createdAt
+        delete data.updatedAt
+        batch.set(targetRef.collection(name).doc(sourceDoc.id), {
+          ...data,
+          createdAt: now,
+          updatedAt: now,
+          ...(name === 'evaluationCases' ? { createdBy: uid } : {}),
+        })
+        operations += 1
+        if (operations === 450) {
+          await batch.commit()
+          batch = adminDb.batch()
+          operations = 0
+        }
+      }
+    }
+    if (operations) await batch.commit()
+
+    const target = {
+      name: parsed.value.name,
+      photoURL: null,
+      role: source.role ?? null,
+      description: String(source.description ?? ''),
+      systemPrompt: String(source.systemPrompt ?? DEFAULT_PROMPT),
+      llmModel: String(source.llmModel ?? DEFAULT_MODEL),
+      knowledgeNamespace: agentNamespace(workspaceId, targetRef.id),
+      isDefault: false,
+      usage: { messageCount: 0, tokenCount: 0, trackedSince: now },
+      clonedFromAgentId: sourceSnap.id,
+      createdAt: now,
+      updatedAt: now,
+    }
+    // Write the parent last: partially copied subcollections never become a
+    // visible agent if a batch fails halfway through.
+    await targetRef.set(target)
+    return c.json({ agent: toAgentDoc(targetRef.id, target), copied }, 201)
+  } catch (error) {
+    await adminDb.recursiveDelete(targetRef).catch(() => {})
+    console.error('[agents] duplicate failed:', error)
+    return c.json({ error: 'Could not duplicate this agent. No copy was kept.' }, 500)
+  }
 })
 
 /** GET /agents/:id/models — live language-model catalog, with stable defaults on outage. */
