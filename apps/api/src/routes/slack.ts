@@ -68,7 +68,7 @@ async function processSlackMessage(
 
   if (convSnap.exists && convSnap.data()!.status !== 'bot') {
     await convRef.collection('messages').add({ role: 'user', content: parsed.text, createdAt: new Date() })
-    await convRef.update({ ...slackFields, updatedAt: new Date(), lastMessage: parsed.text.slice(0, 200) })
+    await convRef.update({ ...slackFields, updatedAt: new Date(), lastMessage: parsed.text.slice(0, 200), lastMessageRole: 'user', unread: true, lastCustomerMessageAt: new Date() })
     return
   }
 

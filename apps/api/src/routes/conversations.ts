@@ -4,8 +4,17 @@ import { adminDb } from '../lib/firebase-admin'
 import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { elapsedMs } from '../lib/analytics/timing'
 import { recordChannelReliability, safeReliabilityDetail } from '../lib/channels/reliability'
+import { inboxCustomerIdentity, matchesInboxSearch } from '../lib/inbox'
 
 const conversations = new Hono<{ Variables: AuthVariables }>()
+
+type ConversationRow = Parameters<typeof matchesInboxSearch>[0] & {
+  id: string
+  status?: string
+  createdAt?: unknown
+  updatedAt?: unknown
+  lastMessage?: string
+}
 
 conversations.use('*', requireAuth)
 
@@ -13,6 +22,19 @@ conversations.use('*', requireAuth)
 conversations.get('/', async (c) => {
   const workspaceId = c.get('workspaceId')
   const status = c.req.query('status') // 'bot' | 'human' | 'resolved' | undefined
+  const search = c.req.query('search')?.trim() ?? ''
+
+  if (search) {
+    const snap = await adminDb
+      .collection(`workspaces/${workspaceId}/conversations`)
+      .orderBy('updatedAt', 'desc')
+      .limit(250)
+      .get()
+    return c.json(snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as ConversationRow))
+      .filter((row) => (!status || row.status === status) && matchesInboxSearch(row, search))
+      .slice(0, 50))
+  }
 
   let query = adminDb
     .collection(`workspaces/${workspaceId}/conversations`)
@@ -29,6 +51,113 @@ conversations.get('/', async (c) => {
 
   const snap = await query.get()
   return c.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+})
+
+/** GET /conversations/operators — safe teammate identities for Inbox assignment. */
+conversations.get('/operators', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const snap = await adminDb.collection('users').where('workspaceId', '==', workspaceId).get()
+  const operators = snap.docs.map((d) => {
+    const data = d.data()
+    return { uid: d.id, displayName: data.displayName ?? '', email: data.email ?? '', role: data.role ?? 'member' }
+  }).sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email))
+  return c.json({ operators })
+})
+
+/** GET /conversations/:id — load one conversation for direct Inbox links. */
+conversations.get('/:id', async (c) => {
+  const ref = adminDb.doc(`workspaces/${c.get('workspaceId')}/conversations/${c.req.param('id')}`)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Conversation not found' }, 404)
+  return c.json({ id: snap.id, ...snap.data() })
+})
+
+/** POST /conversations/:id/read — queue-level read state shared by operators. */
+conversations.post('/:id/read', async (c) => {
+  const ref = adminDb.doc(`workspaces/${c.get('workspaceId')}/conversations/${c.req.param('id')}`)
+  if (!(await ref.get()).exists) return c.json({ error: 'Conversation not found' }, 404)
+  await ref.update({ unread: false, readAt: FieldValue.serverTimestamp(), readBy: c.get('uid') })
+  return c.json({ ok: true })
+})
+
+/** PUT /conversations/:id/assignee { uid: string | null } */
+conversations.put('/:id/assignee', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${c.req.param('id')}`)
+  const convSnap = await convRef.get()
+  if (!convSnap.exists) return c.json({ error: 'Conversation not found' }, 404)
+  if (convSnap.data()?.status === 'resolved') return c.json({ error: 'Reopen the conversation before assigning it.' }, 409)
+
+  const body = await c.req.json<{ uid?: string | null }>().catch(() => ({} as { uid?: string | null }))
+  const uid = typeof body.uid === 'string' && body.uid.trim() ? body.uid.trim() : null
+  if (uid) {
+    const user = await adminDb.doc(`users/${uid}`).get()
+    if (!user.exists || user.data()?.workspaceId !== workspaceId) return c.json({ error: 'Teammate not found' }, 404)
+  }
+
+  await convRef.update({
+    operatorId: uid,
+    status: uid ? 'human' : 'waiting',
+    ...(uid ? { hadTakeover: true } : {}),
+    autoClosedAt: FieldValue.delete(),
+    resolvedAt: FieldValue.delete(),
+    resolutionMs: FieldValue.delete(),
+    unread: false,
+    readAt: FieldValue.serverTimestamp(),
+    readBy: uid,
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+  return c.json({ ok: true })
+})
+
+/** GET /conversations/:id/context — customer identity and conversation history. */
+conversations.get('/:id/context', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const current = await adminDb.doc(`workspaces/${workspaceId}/conversations/${c.req.param('id')}`).get()
+  if (!current.exists) return c.json({ error: 'Conversation not found' }, 404)
+  const data = current.data()!
+  const related = await adminDb.collection(`workspaces/${workspaceId}/conversations`)
+    .where('visitorId', '==', data.visitorId)
+    .limit(200)
+    .get()
+  const time = (value: unknown) => {
+    if (value && typeof value === 'object' && 'toMillis' in value && typeof value.toMillis === 'function') return value.toMillis()
+    return 0
+  }
+  const rows = related.docs.map((d) => ({ id: d.id, ...d.data() } as ConversationRow))
+    .sort((a, b) => time(b.updatedAt) - time(a.updatedAt))
+  return c.json({
+    customer: inboxCustomerIdentity(data),
+    channelType: data.channelType ?? null,
+    conversationCount: rows.length,
+    truncated: rows.length === 200,
+    firstSeenAt: rows.reduce<unknown>((earliest, row) => !earliest || time(row.createdAt) < time(earliest) ? row.createdAt : earliest, null),
+    lastSeenAt: rows[0]?.updatedAt ?? null,
+    recentConversations: rows.slice(0, 8).map((row) => ({
+      id: row.id, status: row.status, lastMessage: row.lastMessage ?? '', updatedAt: row.updatedAt ?? null,
+    })),
+  })
+})
+
+/** POST /conversations/:id/notes — internal-only teammate note. */
+conversations.post('/:id/notes', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const conversationId = c.req.param('id')
+  const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
+  if (!(await convRef.get()).exists) return c.json({ error: 'Conversation not found' }, 404)
+  const body = await c.req.json<{ content?: string }>().catch(() => ({} as { content?: string }))
+  const content = body.content?.trim() ?? ''
+  if (!content) return c.json({ error: 'Note content is required' }, 400)
+  if (content.length > 2_000) return c.json({ error: 'Notes can be up to 2,000 characters.' }, 400)
+  const author = await adminDb.doc(`users/${c.get('uid')}`).get()
+  const authorData = author.data() ?? {}
+  const note = await convRef.collection('notes').add({
+    content,
+    authorId: c.get('uid'),
+    authorName: authorData.displayName || authorData.email || 'Teammate',
+    createdAt: FieldValue.serverTimestamp(),
+  })
+  return c.json({ id: note.id }, 201)
 })
 
 /** GET /conversations/:id/messages — get all messages for a conversation */
@@ -101,6 +230,9 @@ conversations.post('/:id/resolve', async (c) => {
     // conversation is an explicit human decision, so it must not be undone by the
     // next visitor message reopening it.
     autoClosedAt: FieldValue.delete(),
+    unread: false,
+    readAt: FieldValue.serverTimestamp(),
+    readBy: c.get('uid'),
     updatedAt: FieldValue.serverTimestamp(),
   })
 
@@ -130,6 +262,10 @@ conversations.post('/:id/messages', async (c) => {
   await convRef.update({
     updatedAt: FieldValue.serverTimestamp(),
     lastMessage: body.content.trim().slice(0, 200),
+    lastMessageRole: 'operator',
+    unread: false,
+    readAt: FieldValue.serverTimestamp(),
+    readBy: uid,
   })
 
   await adminDb

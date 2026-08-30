@@ -64,6 +64,14 @@ service cloud.firestore {
           allow read, write: if request.auth != null
             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
         }
+
+        // Internal operator notes are visible to workspace teammates but are
+        // created through the authenticated API so author identity is trusted.
+        match /notes/{noteId} {
+          allow read: if request.auth != null
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workspaceId == workspaceId;
+          allow write: if false;
+        }
       }
 
       // Copilot threads are private to the member who created them. The {uid}

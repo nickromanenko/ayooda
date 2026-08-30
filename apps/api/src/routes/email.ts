@@ -108,7 +108,7 @@ email.post('/webhook/:channelId', async (c) => {
     // A human owns (or has queued) this thread — record the message and stay silent.
     if (convSnap.exists && convSnap.data()!.status !== 'bot') {
       await convRef.collection('messages').add({ role: 'user', content: parsed.text, createdAt: new Date() })
-      await convRef.update({ ...emailFields, updatedAt: new Date(), lastMessage: parsed.text.slice(0, 200) })
+      await convRef.update({ ...emailFields, updatedAt: new Date(), lastMessage: parsed.text.slice(0, 200), lastMessageRole: 'user', unread: true, lastCustomerMessageAt: new Date() })
       return c.json({ ok: true })
     }
 

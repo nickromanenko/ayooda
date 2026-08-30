@@ -86,7 +86,7 @@ telegram.post('/webhook/:channelId', async (c) => {
         await convRef.collection('messages').add({
           role: 'user', content: parsed.text, createdAt: new Date(),
         })
-        await convRef.update({ updatedAt: new Date(), lastMessage: parsed.text.slice(0, 200) })
+        await convRef.update({ updatedAt: new Date(), lastMessage: parsed.text.slice(0, 200), lastMessageRole: 'user', unread: true, lastCustomerMessageAt: new Date() })
         return c.json({ ok: true })
       }
 

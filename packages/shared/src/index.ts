@@ -229,6 +229,11 @@ export interface ConversationDoc {
   createdAt: Date
   updatedAt: Date
   lastMessage: string
+  lastMessageRole?: MessageRole
+  unread?: boolean                  // shared operator queue state
+  lastCustomerMessageAt?: Date
+  readAt?: Date
+  readBy?: string
   channelType?: ChannelType
   telegramChatId?: number
   smsFrom?: string

@@ -170,7 +170,10 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const gate = evaluateSilenceGate(convSnap.exists ? convSnap.data() : undefined)
   if (gate.kind === 'silent') {
     await convRef.collection('messages').add({ role: 'user', content: trimmed, createdAt: FieldValue.serverTimestamp() })
-    await convRef.update({ updatedAt: FieldValue.serverTimestamp(), lastMessage: trimmed.slice(0, 200) })
+    await convRef.update({
+      updatedAt: FieldValue.serverTimestamp(), lastMessage: trimmed.slice(0, 200), lastMessageRole: 'user',
+      ...(!isSandbox ? { unread: true, lastCustomerMessageAt: FieldValue.serverTimestamp() } : {}),
+    })
     return { kind: 'silent' }
   }
   if (gate.kind === 'reopen') await convRef.update(gate.update)
@@ -208,6 +211,8 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       timingTrackedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       lastMessage: trimmed,
+      lastMessageRole: 'user',
+      ...(!isSandbox ? { unread: true, lastCustomerMessageAt: FieldValue.serverTimestamp() } : {}),
       ...(isSandbox ? {
         sandbox: true,
         ownerUid: sandbox.ownerUid,
@@ -245,6 +250,12 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
 
   const messagesRef = convRef.collection('messages')
   await messagesRef.add({ role: 'user', content: trimmed, createdAt: FieldValue.serverTimestamp() })
+  if (convSnap.exists && !isSandbox) {
+    await convRef.update({
+      updatedAt: FieldValue.serverTimestamp(), lastMessage: trimmed.slice(0, 200), lastMessageRole: 'user',
+      unread: true, lastCustomerMessageAt: FieldValue.serverTimestamp(),
+    })
+  }
 
   const historySnap = await messagesRef.orderBy('createdAt', 'asc').limitToLast(10).get()
   const history = historySnap.docs.map((d) => d.data() as { role: string; content: string })
@@ -390,7 +401,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
         await convRef.update({
           status,
           ...outcomeUpdate,
-          updatedAt: FieldValue.serverTimestamp(), lastMessage: message.slice(0, 200),
+          updatedAt: FieldValue.serverTimestamp(), lastMessage: message.slice(0, 200), lastMessageRole: 'assistant',
           ...(status === 'bot' ? { botReplyCount: FieldValue.increment(1) } : {}),
           ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
           ...confidenceConversationFields(repliedAt),
@@ -435,7 +446,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     })
     try {
       await convRef.update({
-        updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200), botReplyCount: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(), lastMessage: reply.slice(0, 200), lastMessageRole: 'assistant', botReplyCount: FieldValue.increment(1),
         ...(firstReplyMs !== null ? { firstReplyAt: repliedAt, firstReplyMs } : {}),
         ...confidenceConversationFields(repliedAt),
       })

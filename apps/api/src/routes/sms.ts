@@ -68,7 +68,7 @@ async function processSms(
 
   if (convSnap.exists && convSnap.data()!.status !== 'bot') {
     await convRef.collection('messages').add({ role: 'user', content: inbound.body, createdAt: new Date() })
-    await convRef.update({ ...smsFields, updatedAt: new Date(), lastMessage: inbound.body.slice(0, 200) })
+    await convRef.update({ ...smsFields, updatedAt: new Date(), lastMessage: inbound.body.slice(0, 200), lastMessageRole: 'user', unread: true, lastCustomerMessageAt: new Date() })
     return
   }
 

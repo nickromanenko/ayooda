@@ -253,7 +253,7 @@ describe('prepareTurn workflow actions', () => {
 
     const result = await turn()
     expect(result).toMatchObject({ kind: 'workflow', action: 'resolve', status: 'resolved', message: 'Resolved by graph.' })
-    expect(state.updates.find((row) => row.path === CONV)?.data.workflowRuleId).toBe('done')
+    expect(state.updates.find((row) => row.path === CONV && row.data.workflowRuleId)?.data.workflowRuleId).toBe('done')
     const assistant = state.added.find((row) => row.path === `${CONV}/messages` && row.data.role === 'assistant')
     expect(assistant?.data.metadata.workflowGraphPath).toEqual(['start', 'check', 'done'])
   })

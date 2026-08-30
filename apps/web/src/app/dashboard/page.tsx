@@ -210,7 +210,7 @@ export default async function DashboardPage() {
           <div style={eyebrow}>Recent conversations</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {o.recent.map((conv, i) => (
-              <Link key={conv.id} href="/dashboard/inbox" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', borderTop: i > 0 ? '1px solid var(--line)' : 'none', textDecoration: 'none' }}>
+              <Link key={conv.id} href={`/dashboard/inbox?conversation=${encodeURIComponent(conv.id)}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', borderTop: i > 0 ? '1px solid var(--line)' : 'none', textDecoration: 'none' }}>
                 <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {conv.lastMessage || 'New conversation'}
                 </span>
