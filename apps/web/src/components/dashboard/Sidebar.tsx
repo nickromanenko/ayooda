@@ -18,6 +18,7 @@ import {
   PanelLeftOpen,
   Menu,
   Search,
+  Bell,
   X,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -26,6 +27,7 @@ import { apiRequest } from '@/lib/api'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import styles from './Sidebar.module.css'
 import { DASHBOARD_SEARCH_EVENT } from './DashboardSearch'
+import { DASHBOARD_ATTENTION_EVENT } from './DashboardAttention'
 
 // Knowledge, tools, escalation rules and deployment all configure one agent, so
 // they are reached through that agent's tabs rather than as siblings here.
@@ -83,17 +85,17 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
       try {
         const [inboxRes, channelsRes] = await Promise.all([
           apiRequest('/conversations?status=waiting'),
-          apiRequest('/channels/reliability'),
+          role === 'owner' ? apiRequest('/channels/reliability') : Promise.resolve(null),
         ])
         const inboxBody = inboxRes.ok ? await inboxRes.json() as unknown[] : null
-        const channelsBody = channelsRes.ok ? await channelsRes.json() as { summary?: { failing?: number } } : null
+        const channelsBody = channelsRes?.ok ? await channelsRes.json() as { summary?: { failing?: number } } : null
         if (!cancelled) setBadges({ inbox: inboxBody?.length ?? 0, channels: channelsBody?.summary?.failing ?? 0 })
       } catch { /* badges are supplementary; navigation still works without them */ }
     }
     void refresh()
     const timer = setInterval(() => void refresh(), 60_000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [workspace?.id])
+  }, [role, workspace?.id])
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -111,6 +113,11 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
   function openSearch() {
     setMobileOpen(false)
     window.dispatchEvent(new Event(DASHBOARD_SEARCH_EVENT))
+  }
+
+  function openAttention() {
+    setMobileOpen(false)
+    window.dispatchEvent(new Event(DASHBOARD_ATTENTION_EVENT))
   }
 
   // Copilot is per-member internal chat, not an owner-only admin surface — every
@@ -203,6 +210,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
       </Link>
       <div className={styles.mobileHeaderActions}>
         <button type="button" className={styles.menuButton} aria-label="Search dashboard" title="Search" onClick={openSearch}><Search size={19} /></button>
+        <button type="button" className={styles.menuButton} aria-label={`Needs attention, ${badges.inbox + badges.channels} open items`} title="Needs attention" onClick={openAttention}><Bell size={19} />{badges.inbox + badges.channels > 0 && <span className={styles.mobileBadge}>{badges.inbox + badges.channels > 99 ? '99+' : badges.inbox + badges.channels}</span>}</button>
         <button type="button" className={styles.menuButton} aria-label="Open dashboard navigation" aria-expanded={mobileOpen} aria-controls="dashboard-mobile-drawer" onClick={() => setMobileOpen(true)}><Menu size={20} /></button>
       </div>
     </header>
@@ -267,6 +275,18 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
         >
           <Search size={15} strokeWidth={1.6} />
           {!collapsed && <><span>Search</span><kbd>{shortcutLabel}</kbd></>}
+        </button>
+        <button
+          type="button"
+          className={styles.searchButton}
+          data-collapsed={collapsed}
+          data-tooltip={collapsed ? `Needs attention, ${badges.inbox + badges.channels} open items` : undefined}
+          aria-label={`Needs attention, ${badges.inbox + badges.channels} open items`}
+          onClick={openAttention}
+        >
+          <Bell size={15} strokeWidth={1.6} />
+          {!collapsed && <span>Needs attention</span>}
+          {badges.inbox + badges.channels > 0 && <span className={styles.navBadge} data-collapsed={collapsed}>{collapsed ? '' : badges.inbox + badges.channels > 99 ? '99+' : badges.inbox + badges.channels}</span>}
         </button>
         {visibleNav.map(renderLink)}
       </nav>

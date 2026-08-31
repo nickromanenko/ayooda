@@ -59,6 +59,8 @@
 
   .mobileHeaderActions { display: flex; align-items: center; gap: 7px; }
 
+  .mobileBadge { position: absolute; top: 2px; right: 2px; min-width: 17px; height: 17px; display: grid; place-items: center; padding: 0 4px; border-radius: 999px; background: var(--control-primary); color: var(--control-primary-text); box-shadow: 0 0 0 2px var(--panel); font: 700 8px var(--font-mono); font-variant-numeric: tabular-nums; }
+
   .menuButton, .closeButton {
     all: unset;
     box-sizing: border-box;
@@ -71,6 +73,7 @@
     background: var(--bg-2);
     box-shadow: var(--shadow-control);
     cursor: pointer;
+    position: relative;
     transition-property: scale, background-color, box-shadow;
     transition-duration: 150ms;
     transition-timing-function: ease-out;

@@ -197,7 +197,7 @@ export default function ChannelReliabilityPage() {
             const Icon = providerIcons[channel.type as keyof typeof providerIcons] ?? Activity
             const busy = checking.has(channel.id)
             return (
-              <article className={styles.card} key={channel.id}>
+              <article id={`channel-${channel.id}`} className={styles.card} key={channel.id}>
                 <div className={styles.cardTop}>
                   <div className={styles.providerIcon}><Icon size={18} strokeWidth={1.6} /></div>
                   <div className={styles.identity}><h2 className={styles.provider}>{providerNames[channel.type] ?? channel.type}</h2><p className={styles.agent}>{channel.agentName}</p></div>

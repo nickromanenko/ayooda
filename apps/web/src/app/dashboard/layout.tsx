@@ -4,6 +4,7 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import DashboardSearch from '@/components/dashboard/DashboardSearch'
+import DashboardAttention from '@/components/dashboard/DashboardAttention'
 import styles from './layout.module.css'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className={`${styles.shell} dashboard-shell`}>
         <Sidebar role={role} hasAgentAccess={hasAgentAccess} />
         <DashboardSearch role={role} hasAgentAccess={hasAgentAccess} />
+        <DashboardAttention role={role} />
         <div className={styles.content}>
           <main className={styles.main}>{children}</main>
         </div>
