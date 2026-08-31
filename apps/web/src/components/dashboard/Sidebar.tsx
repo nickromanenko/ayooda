@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
+  Search,
   X,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -24,6 +25,7 @@ import { useWorkspace } from '@/hooks/useWorkspace'
 import { apiRequest } from '@/lib/api'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import styles from './Sidebar.module.css'
+import { DASHBOARD_SEARCH_EVENT } from './DashboardSearch'
 
 // Knowledge, tools, escalation rules and deployment all configure one agent, so
 // they are reached through that agent's tabs rather than as siblings here.
@@ -72,6 +74,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
   const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsedSnapshot, getCollapsedServerSnapshot)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [badges, setBadges] = useState({ inbox: 0, channels: 0 })
+  const shortcutLabel = '⌘/Ctrl K'
 
   useEffect(() => {
     if (!workspace?.id) return
@@ -103,6 +106,11 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
 
   function toggleCollapsed() {
     setCollapsedPersisted(!getCollapsedSnapshot())
+  }
+
+  function openSearch() {
+    setMobileOpen(false)
+    window.dispatchEvent(new Event(DASHBOARD_SEARCH_EVENT))
   }
 
   // Copilot is per-member internal chat, not an owner-only admin surface — every
@@ -193,9 +201,10 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
         </svg>
         Ayooda
       </Link>
-      <button type="button" className={styles.menuButton} aria-label="Open dashboard navigation" aria-expanded={mobileOpen} aria-controls="dashboard-mobile-drawer" onClick={() => setMobileOpen(true)}>
-        <Menu size={20} />
-      </button>
+      <div className={styles.mobileHeaderActions}>
+        <button type="button" className={styles.menuButton} aria-label="Search dashboard" title="Search" onClick={openSearch}><Search size={19} /></button>
+        <button type="button" className={styles.menuButton} aria-label="Open dashboard navigation" aria-expanded={mobileOpen} aria-controls="dashboard-mobile-drawer" onClick={() => setMobileOpen(true)}><Menu size={20} /></button>
+      </div>
     </header>
 
     <button type="button" className={styles.mobileBackdrop} data-open={mobileOpen} aria-label="Close dashboard navigation" tabIndex={mobileOpen ? 0 : -1} onClick={() => setMobileOpen(false)} />
@@ -248,6 +257,17 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <button
+          type="button"
+          className={styles.searchButton}
+          data-collapsed={collapsed}
+          data-tooltip={collapsed ? `Search dashboard, ${shortcutLabel}` : undefined}
+          aria-label={`Search dashboard, ${shortcutLabel}`}
+          onClick={openSearch}
+        >
+          <Search size={15} strokeWidth={1.6} />
+          {!collapsed && <><span>Search</span><kbd>{shortcutLabel}</kbd></>}
+        </button>
         {visibleNav.map(renderLink)}
       </nav>
 
