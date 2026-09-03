@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Check, Copy, KeyRound, Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Check, Copy, ExternalLink, KeyRound, Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 
 interface IdentitySettings {
@@ -106,6 +106,7 @@ window.Ayooda('shutdown')`}</pre>
           </div>
         </div>
       </details>}
+      <a href="/docs/widget-identity" target="_blank" rel="noreferrer" style={{ minHeight: 40, marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--accent-text)', fontSize: 12, textDecoration: 'none' }}>Read the complete integration guide <ExternalLink size={12} /></a>
       {settings.lastVerifiedAt && <p style={{ color: 'var(--ink-faint)', fontSize: 11.5, margin: '12px 0 0' }}>Last verified customer: {new Date(settings.lastVerifiedAt).toLocaleString()}{settings.failureCount ? ` · ${settings.failureCount} failed token${settings.failureCount === 1 ? '' : 's'}` : ''}</p>}
       {error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 12, margin: '12px 0 0' }}>{error}</p>}
     </div>
