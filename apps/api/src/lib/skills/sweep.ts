@@ -14,6 +14,7 @@ import { liveFacts, nextExpiry } from './memory'
 import { loadEnabledSkills } from './registry'
 import { elapsedMs } from '../analytics/timing'
 import './all'   // registers every skill module; without it the sweep silently skips scoring
+import { processDueTicketDeliveries } from '../ticketing/delivery'
 
 export const IDLE_CLOSE_MINUTES = 30
 export const IDLE_LOOKBACK_HOURS = 24
@@ -53,7 +54,7 @@ export function purgeFacts(
   return { facts: kept, nextExpiryAt: nextExpiry(kept) }
 }
 
-export interface SweepReport { closed: number; scored: number; purged: number; synced: number; sandboxPurged: number; slackEventsPurged: number; smsMessagesPurged: number; failed: number }
+export interface SweepReport { closed: number; scored: number; purged: number; synced: number; sandboxPurged: number; slackEventsPurged: number; smsMessagesPurged: number; ticketDeliveries: number; failed: number }
 
 type DateLike = Date | { toDate?: () => Date } | null | undefined
 
@@ -79,7 +80,7 @@ export function isKnowledgeSyncClaimable(data: Record<string, any>, now: Date): 
 }
 
 export async function runSweep(now = new Date()): Promise<SweepReport> {
-  const report: SweepReport = { closed: 0, scored: 0, purged: 0, synced: 0, sandboxPurged: 0, slackEventsPurged: 0, smsMessagesPurged: 0, failed: 0 }
+  const report: SweepReport = { closed: 0, scored: 0, purged: 0, synced: 0, sandboxPurged: 0, slackEventsPurged: 0, smsMessagesPurged: 0, ticketDeliveries: 0, failed: 0 }
 
   // 1. Close idle bot conversations. The query itself (not just each document update) is
   // wrapped so a transient failure — e.g. the composite index still building right after
@@ -304,6 +305,17 @@ export async function runSweep(now = new Date()): Promise<SweepReport> {
     }
   } catch (err) {
     console.warn('[sweep] SMS receipt purge query failed:', err)
+    report.failed++
+  }
+
+  // 8. Deliver durable ticket outbox events. Ticket creation is already complete;
+  // failures remain visible and retry on the schedule owned by the delivery record.
+  try {
+    const deliveries = await processDueTicketDeliveries(now, SWEEP_BATCH)
+    report.ticketDeliveries = deliveries.delivered
+    report.failed += deliveries.failed
+  } catch (err) {
+    console.warn('[sweep] ticket delivery processing failed:', err)
     report.failed++
   }
 

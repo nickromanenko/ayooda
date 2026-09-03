@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Activity, Bot, CornerDownLeft, CreditCard, FileText, LayoutDashboard,
   Loader2, MessageSquare, MessagesSquare, Search, Settings, ShieldCheck,
-  TestTube2, Users, Workflow, Wrench, X,
+  TestTube2, Ticket, Users, Workflow, Wrench, X,
 } from 'lucide-react'
 import type { AgentDoc } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
@@ -15,7 +15,7 @@ export const DASHBOARD_SEARCH_EVENT = 'ayooda:open-search'
 
 type Result = {
   id: string
-  section: 'Navigate' | 'Agents' | 'Conversations'
+  section: 'Navigate' | 'Agents' | 'Conversations' | 'Tickets'
   title: string
   subtitle: string
   href: string
@@ -42,6 +42,7 @@ const AGENT_AREAS = [
   { slug: 'tools', label: 'Tools', keywords: 'connectors actions api', icon: Wrench },
   { slug: 'mcp', label: 'MCP', keywords: 'model context protocol server', icon: Wrench },
   { slug: 'escalation', label: 'Workflows', keywords: 'routing handoff automation rules', icon: Workflow },
+  { slug: 'tickets', label: 'Tickets', keywords: 'support requests webhook email intake delivery', icon: MessageSquare },
   { slug: 'test', label: 'Test', keywords: 'sandbox regression evaluations', icon: TestTube2 },
   { slug: 'deploy', label: 'Deploy', keywords: 'widget telegram email slack sms channels', icon: Activity },
   { slug: 'usage', label: 'Usage', keywords: 'analytics performance confidence metrics', icon: Activity },
@@ -135,21 +136,34 @@ export default function DashboardSearch({ role, hasAgentAccess }: { role: 'owner
       const normalized = term.toLocaleLowerCase()
       setSearchingQuery(normalized)
       setLoadError('')
-      void apiRequest(`/conversations?search=${encodeURIComponent(term)}`)
-        .then(async (response) => {
-          if (!response.ok) throw new Error()
-          const rows = await response.json() as Array<Record<string, unknown>>
+      void Promise.all([
+        apiRequest(`/conversations?search=${encodeURIComponent(term)}`),
+        apiRequest(`/tickets?search=${encodeURIComponent(term)}`),
+      ])
+        .then(async ([conversationResponse, ticketResponse]) => {
+          if (!conversationResponse.ok || !ticketResponse.ok) throw new Error()
+          const rows = await conversationResponse.json() as Array<Record<string, unknown>>
+          const ticketBody = await ticketResponse.json() as { tickets?: Array<Record<string, unknown>> }
           if (cancelled) return
-          setConversationSearch({ query: normalized, results: rows.slice(0, 6).map((row) => ({
+          const conversations: Result[] = rows.slice(0, 5).map((row) => ({
             id: `conversation-${String(row.id)}`,
-            section: 'Conversations',
+            section: 'Conversations' as const,
             title: conversationTitle(row),
             subtitle: typeof row.lastMessage === 'string' && row.lastMessage.trim() ? row.lastMessage : `Status: ${String(row.status ?? 'open')}`,
             href: `/dashboard/inbox?conversation=${encodeURIComponent(String(row.id))}`,
             icon: MessageSquare,
-          })) })
+          }))
+          const ticketResults: Result[] = (ticketBody.tickets ?? []).slice(0, 5).map((ticket) => ({
+            id: `ticket-${String(ticket.id)}`,
+            section: 'Tickets' as const,
+            title: `#${String(ticket.number ?? '—')} · ${String(ticket.subject ?? 'Support ticket')}`,
+            subtitle: `${String(ticket.status ?? 'open').replace('_', ' ')} · ${String(ticket.priority ?? 'normal')} priority`,
+            href: `/dashboard/inbox?conversation=${encodeURIComponent(String(ticket.conversationId ?? ''))}`,
+            icon: Ticket,
+          }))
+          setConversationSearch({ query: normalized, results: [...conversations, ...ticketResults] })
         })
-        .catch(() => { if (!cancelled) setLoadError('Conversation results are temporarily unavailable.') })
+        .catch(() => { if (!cancelled) setLoadError('Conversation and ticket results are temporarily unavailable.') })
         .finally(() => { if (!cancelled) setSearchingQuery((current) => current === normalized ? '' : current) })
     }, 180)
     return () => { cancelled = true; window.clearTimeout(timer) }

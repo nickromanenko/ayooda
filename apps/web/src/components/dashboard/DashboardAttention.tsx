@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Activity, Bell, ChevronRight, Inbox, RefreshCw, X } from 'lucide-react'
+import { Activity, Bell, ChevronRight, Inbox, RefreshCw, Ticket, X } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import styles from './DashboardAttention.module.css'
 
@@ -27,6 +27,13 @@ type ChannelHealth = {
   consecutiveFailures?: number
 }
 
+type FailedTicket = {
+  id: string
+  number: number
+  subject: string
+  conversationId: string
+}
+
 function customerName(row: WaitingConversation): string {
   if (row.emailReplyTo?.trim()) return row.emailReplyTo
   if (row.smsFrom?.trim()) return row.smsFrom
@@ -49,20 +56,24 @@ export default function DashboardAttention({ role }: { role: 'owner' | 'member' 
   const [error, setError] = useState('')
   const [waiting, setWaiting] = useState<WaitingConversation[]>([])
   const [failing, setFailing] = useState<ChannelHealth[]>([])
+  const [failedTickets, setFailedTickets] = useState<FailedTicket[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [conversationResponse, channelResponse] = await Promise.all([
+      const [conversationResponse, channelResponse, ticketResponse] = await Promise.all([
         apiRequest('/conversations?status=waiting'),
         role === 'owner' ? apiRequest('/channels/reliability') : Promise.resolve(null),
+        role === 'owner' ? apiRequest('/tickets?deliveryState=failed') : Promise.resolve(null),
       ])
-      if (!conversationResponse.ok || (channelResponse && !channelResponse.ok)) throw new Error()
+      if (!conversationResponse.ok || (channelResponse && !channelResponse.ok) || (ticketResponse && !ticketResponse.ok)) throw new Error()
       const conversations = await conversationResponse.json() as WaitingConversation[]
       const channelBody = channelResponse ? await channelResponse.json() as { channels?: ChannelHealth[] } : null
+      const ticketBody = ticketResponse ? await ticketResponse.json() as { tickets?: FailedTicket[] } : null
       setWaiting(conversations)
       setFailing((channelBody?.channels ?? []).filter((channel) => channel.status === 'failing'))
+      setFailedTickets(ticketBody?.tickets ?? [])
     } catch {
       setError('The latest attention items could not be loaded. Your existing conversations are unaffected.')
     } finally {
@@ -112,7 +123,7 @@ export default function DashboardAttention({ role }: { role: 'owner' | 'member' 
 
   if (!open) return null
 
-  const total = waiting.length + failing.length
+  const total = waiting.length + failing.length + failedTickets.length
   return (
     <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}>
       <div ref={panelRef} className={styles.panel} role="dialog" aria-modal="true" aria-labelledby="attention-title" onKeyDown={handleKeyDown}>
@@ -148,7 +159,18 @@ export default function DashboardAttention({ role }: { role: 'owner' | 'member' 
             ))}</div>
           </section>}
 
-          {!error && !loading && total === 0 && <div className={styles.empty}><span><Bell size={21} /></span><h3>Nothing needs attention</h3><p>Waiting conversations and channel failures will appear here.</p></div>}
+          {!error && failedTickets.length > 0 && <section className={styles.section} aria-labelledby="tickets-heading">
+            <div className={styles.sectionHeading}><div><Ticket size={15} /><h3 id="tickets-heading">Ticket delivery failures</h3></div><span>{failedTickets.length}</span></div>
+            <div className={styles.items}>{failedTickets.map((ticket) => (
+              <button type="button" className={styles.item} key={ticket.id} onClick={() => visit(`/dashboard/inbox?conversation=${encodeURIComponent(ticket.conversationId)}`)}>
+                <span className={styles.itemIcon} data-danger="true"><Ticket size={15} /></span>
+                <span className={styles.itemCopy}><strong>#{ticket.number} · {ticket.subject}</strong><small>The ticket is safe in Ayooda. External delivery needs attention.</small></span>
+                <ChevronRight size={15} aria-hidden />
+              </button>
+            ))}</div>
+          </section>}
+
+          {!error && !loading && total === 0 && <div className={styles.empty}><span><Bell size={21} /></span><h3>Nothing needs attention</h3><p>Waiting conversations, channel failures, and ticket delivery issues will appear here.</p></div>}
           {!error && loading && total === 0 && <div className={styles.loading}><RefreshCw size={20} data-spinning="true" /><span>Checking your workspace…</span></div>}
         </div>
 

@@ -5,6 +5,7 @@ import { requireAuth, type AuthVariables } from '../middleware/auth'
 import { elapsedMs } from '../lib/analytics/timing'
 import { recordChannelReliability, safeReliabilityDetail } from '../lib/channels/reliability'
 import { inboxCustomerIdentity, matchesInboxSearch } from '../lib/inbox'
+import { createSupportTicket } from '../lib/ticketing/service'
 
 const conversations = new Hono<{ Variables: AuthVariables }>()
 
@@ -158,6 +159,23 @@ conversations.post('/:id/notes', async (c) => {
     createdAt: FieldValue.serverTimestamp(),
   })
   return c.json({ id: note.id }, 201)
+})
+
+/** POST /conversations/:id/ticket — operator creates one durable ticket from this conversation. */
+conversations.post('/:id/ticket', async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const conversationId = c.req.param('id')
+  const conversation = await adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`).get()
+  if (!conversation.exists) return c.json({ error: 'Conversation not found' }, 404)
+  if (conversation.data()?.status === 'resolved') return c.json({ error: 'Reopen the conversation before creating a ticket.' }, 409)
+  const agentId = conversation.data()?.agentId
+  if (typeof agentId !== 'string' || !agentId) return c.json({ error: 'This conversation has no agent.' }, 409)
+  try {
+    const result = await createSupportTicket({ workspaceId, agentId, conversationId, submission: await c.req.json().catch(() => null), createdBy: 'operator' })
+    return c.json(result, result.created ? 201 : 200)
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Ticket could not be created.' }, 400)
+  }
 })
 
 /** GET /conversations/:id/messages — get all messages for a conversation */

@@ -21,6 +21,7 @@ import { elapsedMs, timestampDate } from '../analytics/timing'
 import { knowledgeConfidence, LOW_KNOWLEDGE_CONFIDENCE, utcDateKey } from '../analytics/confidence'
 import { sandboxSessionPath } from './sandbox-session'
 import '../skills/all'
+import { loadTicketingTool } from '../ticketing/tool'
 
 export interface PrepareTurnInput {
   workspaceId: string
@@ -43,6 +44,7 @@ export interface ReadyTurn {
   tools: StoredTool[]
   skillTools: ToolSet
   mcpTools: ToolSet
+  trustedTools: ToolSet
   /** Exact workflow responses emitted before the generated response. */
   prefix: string
   persist: (reply: string, promptTokens: number, completionTokens: number) => Promise<string>
@@ -432,6 +434,16 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const { tools, skillTools, mcpTools } = isSandbox && !sandbox.allowTools
     ? { tools: [], skillTools: {}, mcpTools: {} }
     : await loadTurnTools(workspaceId, agentRec.id, skills, skillCtx)
+  let trustedTools: ToolSet = {}
+  if (!isSandbox) {
+    try {
+      const ticketing = await loadTicketingTool({ workspaceId, agentId: agentRec.id, conversationId })
+      trustedTools = ticketing.tools
+      if (ticketing.instructions) skillBlocks.push(ticketing.instructions)
+    } catch (error) {
+      console.warn('[tickets] ticket tool load failed:', error)
+    }
+  }
 
   const persist = async (reply: string, promptTokens: number, completionTokens: number): Promise<string> => {
     const repliedAt = new Date()
@@ -488,6 +500,7 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
     tools,
     skillTools,
     mcpTools,
+    trustedTools,
     prefix: workflowPrefix,
     persist,
   }

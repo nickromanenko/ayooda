@@ -144,7 +144,7 @@ email.post('/webhook/:channelId', async (c) => {
       input: { system: prepared.chatParams.systemPrompt, messages: prepared.chatParams.messages },
     })
 
-    const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools, prepared.mcpTools)
+    const gen = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools, prepared.mcpTools, prepared.trustedTools)
     let generated = ''
     let promptTokens = 0
     let completionTokens = 0

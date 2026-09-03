@@ -104,7 +104,7 @@ async function processSms(
     model: prepared.llmModel,
     input: { system: prepared.chatParams.systemPrompt, messages: prepared.chatParams.messages },
   })
-  const stream = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools, prepared.mcpTools)
+  const stream = runAgentTurn(prepared.chatParams, prepared.tools, prepared.trace, {}, prepared.skillTools, prepared.mcpTools, prepared.trustedTools)
   let generated = ''
   let promptTokens = 0
   let completionTokens = 0

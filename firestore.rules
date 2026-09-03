@@ -26,6 +26,7 @@ service cloud.firestore {
         match /tools/{toolId} { allow read, write: if false; }
         match /workflowGraph/{docId} { allow read, write: if false; }
         match /coreVersions/{versionId} { allow read, write: if false; }
+        match /settings/{settingsId} { allow read, write: if false; }
       }
 
       // Escalation rules: API-managed, server-only.
@@ -56,6 +57,12 @@ service cloud.firestore {
       match /channelAlertSettings/{settingsId} {
         allow read, write: if false;
       }
+
+      // Ticket records, external-delivery outbox payloads, and counters contain
+      // customer data or operational secrets and are served only by the API.
+      match /tickets/{ticketId} { allow read, write: if false; }
+      match /ticketDeliveries/{deliveryId} { allow read, write: if false; }
+      match /counters/{counterId} { allow read, write: if false; }
 
       match /conversations/{conversationId} {
         allow read, write: if request.auth != null

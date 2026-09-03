@@ -43,6 +43,8 @@ import copilotRoutes from './routes/copilot'
 import sandboxRoutes from './routes/sandbox'
 import evaluationRoutes from './routes/evaluations'
 import connectorOAuthRoutes from './routes/connector-oauth'
+import ticketingRoutes from './routes/ticketing'
+import ticketRoutes from './routes/tickets'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -65,6 +67,8 @@ app.route('/agents/:agentId/workflows', workflowRoutes)
 app.route('/agents/:agentId/usage', agentUsageRoutes)
 app.route('/agents/:agentId/sandbox', sandboxRoutes)
 app.route('/agents/:agentId/evaluations', evaluationRoutes)
+app.route('/agents/:agentId/ticketing', ticketingRoutes)
+app.route('/tickets', ticketRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)

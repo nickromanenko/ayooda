@@ -266,6 +266,7 @@ export async function* runAgentTurn(
   deps: RunDeps = {},
   skillTools: ToolSet = {},
   mcpTools: ToolSet = {},
+  trustedTools: ToolSet = {},
 ): AsyncGenerator<ChatChunk, ChatResult, void> {
   // The default wrapper swaps the model string for the selected provider model, so an
   // injected streamText (tests) never touches a live provider.
@@ -283,7 +284,10 @@ export async function* runAgentTurn(
     if (Object.hasOwn(skillTools, name)) console.warn(`[skills] tool name "${name}" shadowed by a customer tool`)
     if (Object.hasOwn(mcpTools, name)) console.warn(`[mcp] tool name "${name}" shadowed by a customer tool`)
   }
-  const toolSet: ToolSet = { ...skillTools, ...mcpTools, ...customerTools }
+  for (const name of Object.keys(trustedTools)) {
+    if (Object.hasOwn(customerTools, name) || Object.hasOwn(skillTools, name) || Object.hasOwn(mcpTools, name)) console.warn(`[tools] reserved tool name "${name}" is shadowed by a trusted system tool`)
+  }
+  const toolSet: ToolSet = { ...skillTools, ...mcpTools, ...customerTools, ...trustedTools }
   const result = run({
     model: chatParams.model,
     system: chatParams.systemPrompt,

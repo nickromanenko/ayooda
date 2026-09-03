@@ -6,6 +6,7 @@ export interface SendEmailInput {
   to: string
   subject: string
   text: string
+  html?: string
   /** Message-ID of the inbound email we are replying to (for threading). */
   inReplyTo?: string
 }
@@ -37,6 +38,7 @@ export async function sendEmail(input: SendEmailInput): Promise<void> {
     to: [input.to],
     subject: input.subject,
     text: input.text,
+    ...(input.html ? { html: input.html } : {}),
   }
   if (input.inReplyTo) {
     body.headers = { 'In-Reply-To': input.inReplyTo, 'References': input.inReplyTo }

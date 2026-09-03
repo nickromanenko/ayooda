@@ -276,7 +276,7 @@ widget.post('/chat', async (c) => {
     })
   }
 
-  const { chatParams, sources, trace, llmModel, tools, skillTools, mcpTools, persist } = prepared
+  const { chatParams, sources, trace, llmModel, tools, skillTools, mcpTools, trustedTools, persist } = prepared
   const generation = trace.generation({ name: 'llm-chat', model: llmModel, input: { system: chatParams.systemPrompt, messages: chatParams.messages } })
 
   return streamSSE(c, async (stream) => {
@@ -286,7 +286,7 @@ widget.post('/chat', async (c) => {
       if (prepared.prefix) {
         await stream.writeSSE({ event: 'chunk', data: JSON.stringify({ text: `${prepared.prefix}\n\n` }) })
       }
-      const gen = runAgentTurn(chatParams, tools, trace, {}, skillTools, mcpTools)
+      const gen = runAgentTurn(chatParams, tools, trace, {}, skillTools, mcpTools, trustedTools)
       let promptTokens = 0
       let completionTokens = 0
       while (true) {

@@ -5,12 +5,13 @@ import {
   collection, query, orderBy, onSnapshot, Timestamp, limit, limitToLast,
   doc, getDocs, startAfter, endBefore, type DocumentData, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
-import { ArrowLeft, Bot, Contact, Loader2, MessageSquare, Search, Send, StickyNote, User, X } from 'lucide-react'
+import { ArrowLeft, Bot, Contact, Loader2, MessageSquare, Search, Send, StickyNote, Ticket, User, X } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import MarkdownMessage from '@/components/dashboard/MarkdownMessage'
 import InboxCustomerDrawer, { type InboxCustomerContext } from '@/components/dashboard/InboxCustomerDrawer'
+import InboxTicketPanel from '@/components/dashboard/InboxTicketPanel'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { useAuth } from '@/components/providers/AuthProvider'
 import styles from './page.module.css'
@@ -34,6 +35,8 @@ interface Conversation {
   slackUserId?: string
   telegramChatId?: number
   channelType?: string
+  ticketId?: string
+  ticketNumber?: number
 }
 
 interface Message {
@@ -58,9 +61,9 @@ interface Operator {
   role: string
 }
 
-type InboxFilter = 'all' | 'unread' | 'mine' | 'waiting' | 'human' | 'bot' | 'resolved'
+type InboxFilter = 'all' | 'unread' | 'mine' | 'tickets' | 'waiting' | 'human' | 'bot' | 'resolved'
 
-const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'unread', 'mine', 'waiting', 'human', 'bot', 'resolved']
+const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'unread', 'mine', 'tickets', 'waiting', 'human', 'bot', 'resolved']
 
 function isInboxFilter(value: string | null): value is InboxFilter {
   return value !== null && INBOX_FILTERS.includes(value as InboxFilter)
@@ -515,6 +518,7 @@ export default function InboxPage() {
     .filter((conversation) => filter === 'all'
       || (filter === 'unread' && conversation.unread)
       || (filter === 'mine' && conversation.operatorId === user?.uid)
+      || (filter === 'tickets' && Boolean(conversation.ticketId))
       || conversation.status === filter)
     .filter((c) => agentFilter === 'all' || c.agentId === agentFilter)
 
@@ -622,6 +626,7 @@ export default function InboxPage() {
                   <span style={{ fontSize: 11.5, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, ...STATUS_STYLE[conv.status] }}>
                     {conv.status}
                   </span>
+                  {conv.ticketId && <span title={`Support ticket #${conv.ticketNumber ?? ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--accent-text)' }}><Ticket size={11} />#{conv.ticketNumber ?? '—'}</span>}
                   <span
                     style={{
                       fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--ink-faint)',
@@ -741,6 +746,15 @@ export default function InboxPage() {
           {selectedConv.summary && (
             <p style={{ fontSize: 13, color: 'var(--ink-mute)', margin: '12px 20px 0' }}>{selectedConv.summary}</p>
           )}
+          <InboxTicketPanel
+            conversationId={selectedConv.id}
+            agentId={selectedConv.agentId}
+            ticketId={selectedConv.ticketId}
+            ticketNumber={selectedConv.ticketNumber}
+            suggestedSubject={selectedConv.lastMessage || `Support request from ${conversationLabel(selectedConv)}`}
+            operators={operators}
+            canRetryDelivery={workspace?.role === 'owner'}
+          />
           {actionError && <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', margin: '10px 20px 0' }}>{actionError}</p>}
 
           {/* Messages */}

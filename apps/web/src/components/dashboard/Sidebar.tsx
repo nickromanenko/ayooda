@@ -75,7 +75,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
   const { workspace } = useWorkspace()
   const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsedSnapshot, getCollapsedServerSnapshot)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [badges, setBadges] = useState({ inbox: 0, channels: 0 })
+  const [badges, setBadges] = useState({ inbox: 0, channels: 0, tickets: 0 })
   const shortcutLabel = '⌘/Ctrl K'
 
   useEffect(() => {
@@ -83,13 +83,15 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
     let cancelled = false
     const refresh = async () => {
       try {
-        const [inboxRes, channelsRes] = await Promise.all([
+        const [inboxRes, channelsRes, ticketsRes] = await Promise.all([
           apiRequest('/conversations?status=waiting'),
           role === 'owner' ? apiRequest('/channels/reliability') : Promise.resolve(null),
+          role === 'owner' ? apiRequest('/tickets?deliveryState=failed') : Promise.resolve(null),
         ])
         const inboxBody = inboxRes.ok ? await inboxRes.json() as unknown[] : null
         const channelsBody = channelsRes?.ok ? await channelsRes.json() as { summary?: { failing?: number } } : null
-        if (!cancelled) setBadges({ inbox: inboxBody?.length ?? 0, channels: channelsBody?.summary?.failing ?? 0 })
+        const ticketsBody = ticketsRes?.ok ? await ticketsRes.json() as { tickets?: unknown[] } : null
+        if (!cancelled) setBadges({ inbox: inboxBody?.length ?? 0, channels: channelsBody?.summary?.failing ?? 0, tickets: ticketsBody?.tickets?.length ?? 0 })
       } catch { /* badges are supplementary; navigation still works without them */ }
     }
     void refresh()
@@ -159,6 +161,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
   }
 
   const badgeCount = (item: { badge?: 'inbox' | 'channels' }) => item.badge ? badges[item.badge] : 0
+  const attentionCount = badges.inbox + badges.channels + badges.tickets
 
   const renderLink = (item: { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean; badge?: 'inbox' | 'channels' }) => {
     const active = isActive(item)
@@ -210,7 +213,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
       </Link>
       <div className={styles.mobileHeaderActions}>
         <button type="button" className={styles.menuButton} aria-label="Search dashboard" title="Search" onClick={openSearch}><Search size={19} /></button>
-        <button type="button" className={styles.menuButton} aria-label={`Needs attention, ${badges.inbox + badges.channels} open items`} title="Needs attention" onClick={openAttention}><Bell size={19} />{badges.inbox + badges.channels > 0 && <span className={styles.mobileBadge}>{badges.inbox + badges.channels > 99 ? '99+' : badges.inbox + badges.channels}</span>}</button>
+        <button type="button" className={styles.menuButton} aria-label={`Needs attention, ${attentionCount} open items`} title="Needs attention" onClick={openAttention}><Bell size={19} />{attentionCount > 0 && <span className={styles.mobileBadge}>{attentionCount > 99 ? '99+' : attentionCount}</span>}</button>
         <button type="button" className={styles.menuButton} aria-label="Open dashboard navigation" aria-expanded={mobileOpen} aria-controls="dashboard-mobile-drawer" onClick={() => setMobileOpen(true)}><Menu size={20} /></button>
       </div>
     </header>
@@ -280,13 +283,13 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
           type="button"
           className={styles.searchButton}
           data-collapsed={collapsed}
-          data-tooltip={collapsed ? `Needs attention, ${badges.inbox + badges.channels} open items` : undefined}
-          aria-label={`Needs attention, ${badges.inbox + badges.channels} open items`}
+          data-tooltip={collapsed ? `Needs attention, ${attentionCount} open items` : undefined}
+          aria-label={`Needs attention, ${attentionCount} open items`}
           onClick={openAttention}
         >
           <Bell size={15} strokeWidth={1.6} />
           {!collapsed && <span>Needs attention</span>}
-          {badges.inbox + badges.channels > 0 && <span className={styles.navBadge} data-collapsed={collapsed}>{collapsed ? '' : badges.inbox + badges.channels > 99 ? '99+' : badges.inbox + badges.channels}</span>}
+          {attentionCount > 0 && <span className={styles.navBadge} data-collapsed={collapsed}>{collapsed ? '' : attentionCount > 99 ? '99+' : attentionCount}</span>}
         </button>
         {visibleNav.map(renderLink)}
       </nav>
