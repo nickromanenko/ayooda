@@ -33,6 +33,7 @@ export interface PrepareTurnInput {
   telegramChatId?: number
   agentId?: string
   sandbox?: { ownerUid: string; allowTools: boolean }
+  customer?: { externalId: string; name?: string; email?: string }
 }
 
 export interface ReadyTurn {
@@ -111,7 +112,7 @@ export function evaluateSilenceGate(data: FirebaseFirestore.DocumentData | undef
  */
 export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn> {
   const turnStartedAt = new Date()
-  const { workspaceId, channelId, conversationId, visitorId, message, channelType, telegramChatId, agentId, sandbox } = input
+  const { workspaceId, channelId, conversationId, visitorId, message, channelType, telegramChatId, agentId, sandbox, customer } = input
   const isSandbox = !!sandbox
   const trimmed = message.trim()
 
@@ -126,6 +127,14 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   const convSnap = await convRef.get()
   if (convSnap.exists && convSnap.data()!.visitorId !== visitorId) {
     return { kind: 'error', error: 'Not found' }
+  }
+  if (convSnap.exists && customer && !isSandbox) {
+    await convRef.update({
+      customerExternalId: customer.externalId,
+      customerName: customer.name ?? null,
+      customerEmail: customer.email ?? null,
+      customerVerified: true,
+    })
   }
   // A workflow route persists on the conversation. Channel defaults only choose
   // the agent for a new thread; later turns stay with the routed specialist.
@@ -207,6 +216,12 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
       channelType,
       agentId: agentRec.id,
       visitorId,
+      ...(customer ? {
+        customerExternalId: customer.externalId,
+        customerName: customer.name ?? null,
+        customerEmail: customer.email ?? null,
+        customerVerified: true,
+      } : {}),
       status: 'bot',
       operatorId: null,
       createdAt: FieldValue.serverTimestamp(),

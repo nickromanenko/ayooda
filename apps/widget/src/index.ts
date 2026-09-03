@@ -46,6 +46,21 @@ if (!CHANNEL_ID && !PREVIEW_CONFIG_RAW) {
 interface WidgetConfig extends WidgetAppearance {
   agentName: string
   agentPhotoURL: string | null
+  identityVerification?: { enabled: boolean; requireAuthentication: boolean }
+}
+
+interface WidgetSession { sessionToken: string; conversationId: string; expiresAt: string }
+interface AyoodaCommandQueue { (...args: unknown[]): void; q?: unknown[][] }
+
+declare global { interface Window { Ayooda?: AyoodaCommandQueue } }
+
+let widgetInstance: AyoodaWidget | null = null
+let pendingIdentityToken: string | null = null
+const queuedCommands = Array.isArray(window.Ayooda?.q) ? [...window.Ayooda.q] : []
+for (const args of queuedCommands) {
+  if ((args[0] === 'boot' || args[0] === 'update') && typeof (args[1] as { identityToken?: unknown } | undefined)?.identityToken === 'string') {
+    pendingIdentityToken = (args[1] as { identityToken: string }).identityToken
+  } else if (args[0] === 'shutdown') pendingIdentityToken = null
 }
 
 interface ChatDone {
@@ -190,9 +205,25 @@ function localizeConfig(config: WidgetConfig): WidgetConfig {
   return { ...config, ...copy }
 }
 
-async function fetchHistory(conversationId: string, visitorId: string): Promise<ConversationHistory | null> {
+function identityParams(visitorId: string, sessionToken?: string | null): string {
+  return sessionToken
+    ? `sessionToken=${encodeURIComponent(sessionToken)}`
+    : `visitorId=${encodeURIComponent(visitorId)}`
+}
+
+async function createAuthenticatedSession(identityToken: string): Promise<WidgetSession> {
+  const res = await fetch(`${API_BASE}/widget/session`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channelId: CHANNEL_ID, identityToken }),
+  })
+  const payload = await res.json().catch(() => ({})) as WidgetSession & { error?: string }
+  if (!res.ok) throw new Error(payload.error ?? 'Could not verify this customer.')
+  return payload
+}
+
+async function fetchHistory(conversationId: string, visitorId: string, sessionToken?: string | null): Promise<ConversationHistory | null> {
   const url = `${API_BASE}/widget/conversations/${conversationId}/messages` +
-    `?channelId=${encodeURIComponent(CHANNEL_ID)}&visitorId=${encodeURIComponent(visitorId)}`
+    `?channelId=${encodeURIComponent(CHANNEL_ID)}&${identityParams(visitorId, sessionToken)}`
   const res = await fetch(url)
   if (res.status === 404) return null
   if (!res.ok) throw new Error('Failed to load conversation history')
@@ -205,6 +236,7 @@ async function sendMessageStream(
   message: string,
   conversationId: string,
   visitorId: string,
+  sessionToken: string | null,
   handlers: { onChunk: (text: string) => void; onDone: (done: ChatDone) => void },
 ): Promise<void> {
   const controller = new AbortController()
@@ -217,7 +249,7 @@ async function sendMessageStream(
     const res = await fetch(`${API_BASE}/widget/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channelId: CHANNEL_ID, conversationId, message, visitorId }),
+      body: JSON.stringify({ channelId: CHANNEL_ID, conversationId, message, visitorId, sessionToken }),
       signal: controller.signal,
     })
     if (!res.ok) {
@@ -897,6 +929,7 @@ class AyoodaWidget {
   private sending = false
   private conversationId: string
   private visitorId: string
+  private sessionToken: string | null
   private config: WidgetConfig
   private strings: WidgetStrings
   private messageBuffer = new MessageBuffer()
@@ -914,18 +947,27 @@ class AyoodaWidget {
   private readonly preview: boolean
   private newChatDialog!: HTMLElement
   private newChatButton!: HTMLButtonElement
+  private sessionVersion = 0
 
-  constructor(host: HTMLElement, config: WidgetConfig, preview = false) {
+  constructor(host: HTMLElement, config: WidgetConfig, preview = false, session: WidgetSession | null = null) {
     this.config = localizeConfig(config)
     this.preview = preview
     this.strings = widgetStrings(config.locale, navigator.language)
-    this.conversationId = preview ? crypto.randomUUID() : getConversationId(config)
+    this.conversationId = preview ? crypto.randomUUID() : session?.conversationId ?? getConversationId(config)
     this.visitorId = preview ? 'preview' : getVisitorId()
+    this.sessionToken = session?.sessionToken ?? null
 
     this.shadow = host.attachShadow({ mode: 'open' })
     this.build()
     this.setupViewportSizing(host)
-    this.historyReady = preview ? Promise.resolve(this.loadPreview()) : this.loadHistory()
+    const authenticationRequired = !preview && config.identityVerification?.requireAuthentication && !session
+    if (authenticationRequired) {
+      this.setAuthenticationRequired(true)
+      this.appendBotMessage(this.strings.authenticationRequired, true)
+      this.historyReady = Promise.resolve()
+    } else {
+      this.historyReady = preview ? Promise.resolve(this.loadPreview()) : this.loadHistory()
+    }
     if (!preview) this.setupProactiveBehavior()
   }
 
@@ -1113,7 +1155,7 @@ class AyoodaWidget {
 
   private async loadHistory() {
     try {
-      const history = await fetchHistory(this.conversationId, this.visitorId)
+      const history = await fetchHistory(this.conversationId, this.visitorId, this.sessionToken)
       if (!history?.messages.length) {
         this.appendBotMessage(this.config.welcomeMessage, true)
       } else {
@@ -1200,6 +1242,54 @@ class AyoodaWidget {
     this.input.focus()
   }
 
+  async identify(identityToken: string) {
+    if (this.preview || !identityToken) return
+    const session = await createAuthenticatedSession(identityToken)
+    this.resetSession(session.conversationId, session.sessionToken)
+    this.setAuthenticationRequired(false)
+    this.historyReady = this.loadHistory()
+    await this.historyReady
+  }
+
+  async shutdown() {
+    if (this.preview) return
+    const oldToken = this.sessionToken
+    if (oldToken) {
+      void fetch(`${API_BASE}/widget/session`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+        body: JSON.stringify({ channelId: CHANNEL_ID, sessionToken: oldToken }),
+      }).catch(() => {})
+    }
+    this.resetSession(createConversationId(this.config), null)
+    if (this.config.identityVerification?.requireAuthentication) {
+      this.setAuthenticationRequired(true)
+      this.appendBotMessage(this.strings.authenticationRequired, true)
+    } else this.appendBotMessage(this.config.welcomeMessage, true)
+  }
+
+  private setAuthenticationRequired(required: boolean) {
+    this.input.disabled = required
+    this.input.placeholder = required ? this.strings.authenticationRequired : (this.config.inputPlaceholder || this.strings.compose)
+    this.sendBtn.disabled = required || !this.input.value.trim()
+  }
+
+  private resetSession(conversationId: string, sessionToken: string | null) {
+    this.sessionVersion++
+    this.sending = false
+    this.eventSource?.close()
+    this.eventSource = null
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = null
+    this.conversationId = conversationId
+    this.sessionToken = sessionToken
+    this.messageBuffer = new MessageBuffer()
+    this.feedSuspended = false
+    this.messages.replaceChildren()
+    this.hasConversationActivity = false
+    this.setUnreadCount(0)
+    this.setStatus('online')
+  }
+
   private requestNewConversation() {
     if (this.sending) return
     if (!this.hasConversationActivity) {
@@ -1219,7 +1309,7 @@ class AyoodaWidget {
     if (this.eventSource || this.feedSuspended) return
     const url =
       `${API_BASE}/widget/conversations/${this.conversationId}/events` +
-      `?channelId=${encodeURIComponent(CHANNEL_ID)}&visitorId=${encodeURIComponent(this.visitorId)}`
+      `?channelId=${encodeURIComponent(CHANNEL_ID)}&${identityParams(this.visitorId, this.sessionToken)}`
     const es = new EventSource(url)
     this.eventSource = es
 
@@ -1366,7 +1456,7 @@ class AyoodaWidget {
     void fetch(`${API_BASE}/widget/conversations/${this.conversationId}/messages/${messageId}/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channelId: CHANNEL_ID, visitorId: this.visitorId, value }),
+      body: JSON.stringify({ channelId: CHANNEL_ID, visitorId: this.visitorId, sessionToken: this.sessionToken, value }),
       keepalive: true,
     }).catch(() => {})
   }
@@ -1461,10 +1551,12 @@ class AyoodaWidget {
     const typingEl = this.showTyping()
     let bubble: HTMLElement | null = null
     let streamedMarkdown = ''
+    const sessionVersion = this.sessionVersion
 
     try {
-      await sendMessageStream(text, this.conversationId, this.visitorId, {
+      await sendMessageStream(text, this.conversationId, this.visitorId, this.sessionToken, {
         onChunk: (chunk) => {
+          if (sessionVersion !== this.sessionVersion) return
           const stick = this.isNearBottom()
           if (!bubble) {
             typingEl.remove()
@@ -1475,6 +1567,7 @@ class AyoodaWidget {
           this.afterContentChange(stick)
         },
         onDone: (done) => {
+          if (sessionVersion !== this.sessionVersion) return
           this.messageBuffer.markRendered(done.messageId)
           if (bubble) this.addMessageDetails(bubble, new Date().toISOString(), done.messageId)
           if (done.status === 'waiting') this.appendSystemNote(this.strings.waiting)
@@ -1490,6 +1583,7 @@ class AyoodaWidget {
         },
       })
     } catch (error) {
+      if (sessionVersion !== this.sessionVersion) return
       typingEl.remove()
       if (!bubble) {
         const message = error instanceof DOMException && error.name === 'AbortError'
@@ -1500,6 +1594,7 @@ class AyoodaWidget {
         this.appendRetryError(message, text)
       }
     } finally {
+      if (sessionVersion !== this.sessionVersion) return
       this.sending = false
       this.setStatus('online')
       for (const pending of this.messageBuffer.flush()) {
@@ -1541,9 +1636,22 @@ async function init() {
     document.body.appendChild(host)
     if (preview) host.style.setProperty('--aw-keyboard-inset', '0px')
     else observeWidgetVisibility(host, config, () => recordWidgetEvent('visible'))
-    new AyoodaWidget(host, config, Boolean(preview))
+    const session = !preview && pendingIdentityToken ? await createAuthenticatedSession(pendingIdentityToken) : null
+    widgetInstance = new AyoodaWidget(host, config, Boolean(preview), session)
   } catch (err) {
     if (PREVIEW_CONFIG_RAW) document.body.dataset.ayoodaPreviewError = err instanceof Error ? err.message : 'Preview failed to initialize'
     console.error('[Ayooda] Failed to initialize widget:', err)
   }
 }
+
+window.Ayooda = ((command: unknown, options?: unknown) => {
+  if (command === 'boot' || command === 'update') {
+    const identityToken = (options as { identityToken?: unknown } | undefined)?.identityToken
+    if (typeof identityToken !== 'string' || !identityToken) return
+    pendingIdentityToken = identityToken
+    if (widgetInstance) void widgetInstance.identify(identityToken).catch((error) => console.error('[Ayooda] Identity update failed:', error))
+  } else if (command === 'shutdown') {
+    pendingIdentityToken = null
+    if (widgetInstance) void widgetInstance.shutdown()
+  }
+}) as AyoodaCommandQueue

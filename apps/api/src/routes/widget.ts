@@ -14,6 +14,10 @@ import { canHideBranding } from '../lib/channels/branding'
 import { runAgentTurn } from '../lib/chat/tools'
 import { rateLimit } from '../lib/rate-limit'
 import { DEFAULT_WIDGET_APPEARANCE } from '@ayooda/shared'
+import {
+  channelIdentitySecrets, createWidgetSession, resolveWidgetSession, revokeWidgetSession,
+  verifyWidgetIdentityToken, type VerifiedWidgetCustomer,
+} from '../lib/widget-identity'
 
 const widget = new Hono()
 
@@ -65,6 +69,26 @@ function domainAllowed(c: { req: { header: (name: string) => string | undefined 
     : host === domain)
 }
 
+type WidgetIdentity = { visitorId: string; customer?: VerifiedWidgetCustomer }
+
+async function resolveIdentity(
+  workspaceId: string,
+  channelId: string,
+  channelData: Record<string, unknown>,
+  visitorId?: string | null,
+  sessionToken?: string | null,
+): Promise<WidgetIdentity | null> {
+  const session = await resolveWidgetSession(workspaceId, channelId, sessionToken)
+  if (session) return session
+  // Never silently downgrade an invalid/expired authenticated session to a
+  // caller-controlled guest identity, even when this widget also allows guests.
+  if (sessionToken) return null
+  const settings = channelData.identityVerification as { requireAuthentication?: boolean } | undefined
+  if (settings?.requireAuthentication) return null
+  if (!visitorId || visitorId.length > 200 || !/^[A-Za-z0-9_-]+$/.test(visitorId)) return null
+  return { visitorId }
+}
+
 // ---------------------------------------------------------------------------
 // GET /widget/config/:channelId
 // ---------------------------------------------------------------------------
@@ -73,7 +97,6 @@ widget.get('/config/:channelId', async (c) => {
   const channelId = c.req.param('channelId')
   const channelDoc = await findChannel(channelId)
   if (!channelDoc) return c.json({ error: 'Channel not found' }, 404)
-
   const data = channelDoc.data()
   if (data.isActive === false) return c.json({ error: 'This widget is paused.' }, 404)
   if (!domainAllowed(c, data)) return c.json({ error: 'This widget is not allowed on this domain.' }, 403)
@@ -143,7 +166,57 @@ widget.get('/config/:channelId', async (c) => {
     agentPhotoURL,
     showBranding,
     allowedDomains: undefined,
+    identityVerification: {
+      enabled: Boolean(data.identityVerification?.enabled),
+      requireAuthentication: Boolean(data.identityVerification?.requireAuthentication),
+    },
   })
+})
+
+// Exchange a short-lived, server-signed customer identity JWT for an opaque
+// browser session. The signing secret never enters customer-side JavaScript.
+widget.post('/session', async (c) => {
+  c.header('Cache-Control', 'no-store')
+  const body = await c.req.json<{ channelId?: string; identityToken?: string }>().catch(() => ({} as { channelId?: string; identityToken?: string }))
+  if (!body.channelId || !body.identityToken || body.identityToken.length > 8192) return c.json({ error: 'channelId and a valid identityToken are required' }, 400)
+  if (!rateLimit(`widget-session:${clientIp(c)}`, 120, RATE_WINDOW_MS).ok) return c.json({ error: 'Too many requests' }, 429)
+  const channelDoc = await findChannel(body.channelId)
+  if (!channelDoc || channelDoc.data().isActive === false || !domainAllowed(c, channelDoc.data())) return c.json({ error: 'Not found' }, 404)
+  const data = channelDoc.data()
+  if (!data.identityVerification?.enabled) return c.json({ error: 'Authenticated visitors are not enabled for this widget.' }, 403)
+  const secrets = channelIdentitySecrets(data)
+  if (!secrets.length) return c.json({ error: 'Widget identity verification is not configured.' }, 503)
+  let customer: VerifiedWidgetCustomer
+  try {
+    let verified: VerifiedWidgetCustomer | null = null
+    for (const secret of secrets) {
+      try { verified = verifyWidgetIdentityToken(body.identityToken, secret, body.channelId); break } catch { /* try rotation grace key */ }
+    }
+    if (!verified) throw new Error('Invalid identity token')
+    customer = verified
+  } catch (error) {
+    await channelDoc.ref.update({ 'identityVerification.lastFailureAt': new Date(), 'identityVerification.failureCount': FieldValue.increment(1) }).catch(() => {})
+    return c.json({ error: error instanceof Error ? error.message : 'Invalid identity token.' }, 401)
+  }
+  const workspaceId: string = data.workspaceId
+  const session = await createWidgetSession(workspaceId, body.channelId, customer)
+  const conversations = await adminDb.collection(`workspaces/${workspaceId}/conversations`)
+    .where('channelId', '==', body.channelId)
+    .where('visitorId', '==', session.visitorId)
+    .orderBy('updatedAt', 'desc')
+    .limit(1)
+    .get()
+  const existing = conversations.docs[0]
+  await channelDoc.ref.update({ 'identityVerification.lastVerifiedAt': new Date() }).catch(() => {})
+  return c.json({ sessionToken: session.token, expiresAt: session.expiresAt.toISOString(), conversationId: existing?.id ?? crypto.randomUUID() })
+})
+
+widget.delete('/session', async (c) => {
+  const body = await c.req.json<{ channelId?: string; sessionToken?: string }>().catch(() => ({} as { channelId?: string; sessionToken?: string }))
+  if (!body.channelId || !body.sessionToken) return c.json({ ok: true })
+  const channelDoc = await findChannel(body.channelId)
+  if (channelDoc) await revokeWidgetSession(channelDoc.data().workspaceId, body.sessionToken)
+  return c.json({ ok: true })
 })
 
 // ---------------------------------------------------------------------------
@@ -177,9 +250,9 @@ widget.post('/event', async (c) => {
 widget.post('/conversations/:conversationId/messages/:messageId/feedback', async (c) => {
   const conversationId = c.req.param('conversationId')
   const messageId = c.req.param('messageId')
-  const body = await c.req.json<{ channelId?: string; visitorId?: string; value?: string }>()
-    .catch(() => ({} as { channelId?: string; visitorId?: string; value?: string }))
-  if (!body.channelId || !body.visitorId || !['helpful', 'unhelpful'].includes(body.value ?? '')) {
+  const body = await c.req.json<{ channelId?: string; visitorId?: string; sessionToken?: string; value?: string }>()
+    .catch(() => ({} as { channelId?: string; visitorId?: string; sessionToken?: string; value?: string }))
+  if (!body.channelId || !['helpful', 'unhelpful'].includes(body.value ?? '')) {
     return c.json({ error: 'Invalid feedback.' }, 400)
   }
   if (!rateLimit(`widget-feedback:${clientIp(c)}`, 60, RATE_WINDOW_MS).ok) return c.json({ ok: true })
@@ -189,13 +262,15 @@ widget.post('/conversations/:conversationId/messages/:messageId/feedback', async
     return c.json({ error: 'Not found' }, 404)
   }
   const workspaceId: string = channelDoc.data().workspaceId
+  const identity = await resolveIdentity(workspaceId, body.channelId, channelDoc.data(), body.visitorId, body.sessionToken)
+  if (!identity) return c.json({ error: 'Authentication required' }, 401)
   const conversationRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
   const messageRef = conversationRef.collection('messages').doc(messageId)
   const value = body.value as 'helpful' | 'unhelpful'
 
   const found = await adminDb.runTransaction(async (transaction) => {
     const [conversation, message] = await Promise.all([transaction.get(conversationRef), transaction.get(messageRef)])
-    if (!conversation.exists || conversation.data()!.visitorId !== body.visitorId || !message.exists || message.data()!.role === 'user') return false
+    if (!conversation.exists || conversation.data()!.visitorId !== identity.visitorId || !message.exists || message.data()!.role === 'user') return false
     const previous = message.data()!.metadata?.visitorFeedback as 'helpful' | 'unhelpful' | undefined
     if (previous === value) return true
     transaction.update(messageRef, { 'metadata.visitorFeedback': value })
@@ -215,15 +290,16 @@ interface ChatBody {
   channelId: string
   conversationId: string
   message: string
-  visitorId: string
+  visitorId?: string
+  sessionToken?: string
 }
 
 widget.post('/chat', async (c) => {
   const body = await c.req.json<ChatBody>()
-  const { channelId, conversationId, message, visitorId } = body
+  const { channelId, conversationId, message } = body
 
-  if (!channelId || !conversationId || !message?.trim() || !visitorId) {
-    return c.json({ error: 'channelId, conversationId, message, and visitorId are required' }, 400)
+  if (!channelId || !conversationId || !message?.trim()) {
+    return c.json({ error: 'channelId, conversationId, and message are required' }, 400)
   }
 
   // Rate limit before any Firestore/LLM work
@@ -246,13 +322,16 @@ widget.post('/chat', async (c) => {
   // 1. Look up channel → get workspaceId + agent config
   const channelDoc = await findChannel(channelId)
   if (!channelDoc) return c.json({ error: 'Channel not found' }, 404)
+  if (channelDoc.data().isActive === false) return c.json({ error: 'This widget is paused.' }, 404)
   if (!domainAllowed(c, channelDoc.data())) return c.json({ error: 'This widget is not allowed on this domain.' }, 403)
 
   const workspaceId: string = channelDoc.data().workspaceId
+  const identity = await resolveIdentity(workspaceId, channelId, channelDoc.data(), body.visitorId, body.sessionToken)
+  if (!identity) return c.json({ error: 'Authentication required' }, 401)
 
   const { prepareTurn } = await import('../lib/chat/agent-turn')
   const prepared = await prepareTurn({
-    workspaceId, channelId, conversationId, visitorId, message, channelType: 'web_widget',
+    workspaceId, channelId, conversationId, visitorId: identity.visitorId, customer: identity.customer, message, channelType: 'web_widget',
     agentId: channelDoc.data().agentId,
   })
 
@@ -316,10 +395,12 @@ widget.post('/chat', async (c) => {
 // ---------------------------------------------------------------------------
 
 widget.get('/conversations/:conversationId/messages', async (c) => {
+  c.header('Cache-Control', 'private, no-store')
   const conversationId = c.req.param('conversationId')
   const channelId = c.req.query('channelId')
   const visitorId = c.req.query('visitorId')
-  if (!channelId || !visitorId) return c.json({ error: 'channelId and visitorId are required' }, 400)
+  const sessionToken = c.req.query('sessionToken')
+  if (!channelId) return c.json({ error: 'channelId is required' }, 400)
 
   const channelDoc = await findChannel(channelId)
   if (!channelDoc) return c.json({ error: 'Not found' }, 404)
@@ -327,9 +408,11 @@ widget.get('/conversations/:conversationId/messages', async (c) => {
   if (!domainAllowed(c, channelDoc.data())) return c.json({ error: 'Not found' }, 404)
 
   const workspaceId: string = channelDoc.data().workspaceId
+  const identity = await resolveIdentity(workspaceId, channelId, channelDoc.data(), visitorId, sessionToken)
+  if (!identity) return c.json({ error: 'Authentication required' }, 401)
   const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
   const convSnap = await convRef.get()
-  if (!convSnap.exists || convSnap.data()!.visitorId !== visitorId) {
+  if (!convSnap.exists || convSnap.data()!.visitorId !== identity.visitorId) {
     return c.json({ error: 'Not found' }, 404)
   }
 
@@ -354,11 +437,13 @@ widget.get('/conversations/:conversationId/messages', async (c) => {
 const HEARTBEAT_MS = 25_000
 
 widget.get('/conversations/:conversationId/events', async (c) => {
+  c.header('Cache-Control', 'no-store')
   const conversationId = c.req.param('conversationId')
   const channelId = c.req.query('channelId')
   const visitorId = c.req.query('visitorId')
-  if (!channelId || !visitorId) {
-    return c.json({ error: 'channelId and visitorId are required' }, 400)
+  const sessionToken = c.req.query('sessionToken')
+  if (!channelId) {
+    return c.json({ error: 'channelId is required' }, 400)
   }
 
   const ip = clientIp(c)
@@ -374,11 +459,13 @@ widget.get('/conversations/:conversationId/events', async (c) => {
   if (!domainAllowed(c, channelDoc.data())) return c.json({ error: 'Not found' }, 404)
 
   const workspaceId: string = channelDoc.data().workspaceId
+  const identity = await resolveIdentity(workspaceId, channelId, channelDoc.data(), visitorId, sessionToken)
+  if (!identity) return c.json({ error: 'Authentication required' }, 401)
   const convRef = adminDb.doc(`workspaces/${workspaceId}/conversations/${conversationId}`)
   const convSnap = await convRef.get()
   // visitorId must match — conversation IDs are client-generated; this prevents
   // one visitor subscribing to another visitor's conversation.
-  if (!convSnap.exists || convSnap.data()!.visitorId !== visitorId) {
+  if (!convSnap.exists || convSnap.data()!.visitorId !== identity.visitorId) {
     return c.json({ error: 'Not found' }, 404)
   }
 

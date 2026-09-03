@@ -25,6 +25,15 @@
       ]
     },
     {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "channelId", "order": "ASCENDING" },
+        { "fieldPath": "visitorId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "knowledge",
       "queryScope": "COLLECTION",
       "fields": [
@@ -110,6 +119,16 @@
       "fields": [
         { "fieldPath": "twilio.accountSid", "order": "ASCENDING" },
         { "fieldPath": "twilio.fromNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "widgetSessions",
+      "fieldPath": "expiresAt",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
       ]
     }
   ],

@@ -7,5 +7,7 @@ test('channel serialization removes credentials for every supported provider', (
     botTokenEnc: 'telegram', resendApiKeyEnc: 'email', webhookSecret: 'webhook',
     slackBotTokenEnc: 'slack-token', slackSigningSecretEnc: 'slack-signing',
     twilioAuthTokenEnc: 'twilio-token',
+    identitySigningSecretEnc: 'identity-secret',
+    identityPreviousSigningSecretEnc: 'previous-identity-secret',
   })).toEqual({ id: 'channel', type: 'slack', config: { teamName: 'Acme' } })
 })

@@ -7,6 +7,7 @@ import { trackProductEvent } from '@/lib/product-analytics'
 import { Loading } from '@/components/dashboard/Loading'
 import { label, errorText, input } from '@/components/dashboard/ui'
 import WidgetAppearance from '@/components/dashboard/WidgetAppearance'
+import WidgetIdentitySettings from '@/components/dashboard/WidgetIdentitySettings'
 import LaunchReadiness from './LaunchReadiness'
 import {
   DEFAULT_WIDGET_APPEARANCE,
@@ -30,6 +31,7 @@ interface Channel {
     daily?: Record<string, { loads?: number; visible?: number; open?: number; conversations?: number }>
   }
   brandingLocked?: boolean
+  identityVerification?: { enabled: boolean; requireAuthentication: boolean; hasSigningSecret: boolean; lastVerifiedAt?: string | null; failureCount?: number }
   config?: Partial<Appearance> & { agentName?: string; agentPhotoURL?: string | null; fromAddress?: string; inboxAddress?: string; accountSid?: string; fromNumber?: string }
   telegram?: { botUsername: string; botId: number }
   slack?: { teamId: string; teamName: string; botUserId: string }
@@ -422,6 +424,7 @@ export default function AgentDeployPage({ params }: { params: Promise<{ agentId:
                 }}
                 onSaved={applyAppearance}
               />
+              <WidgetIdentitySettings agentId={agentId} channelId={widget.id} initial={widget.identityVerification} />
 
               <button type="button" onClick={() => setConfirmWidgetRemoval(true)} disabled={widgetBusy} className="btn btn-ghost" style={{ marginTop: 20, borderRadius: 'var(--r-sm)', padding: '8px 14px', fontSize: 13, color: 'var(--danger)' }}>
                 Remove widget

@@ -7,6 +7,8 @@ export function stripChannelSecrets(data: Record<string, unknown>): Record<strin
     slackSigningSecretEnc,
     twilioAuthTokenEnc,
     webhookSecret,
+    identitySigningSecretEnc,
+    identityPreviousSigningSecretEnc,
     ...safe
   } = data
   return safe

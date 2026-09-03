@@ -46,6 +46,12 @@ service cloud.firestore {
           && callerData().get('role', 'owner') != 'member';
       }
 
+      // Opaque widget browser sessions contain verified customer identity and
+      // are exclusively resolved by the public API through the Admin SDK.
+      match /widgetSessions/{sessionId} {
+        allow read, write: if false;
+      }
+
       // Channel delivery telemetry and provider diagnostics are owner-only API
       // data. Error details are sanitized server-side and never client-readable.
       match /channelReliability/{channelId} {

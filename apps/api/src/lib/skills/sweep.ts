@@ -54,7 +54,7 @@ export function purgeFacts(
   return { facts: kept, nextExpiryAt: nextExpiry(kept) }
 }
 
-export interface SweepReport { closed: number; scored: number; purged: number; synced: number; sandboxPurged: number; slackEventsPurged: number; smsMessagesPurged: number; ticketDeliveries: number; failed: number }
+export interface SweepReport { closed: number; scored: number; purged: number; synced: number; sandboxPurged: number; widgetSessionsPurged: number; slackEventsPurged: number; smsMessagesPurged: number; ticketDeliveries: number; failed: number }
 
 type DateLike = Date | { toDate?: () => Date } | null | undefined
 
@@ -80,7 +80,7 @@ export function isKnowledgeSyncClaimable(data: Record<string, any>, now: Date): 
 }
 
 export async function runSweep(now = new Date()): Promise<SweepReport> {
-  const report: SweepReport = { closed: 0, scored: 0, purged: 0, synced: 0, sandboxPurged: 0, slackEventsPurged: 0, smsMessagesPurged: 0, ticketDeliveries: 0, failed: 0 }
+  const report: SweepReport = { closed: 0, scored: 0, purged: 0, synced: 0, sandboxPurged: 0, widgetSessionsPurged: 0, slackEventsPurged: 0, smsMessagesPurged: 0, ticketDeliveries: 0, failed: 0 }
 
   // 1. Close idle bot conversations. The query itself (not just each document update) is
   // wrapped so a transient failure — e.g. the composite index still building right after
@@ -266,7 +266,20 @@ export async function runSweep(now = new Date()): Promise<SweepReport> {
     report.failed++
   }
 
-  // 6. Slack event ids make webhook retries idempotent. Keep only a short receipt window.
+  // 6. Authenticated widget sessions contain customer identity and expire after
+  // one day. Purge the documents as well as rejecting them at request time.
+  try {
+    const expired = await adminDb.collectionGroup('widgetSessions').where('expiresAt', '<=', now).limit(SWEEP_BATCH).get()
+    for (const doc of expired.docs) {
+      try { await doc.ref.delete(); report.widgetSessionsPurged++ }
+      catch (err) { console.warn('[sweep] widget session purge failed:', doc.ref.path, err); report.failed++ }
+    }
+  } catch (err) {
+    console.warn('[sweep] widget-session purge query failed:', err)
+    report.failed++
+  }
+
+  // 7. Slack event ids make webhook retries idempotent. Keep only a short receipt window.
   try {
     const expired = await adminDb
       .collectionGroup('slackEventReceipts')
@@ -287,7 +300,7 @@ export async function runSweep(now = new Date()): Promise<SweepReport> {
     report.failed++
   }
 
-  // 7. Twilio Message SIDs make webhook retries idempotent; expire receipts after one day.
+  // 8. Twilio Message SIDs make webhook retries idempotent; expire receipts after one day.
   try {
     const expired = await adminDb
       .collectionGroup('smsMessageReceipts')
@@ -308,7 +321,7 @@ export async function runSweep(now = new Date()): Promise<SweepReport> {
     report.failed++
   }
 
-  // 8. Deliver durable ticket outbox events. Ticket creation is already complete;
+  // 9. Deliver durable ticket outbox events. Ticket creation is already complete;
   // failures remain visible and retry on the schedule owned by the delivery record.
   try {
     const deliveries = await processDueTicketDeliveries(now, SWEEP_BATCH)

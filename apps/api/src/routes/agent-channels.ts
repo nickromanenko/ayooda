@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { randomBytes } from 'crypto'
 import { adminDb } from '../lib/firebase-admin'
-import { requireAuth, type AuthVariables } from '../middleware/auth'
+import { requireAuth, requireOwner, type AuthVariables } from '../middleware/auth'
 import { requireAgent } from '../middleware/agent'
 import { encryptSecret, decryptSecret } from '../lib/crypto'
 import { getMe, setWebhook, deleteWebhook } from '../lib/telegram/client'
@@ -86,6 +86,13 @@ agentChannels.get('/', async (c) => {
         // Same shape as the skills catalogue: the row carries whether the plan
         // permits the option, so the UI can show it locked rather than hide it.
         brandingLocked: !canHide,
+        identityVerification: {
+          enabled: Boolean((safe.identityVerification as { enabled?: boolean } | undefined)?.enabled),
+          requireAuthentication: Boolean((safe.identityVerification as { requireAuthentication?: boolean } | undefined)?.requireAuthentication),
+          hasSigningSecret: typeof d.data().identitySigningSecretEnc === 'string',
+          lastVerifiedAt: (d.data().identityVerification?.lastVerifiedAt?.toDate?.() as Date | undefined)?.toISOString?.() ?? null,
+          failureCount: d.data().identityVerification?.failureCount ?? 0,
+        },
         config: {
           ...DEFAULT_WIDGET_APPEARANCE,
           ...config,
@@ -185,6 +192,56 @@ agentChannels.put('/web-widget', async (c) => {
     isActive: result.value.enabled,
   })
   return c.json(result.value)
+})
+
+/** Configure cryptographically verified signed-in visitors. Owner-only because it controls a signing credential. */
+agentChannels.put('/web-widget/identity', requireOwner, async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
+  const existing = await channelOfType(workspaceId, agentId, 'web_widget')
+  if (!existing) return c.json({ error: 'This agent has no widget yet.' }, 404)
+  const body = await c.req.json<{ enabled?: unknown; requireAuthentication?: unknown }>().catch(() => ({} as { enabled?: unknown; requireAuthentication?: unknown }))
+  if (typeof body.enabled !== 'boolean' || typeof body.requireAuthentication !== 'boolean') {
+    return c.json({ error: 'enabled and requireAuthentication must be booleans.' }, 400)
+  }
+  if (body.requireAuthentication && !body.enabled) return c.json({ error: 'Enable identity verification before requiring sign-in.' }, 400)
+  let signingSecret: string | undefined
+  const updates: Record<string, unknown> = {
+    'identityVerification.enabled': body.enabled,
+    'identityVerification.requireAuthentication': body.requireAuthentication,
+    'identityVerification.updatedAt': new Date(),
+  }
+  if (body.enabled && typeof existing.data().identitySigningSecretEnc !== 'string') {
+    signingSecret = randomBytes(32).toString('base64url')
+    updates.identitySigningSecretEnc = encryptSecret(signingSecret)
+  }
+  await existing.ref.update(updates)
+  return c.json({
+    enabled: body.enabled,
+    requireAuthentication: body.requireAuthentication,
+    hasSigningSecret: typeof existing.data().identitySigningSecretEnc === 'string' || Boolean(signingSecret),
+    ...(signingSecret ? { signingSecret } : {}),
+  })
+})
+
+agentChannels.post('/web-widget/identity/rotate', requireOwner, async (c) => {
+  const workspaceId = c.get('workspaceId')
+  const agentId = c.get('agentId')!
+  const existing = await channelOfType(workspaceId, agentId, 'web_widget')
+  if (!existing) return c.json({ error: 'This agent has no widget yet.' }, 404)
+  const signingSecret = randomBytes(32).toString('base64url')
+  const currentSecret = existing.data().identitySigningSecretEnc
+  const previousSecretValidUntil = new Date(Date.now() + 60 * 60_000)
+  await existing.ref.update({
+    identitySigningSecretEnc: encryptSecret(signingSecret),
+    ...(typeof currentSecret === 'string' ? {
+      identityPreviousSigningSecretEnc: currentSecret,
+      identityPreviousSecretExpiresAt: previousSecretValidUntil,
+    } : {}),
+    'identityVerification.enabled': true,
+    'identityVerification.rotatedAt': new Date(),
+  })
+  return c.json({ signingSecret, previousSecretValidUntil: typeof currentSecret === 'string' ? previousSecretValidUntil.toISOString() : null })
 })
 
 /** DELETE /agents/:agentId/channels/web-widget — take this agent off the web. */

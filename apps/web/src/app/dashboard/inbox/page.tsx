@@ -37,6 +37,10 @@ interface Conversation {
   channelType?: string
   ticketId?: string
   ticketNumber?: number
+  customerName?: string
+  customerEmail?: string
+  customerExternalId?: string
+  customerVerified?: boolean
 }
 
 interface Message {
@@ -121,6 +125,8 @@ function normalizeConversation(value: Record<string, unknown>): Conversation {
 }
 
 function conversationLabel(conversation: Conversation): string {
+  if (conversation.customerName) return conversation.customerName
+  if (conversation.customerEmail) return conversation.customerEmail
   if (conversation.emailReplyTo) return conversation.emailReplyTo
   if (conversation.smsFrom) return conversation.smsFrom
   if (conversation.slackUserId) return `Slack ${conversation.slackUserId}`

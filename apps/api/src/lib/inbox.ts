@@ -7,6 +7,9 @@ export interface InboxConversationSearchFields {
   smsFrom?: unknown
   slackUserId?: unknown
   telegramChatId?: unknown
+  customerName?: unknown
+  customerEmail?: unknown
+  customerExternalId?: unknown
 }
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
@@ -23,6 +26,9 @@ export function matchesInboxSearch(row: InboxConversationSearchFields, rawQuery:
     row.smsFrom,
     row.slackUserId,
     row.telegramChatId,
+    row.customerName,
+    row.customerEmail,
+    row.customerExternalId,
   ].map((value) => String(value ?? '').toLocaleLowerCase()).join('\n')
   return terms.every((term) => haystack.includes(term))
 }
@@ -34,10 +40,12 @@ export function inboxCustomerIdentity(row: InboxConversationSearchFields): {
   externalId: string
 } {
   const visitorId = text(row.visitorId) || 'Unknown visitor'
-  const email = text(row.emailReplyTo) || (visitorId.startsWith('email_') ? visitorId.slice(6) : '')
+  const email = text(row.customerEmail) || text(row.emailReplyTo) || (visitorId.startsWith('email_') ? visitorId.slice(6) : '')
   const phone = text(row.smsFrom) || (visitorId.startsWith('sms_') ? visitorId.slice(4) : '')
   const slackUser = text(row.slackUserId)
   const telegramChat = text(row.telegramChatId)
-  const label = email || phone || (slackUser ? `Slack ${slackUser}` : '') || (telegramChat ? `Telegram ${telegramChat}` : '') || visitorId
-  return { label, email: email || null, phone: phone || null, externalId: visitorId }
+  const name = text(row.customerName)
+  const externalId = text(row.customerExternalId) || visitorId
+  const label = name || email || phone || (slackUser ? `Slack ${slackUser}` : '') || (telegramChat ? `Telegram ${telegramChat}` : '') || externalId
+  return { label, email: email || null, phone: phone || null, externalId }
 }
