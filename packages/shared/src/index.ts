@@ -1,6 +1,13 @@
 import type { Subscription, PlanTier } from './plans'
 import type { SkillId, SkillConfig } from './skills'
 
+export type {
+  KnowledgeBaseArticle,
+  KnowledgeBaseArticleRole,
+  KnowledgeBaseArticleStatus,
+  KnowledgeBaseArticleSummary,
+} from './knowledge-base'
+
 export {
   KNOWLEDGE_SYNC_INTERVAL_HOURS,
   KNOWLEDGE_SYNC_LEASE_MINUTES,
