@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CopyPlus, Loader2, X } from 'lucide-react'
 import type { AgentDoc } from '@ayooda/shared'
 import { apiRequestOrThrow } from '@/lib/api'
+import { AppCheckbox } from '@/components/ui/AppCheckbox'
 import styles from './duplicate-agent.module.css'
 
 type CopyOptions = {
@@ -92,10 +93,7 @@ export default function DuplicateAgentDialog({ source, onClose }: { source: Agen
         <div className={styles.body}>
           <label className={styles.nameField}><span>New agent name</span><input ref={inputRef} value={name} maxLength={80} disabled={busy} onChange={(event) => setName(event.target.value)} /></label>
           <fieldset className={styles.options}><legend>Include reusable configuration</legend>{OPTIONS.map((option) => (
-            <label key={option.key} className={styles.option}>
-              <input type="checkbox" checked={options[option.key]} disabled={busy} onChange={(event) => setOptions((current) => ({ ...current, [option.key]: event.target.checked }))} />
-              <span><strong>{option.title}</strong><small>{option.description}</small></span>
-            </label>
+            <AppCheckbox key={option.key} className={styles.option} checked={options[option.key]} disabled={busy} onChange={(checked) => setOptions((current) => ({ ...current, [option.key]: checked }))} label={option.title} description={option.description} />
           ))}</fieldset>
           <div className={styles.scope}><strong>Always starts fresh</strong><p>Knowledge, channels, conversations, usage, agent photo, team access, and model-provider keys are not copied.</p></div>
           {error && <p className={styles.error} role="alert">{error}</p>}

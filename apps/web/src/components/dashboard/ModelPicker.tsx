@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, Cpu, Loader2, Search, Sparkles } from 'lucide-react'
 import type { GatewayModelCatalog, GatewayModelInfo } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { AppSelect } from '@/components/ui/AppSelect'
 import styles from './ModelPicker.module.css'
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -156,10 +157,13 @@ export default function ModelPicker({
                 aria-label="Search models"
               />
             </label>
-            <select value={provider} onChange={(event) => setProvider(event.target.value)} className={styles.providerSelect} aria-label="Filter by provider">
-              <option value="all">All providers</option>
-              {providers.map((item) => <option key={item} value={item}>{providerLabel(item)}</option>)}
-            </select>
+            <AppSelect
+              ariaLabel="Filter by provider"
+              className={styles.providerSelect}
+              onChange={setProvider}
+              options={[{ value: 'all', label: 'All providers' }, ...providers.map((item) => ({ value: item, label: providerLabel(item) }))]}
+              value={provider}
+            />
           </div>
 
           <div className={styles.modelList} role="listbox" aria-label="AI Gateway models">

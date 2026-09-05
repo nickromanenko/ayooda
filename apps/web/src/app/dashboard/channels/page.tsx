@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { toast } from '@heroui/react'
 import { Activity, BellRing, Bot, CheckCircle2, CircleAlert, Globe2, Loader2, Mail, MessageSquare, RefreshCw, Save, Smartphone } from 'lucide-react'
 import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import styles from './page.module.css'
 
 type Status = 'healthy' | 'failing' | 'unchecked' | 'inactive'
@@ -94,6 +97,7 @@ export default function ChannelReliabilityPage() {
       const body = await response.json().catch(() => ({})) as { error?: string }
       if (!response.ok) throw new Error(body.error ?? 'Could not save alert settings.')
       setAlertNotice(alerts.settings.enabled ? 'Reliability alerts are active.' : 'Reliability alerts are paused.')
+      toast.success(alerts.settings.enabled ? 'Reliability alerts enabled' : 'Reliability alerts paused')
       await loadAlerts()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save alert settings.')
@@ -146,41 +150,28 @@ export default function ChannelReliabilityPage() {
             <span className={styles.alertIcon}><BellRing size={18} strokeWidth={1.7} /></span>
             <div><h2 id="alert-settings-title" className={styles.alertTitle}>Reliability alerts</h2><p className={styles.alertDescription}>Notify owners once when a channel reaches the failure threshold, then again when it recovers.</p></div>
           </div>
-          <button
-            className={`${styles.toggle} ${alerts.settings.enabled ? styles.toggleOn : ''}`}
-            type="button" role="switch" aria-checked={alerts.settings.enabled}
-            aria-label="Enable reliability alerts"
-            onClick={() => updateAlerts((settings) => ({ ...settings, enabled: !settings.enabled }))}
-          ><span className={styles.toggleKnob} /></button>
+          <AppSwitch hideLabel label="Enable reliability alerts" checked={alerts.settings.enabled} onChange={(enabled) => updateAlerts((settings) => ({ ...settings, enabled }))} />
         </div>
 
         <div className={styles.alertForm} aria-disabled={!alerts.settings.enabled}>
-          <label className={styles.field}>
+          <div className={styles.field}>
             <span className={styles.fieldLabel}>Alert after</span>
-            <select className={styles.select} value={alerts.settings.threshold} disabled={!alerts.settings.enabled} onChange={(event) => updateAlerts((settings) => ({ ...settings, threshold: Number(event.target.value) }))}>
-              {[2, 3, 4, 5, 6, 8, 10].map((threshold) => <option key={threshold} value={threshold}>{threshold} consecutive failures</option>)}
-            </select>
-          </label>
+            <AppSelect ariaLabel="Alert failure threshold" value={String(alerts.settings.threshold)} disabled={!alerts.settings.enabled} onChange={(value) => updateAlerts((settings) => ({ ...settings, threshold: Number(value) }))} options={[2, 3, 4, 5, 6, 8, 10].map((threshold) => ({ value: String(threshold), label: `${threshold} consecutive failures` }))} />
+          </div>
 
           <div className={styles.destination}>
-            <label className={styles.checkRow}>
-              <input type="checkbox" checked={alerts.settings.email.enabled} disabled={!alerts.settings.enabled || alerts.transports.email.length === 0} onChange={(event) => updateAlerts((settings) => ({ ...settings, email: { ...settings.email, enabled: event.target.checked } }))} />
-              <span><strong>Email owner</strong><small>{alerts.transports.email.length ? 'Send through a connected Resend mailbox.' : 'Connect an email channel to enable this.'}</small></span>
-            </label>
+            <AppSwitch checked={alerts.settings.email.enabled} disabled={!alerts.settings.enabled || alerts.transports.email.length === 0} onChange={(enabled) => updateAlerts((settings) => ({ ...settings, email: { ...settings.email, enabled } }))} label="Email owner" description={alerts.transports.email.length ? 'Send through a connected Resend mailbox.' : 'Connect an email channel to enable this.'} />
             {alerts.settings.email.enabled && <div className={styles.destinationFields}>
               <label className={styles.field}><span className={styles.fieldLabel}>Recipient</span><input className={styles.input} type="email" value={alerts.settings.email.address} disabled={!alerts.settings.enabled} onChange={(event) => updateAlerts((settings) => ({ ...settings, email: { ...settings.email, address: event.target.value } }))} /></label>
-              <label className={styles.field}><span className={styles.fieldLabel}>Send with</span><select className={styles.select} value={alerts.settings.email.transportChannelId} disabled={!alerts.settings.enabled} onChange={(event) => updateAlerts((settings) => ({ ...settings, email: { ...settings.email, transportChannelId: event.target.value } }))}>{alerts.transports.email.map((channel) => <option key={channel.id} value={channel.id}>{channel.label}</option>)}</select></label>
+              <div className={styles.field}><span className={styles.fieldLabel}>Send with</span><AppSelect ariaLabel="Email transport" value={alerts.settings.email.transportChannelId} disabled={!alerts.settings.enabled} onChange={(value) => updateAlerts((settings) => ({ ...settings, email: { ...settings.email, transportChannelId: value } }))} options={alerts.transports.email.map((channel) => ({ value: channel.id, label: channel.label }))} /></div>
             </div>}
           </div>
 
           <div className={styles.destination}>
-            <label className={styles.checkRow}>
-              <input type="checkbox" checked={alerts.settings.slack.enabled} disabled={!alerts.settings.enabled || alerts.transports.slack.length === 0} onChange={(event) => updateAlerts((settings) => ({ ...settings, slack: { ...settings.slack, enabled: event.target.checked } }))} />
-              <span><strong>Slack channel</strong><small>{alerts.transports.slack.length ? 'Send through a connected Slack app.' : 'Connect a Slack channel to enable this.'}</small></span>
-            </label>
+            <AppSwitch checked={alerts.settings.slack.enabled} disabled={!alerts.settings.enabled || alerts.transports.slack.length === 0} onChange={(enabled) => updateAlerts((settings) => ({ ...settings, slack: { ...settings.slack, enabled } }))} label="Slack channel" description={alerts.transports.slack.length ? 'Send through a connected Slack app.' : 'Connect a Slack channel to enable this.'} />
             {alerts.settings.slack.enabled && <div className={styles.destinationFields}>
               <label className={styles.field}><span className={styles.fieldLabel}>Channel ID</span><input className={styles.input} value={alerts.settings.slack.destination} disabled={!alerts.settings.enabled} placeholder="C0123456789" onChange={(event) => updateAlerts((settings) => ({ ...settings, slack: { ...settings.slack, destination: event.target.value } }))} /></label>
-              <label className={styles.field}><span className={styles.fieldLabel}>Send with</span><select className={styles.select} value={alerts.settings.slack.transportChannelId} disabled={!alerts.settings.enabled} onChange={(event) => updateAlerts((settings) => ({ ...settings, slack: { ...settings.slack, transportChannelId: event.target.value } }))}>{alerts.transports.slack.map((channel) => <option key={channel.id} value={channel.id}>{channel.label}</option>)}</select></label>
+              <div className={styles.field}><span className={styles.fieldLabel}>Send with</span><AppSelect ariaLabel="Slack transport" value={alerts.settings.slack.transportChannelId} disabled={!alerts.settings.enabled} onChange={(value) => updateAlerts((settings) => ({ ...settings, slack: { ...settings.slack, transportChannelId: value } }))} options={alerts.transports.slack.map((channel) => ({ value: channel.id, label: channel.label }))} /></div>
             </div>}
           </div>
         </div>

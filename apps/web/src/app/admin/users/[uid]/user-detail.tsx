@@ -5,12 +5,14 @@ import { ArrowLeft, Loader2, LogOut, ShieldOff, ShieldCheck } from 'lucide-react
 import { useCallback, useEffect, useState } from 'react'
 import type { AdminUserSummary } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
 import styles from '../../admin.module.css'
 
 const fullDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 const shown = (value: string | null) => value ? fullDate.format(new Date(value)) : '—'
 
 export default function UserDetail({ uid }: { uid: string }) {
+  const confirm = useAppConfirm()
   const [user, setUser] = useState<AdminUserSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
@@ -30,10 +32,13 @@ export default function UserDetail({ uid }: { uid: string }) {
 
   async function action(kind: 'disable' | 'enable' | 'revoke-sessions') {
     if (!user) return
-    const prompt = kind === 'disable'
-      ? `Disable ${user.email || user.uid}? They will be signed out and unable to sign in.`
-      : kind === 'enable' ? `Re-enable ${user.email || user.uid}?` : `Sign ${user.email || user.uid} out of all sessions?`
-    if (!window.confirm(prompt)) return
+    const identity = user.email || user.uid
+    const options = kind === 'disable'
+      ? { title: `Disable ${identity}?`, description: 'They will be signed out and unable to sign in until an administrator re-enables the account.', confirmLabel: 'Disable account', tone: 'danger' as const }
+      : kind === 'enable'
+        ? { title: `Re-enable ${identity}?`, description: 'This restores the user’s ability to sign in.', confirmLabel: 'Enable account', tone: 'warning' as const }
+        : { title: `Sign ${identity} out?`, description: 'All active sessions will be revoked. The user can sign in again with their credentials.', confirmLabel: 'Revoke sessions', tone: 'warning' as const }
+    if (!await confirm(options)) return
     setBusy(kind); setError(''); setNotice('')
     try {
       const response = await apiRequest(`/admin/users/${encodeURIComponent(uid)}/${kind}`, { method: 'POST' })

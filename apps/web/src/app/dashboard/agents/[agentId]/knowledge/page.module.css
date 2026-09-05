@@ -67,9 +67,7 @@
 .sourceError { color: var(--danger); }
 .sourceWarning { color: var(--accent-text); }
 .nextSync { color: var(--ink-faint); }
-.syncSelect { min-width: 98px; min-height: 34px; flex-shrink: 0; padding: 5px 23px 5px 8px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: var(--control-surface); color: var(--ink-mute); font: 9px var(--font-mono); }
-.syncSelect:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.syncSelect:disabled { opacity: .5; }
+.syncSelect { min-width: 118px; flex-shrink: 0; font: 9px var(--font-mono); }
 .iconButton { width: 40px; height: 40px; flex-shrink: 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--ink-mute); cursor: pointer; transition-property: background-color, color, transform; transition-duration: 140ms; }
 .iconButton:hover { background: var(--panel-2); color: var(--accent-text); }
 .deleteButton:hover { color: var(--danger); }

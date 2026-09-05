@@ -1,23 +1,18 @@
 import type { ReactNode } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Skeleton, Spinner } from '@heroui/react'
+import styles from './Loading.module.css'
 
 /** Full-panel loading state — centered and identical everywhere it's used. */
 export function Loading({ label = 'Loading…', pad = '48px 0', size = 16 }: { label?: string; pad?: string; size?: number }) {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      style={{
-        width: '100%', maxWidth: 880, margin: '0 auto', padding: pad,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-mute)', fontSize: 13, marginBottom: 16 }}>
-        <Loader2 size={size} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-text)', flexShrink: 0 }} />
+    <div role="status" aria-live="polite" className={styles.loading} style={{ padding: pad }}>
+      <div className={styles.status}>
+        <Spinner aria-hidden="true" className={styles.spinner} size={size <= 14 ? 'sm' : size >= 22 ? 'lg' : 'md'} />
         {label}
       </div>
-      <div aria-hidden style={{ display: 'grid', gap: 10 }}>
+      <div aria-hidden className={styles.skeletons}>
         {[72, 100, 86].map((width, index) => (
-          <span key={width} style={{ display: 'block', width: `${width}%`, height: index === 0 ? 18 : 52, borderRadius: index === 0 ? 8 : 14, background: 'linear-gradient(100deg, var(--panel-2) 25%, var(--panel) 45%, var(--panel-2) 65%)', backgroundSize: '220% 100%', animation: 'dashboard-shimmer 1.5s ease-in-out infinite' }} />
+          <Skeleton animationType="shimmer" className={index === 0 ? styles.titleSkeleton : styles.cardSkeleton} key={width} style={{ width: `${width}%` }} />
         ))}
       </div>
     </div>

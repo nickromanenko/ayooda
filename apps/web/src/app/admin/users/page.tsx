@@ -5,6 +5,7 @@ import { Loader2, Search } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { AdminListResponse, AdminUserSummary } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { AppSelect } from '@/components/ui/AppSelect'
 import styles from '../admin.module.css'
 
 const date = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -45,7 +46,7 @@ export default function AdminUsersPage() {
     <header className={styles.header}><div><p className={styles.eyebrow}>Platform directory</p><h1 className={styles.title}>Users</h1><p className={styles.description}>Find accounts, understand their workspace access, and safely manage sign-in.</p></div></header>
     <form className={styles.toolbar} onSubmit={(event) => { event.preventDefault(); setQuery(queryInput.trim()) }}>
       <div className={styles.searchWrap}><Search className={styles.searchIcon} size={16} /><label className="sr-only" htmlFor="admin-user-search">Search users</label><input id="admin-user-search" className={styles.field} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="Name, email, or exact UID" /></div>
-      <select className={styles.select} value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter by account status"><option value="">All statuses</option><option value="active">Active</option><option value="disabled">Disabled</option></select>
+      <AppSelect ariaLabel="Filter by account status" className={styles.heroSelect} value={status} onChange={setStatus} emptyLabel="All statuses" options={[{ value: 'active', label: 'Active' }, { value: 'disabled', label: 'Disabled' }]} />
       <label className={styles.button + ' ' + styles.buttonGhost} style={{ cursor: 'pointer' }}><input type="checkbox" checked={adminsOnly} onChange={(event) => setAdminsOnly(event.target.checked)} /> Admins only</label>
       <button className={styles.button} type="submit">Search</button>
     </form>

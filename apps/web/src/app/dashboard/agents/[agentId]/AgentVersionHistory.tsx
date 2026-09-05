@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, History, Loader2, RotateCcw } from 'lucide-react'
 import type { AgentDoc } from '@ayooda/shared'
 import { apiRequestOrThrow } from '@/lib/api'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
 import styles from './version-history.module.css'
 
 type CoreField = 'name' | 'description' | 'systemPrompt' | 'llmModel' | 'role'
@@ -42,6 +43,7 @@ export default function AgentVersionHistory({
   refreshKey: number
   onRestored: (agent: AgentDoc) => void
 }) {
+  const confirm = useAppConfirm()
   const [versions, setVersions] = useState<Version[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(false)
@@ -65,7 +67,7 @@ export default function AgentVersionHistory({
 
   async function restore(version: Version) {
     const when = versionDate(version.createdAt)
-    if (!window.confirm(`Restore the agent configuration from ${when}? Your current configuration will remain available in history.`)) return
+    if (!await confirm({ title: `Restore the version from ${when}?`, description: 'The saved version will become active. The current configuration will remain available in history.', confirmLabel: 'Restore version', tone: 'warning' })) return
     setRestoringId(version.id); setError('')
     try {
       const response = await apiRequestOrThrow(`/agents/${agentId}/versions/${version.id}/restore`, { method: 'POST' }, 'Could not restore this configuration.')

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, Clock3, FlaskConical, Loader2, Pencil, Play, Plus, Trash2, X } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import styles from './evaluation.module.css'
 
 type ExpectedOutcome = 'any' | 'answer' | 'handoff' | 'silent'
@@ -50,6 +53,7 @@ async function responseError(response: Response, fallback: string): Promise<Erro
 }
 
 export default function EvaluationSuite({ agentId }: { agentId: string }) {
+  const confirm = useAppConfirm()
   const [cases, setCases] = useState<EvaluationCase[]>([])
   const [runs, setRuns] = useState<EvaluationRun[]>([])
   const [loading, setLoading] = useState(true)
@@ -141,7 +145,7 @@ export default function EvaluationSuite({ agentId }: { agentId: string }) {
   }
 
   async function remove(testCase: EvaluationCase) {
-    if (!window.confirm(`Delete “${testCase.name}”? Past run results will remain available.`)) return
+    if (!await confirm({ title: `Delete “${testCase.name}”?`, description: 'The test will be removed from future suite runs. Past run results will remain available.', confirmLabel: 'Delete test' })) return
     setError('')
     const response = await apiRequest(`/agents/${agentId}/evaluations/cases/${testCase.id}`, { method: 'DELETE' }).catch(() => null)
     if (!response?.ok) {
@@ -198,13 +202,13 @@ export default function EvaluationSuite({ agentId }: { agentId: string }) {
           </div>
           <div className={styles.formGrid}>
             <label className={styles.field}><span>Test name</span><input value={draft.name} maxLength={100} placeholder="Refund policy" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
-            <label className={styles.field}><span>Expected behavior</span><select value={draft.expectedOutcome} onChange={(event) => setDraft((current) => ({ ...current, expectedOutcome: event.target.value as ExpectedOutcome }))}><option value="answer">Answer customer</option><option value="handoff">Hand off to human</option><option value="silent">Stop without reply</option><option value="any">Any behavior</option></select></label>
+            <div className={styles.field}><span>Expected behavior</span><AppSelect ariaLabel="Expected behavior" value={draft.expectedOutcome} onChange={(value) => setDraft((current) => ({ ...current, expectedOutcome: value as ExpectedOutcome }))} options={[{ value: 'answer', label: 'Answer customer' }, { value: 'handoff', label: 'Hand off to human' }, { value: 'silent', label: 'Stop without reply' }, { value: 'any', label: 'Any behavior' }]} /></div>
             <label className={`${styles.field} ${styles.full}`}><span>Customer message</span><textarea rows={2} maxLength={5000} value={draft.prompt} placeholder="Can I get a refund after 30 days?" onChange={(event) => setDraft((current) => ({ ...current, prompt: event.target.value }))} /></label>
             <label className={styles.field}><span>Must mention <small>one phrase per line</small></span><textarea rows={3} value={draft.expectedIncludes.join('\n')} placeholder={'30 days\ncontact support'} onChange={(event) => setDraft((current) => ({ ...current, expectedIncludes: event.target.value.split('\n') }))} /></label>
             <label className={styles.field}><span>Must avoid <small>one phrase per line</small></span><textarea rows={3} value={draft.forbiddenIncludes.join('\n')} placeholder={'guaranteed refund\nlegal advice'} onChange={(event) => setDraft((current) => ({ ...current, forbiddenIncludes: event.target.value.split('\n') }))} /></label>
           </div>
           <div className={styles.formActions}>
-            <label className={styles.enabled}><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} /> Include in suite runs</label>
+            <AppSwitch compact className={styles.enabled} checked={draft.enabled} onChange={(enabled) => setDraft((current) => ({ ...current, enabled }))} label="Include in suite runs" />
             <button type="button" className="btn btn-ghost" onClick={() => setFormOpen(false)}>Cancel</button>
             <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={saving || !draft.name.trim() || !draft.prompt.trim()}>{saving && <Loader2 size={14} className={styles.spin} />}{editingId ? 'Save changes' : 'Add test'}</button>
           </div>
@@ -223,7 +227,7 @@ export default function EvaluationSuite({ agentId }: { agentId: string }) {
             const result = lastResult.get(testCase.id)
             return (
               <article key={testCase.id} className={styles.case} data-disabled={!testCase.enabled}>
-                <label className={styles.caseToggle} title={testCase.enabled ? 'Included in suite runs' : 'Excluded from suite runs'}><input type="checkbox" checked={testCase.enabled} onChange={() => void toggle(testCase)} /><span /></label>
+                <AppSwitch hideLabel className={styles.caseToggle} label={testCase.enabled ? 'Included in suite runs' : 'Excluded from suite runs'} checked={testCase.enabled} onChange={() => void toggle(testCase)} />
                 <div className={styles.caseCopy}>
                   <div className={styles.caseTitle}><strong>{testCase.name}</strong>{result !== undefined && <span className={result ? styles.pass : styles.fail}>{result ? <Check size={11} /> : <X size={11} />}{result ? 'Passed' : 'Failed'}</span>}</div>
                   <p>{testCase.prompt}</p>

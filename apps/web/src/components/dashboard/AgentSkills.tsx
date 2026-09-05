@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AgentSkillView, SkillId } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import { Loading } from '@/components/dashboard/Loading'
 import { muted } from '@/components/dashboard/ui'
 
@@ -58,13 +59,7 @@ export default function AgentSkills({ agentId }: { agentId: string }) {
             {s.locked ? (
               <span style={muted}>Upgrade to enable</span>
             ) : (
-              <input
-                type="checkbox"
-                checked={s.enabled}
-                disabled={busy === s.id}
-                onChange={(e) => void save(s, { enabled: e.target.checked })}
-                aria-label={`Enable ${s.label}`}
-              />
+              <AppSwitch hideLabel label={`Enable ${s.label}`} checked={s.enabled} disabled={busy === s.id} onChange={(enabled) => void save(s, { enabled })} />
             )}
           </div>
           {s.enabled && !s.locked && <SkillConfigFields skill={s} onSave={save} busy={busy === s.id} />}

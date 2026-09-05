@@ -6,6 +6,8 @@ import { ExternalLink, Eye, EyeOff, KeyRound, Loader2, Lock, ServerCog, ShieldCh
 import type { AgentAccessEntry, CustomEndpointStatus, GatewayKeyStatus } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
+import { AppCheckbox } from '@/components/ui/AppCheckbox'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import { card, label, muted, errorText } from '@/components/dashboard/ui'
 import styles from './page.module.css'
 
@@ -264,18 +266,15 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
             </div>
 
             <div className={styles.endpointFooter}>
-              <label className={styles.keylessOption}>
-                <input
-                  type="checkbox"
+              <AppCheckbox className={styles.keylessOption}
                   checked={customKeyless}
-                  onChange={(event) => {
-                    setCustomKeyless(event.target.checked)
-                    if (event.target.checked) { setCustomApiKey(''); setShowCustomKey(false) }
+                  onChange={(checked) => {
+                    setCustomKeyless(checked)
+                    if (checked) { setCustomApiKey(''); setShowCustomKey(false) }
                     setCustomError(''); setCustomSuccess('')
                   }}
+                  label="This endpoint does not require an API key"
                 />
-                This endpoint does not require an API key
-              </label>
               <button
                 type="submit"
                 className={`btn btn-primary ${styles.actionButton}`}
@@ -451,12 +450,7 @@ export default function AgentSecurityPage({ params }: { params: Promise<{ agentI
             </div>
             {busy === p.uid
               ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--ink-mute)' }} />
-              : <input
-                  type="checkbox"
-                  checked={p.hasAccess}
-                  onChange={(e) => void toggle(p, e.target.checked)}
-                  aria-label={`Let ${p.displayName || p.email} configure this agent`}
-                />}
+              : <AppSwitch hideLabel checked={p.hasAccess} onChange={(checked) => void toggle(p, checked)} label={`Let ${p.displayName || p.email} configure this agent`} />}
           </label>
         ))}
       </div>

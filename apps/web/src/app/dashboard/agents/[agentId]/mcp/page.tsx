@@ -6,6 +6,9 @@ import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { trackProductEvent } from '@/lib/product-analytics'
 import { MCP_TRANSPORT_LABELS, type McpServerDef, type McpTransportType, type McpServerAuthType } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
 
 const row: React.CSSProperties = { display: 'flex', gap: 8, marginBottom: 8 }
@@ -30,6 +33,7 @@ const emptyForm: FormState = {
 }
 
 export default function AgentMcpPage({ params }: { params: Promise<{ agentId: string }> }) {
+  const confirm = useAppConfirm()
   const { agentId } = use(params)
 
   const [servers, setServers] = useState<McpServerDef[]>([])
@@ -90,7 +94,7 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
   }
 
   async function remove(id: string) {
-    if (!window.confirm('Delete this MCP server connection?')) return
+    if (!await confirm({ title: 'Delete this MCP connection?', description: 'The agent will immediately lose access to the tools provided by this server.', confirmLabel: 'Delete connection' })) return
     setBusyId(id)
     try { await apiRequestOrThrow(`/agents/${agentId}/mcp/${id}`, { method: 'DELETE' }, 'Could not delete this MCP server.'); await load() }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not delete this MCP server.') }
@@ -181,10 +185,7 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
             <input placeholder="Server name (e.g. Shopify MCP)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input} />
           </div>
           <div className="responsive-form-row" style={{ ...row }}>
-            <select value={form.transport} onChange={(e) => setForm({ ...form, transport: e.target.value as McpTransportType })} style={{ ...input, width: 170 }}>
-              <option value="streamable-http">Streamable HTTP</option>
-              <option value="sse">HTTP + SSE</option>
-            </select>
+            <AppSelect ariaLabel="MCP transport" value={form.transport} onChange={(value) => setForm({ ...form, transport: value as McpTransportType })} style={{ width: 180 }} options={[{ value: 'streamable-http', label: 'Streamable HTTP' }, { value: 'sse', label: 'HTTP + SSE' }]} />
             <input placeholder="https://mcp.example.com/mcp" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} style={input} />
           </div>
 
@@ -200,18 +201,12 @@ export default function AgentMcpPage({ params }: { params: Promise<{ agentId: st
 
           <p style={{ ...label, marginTop: 16 }}>Authentication</p>
           <div className="responsive-form-row" style={row}>
-            <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as McpServerAuthType })} style={{ ...input, width: 160 }}>
-              <option value="none">None</option>
-              <option value="bearer">Bearer token</option>
-              <option value="header">Custom header</option>
-            </select>
+            <AppSelect ariaLabel="MCP authentication" value={form.authType} onChange={(value) => setForm({ ...form, authType: value as McpServerAuthType })} style={{ width: 170 }} options={[{ value: 'none', label: 'None' }, { value: 'bearer', label: 'Bearer token' }, { value: 'header', label: 'Custom header' }]} />
             {form.authType === 'header' && <input placeholder="X-API-Key" value={form.headerName} onChange={(e) => setForm({ ...form, headerName: e.target.value })} style={{ ...input, width: 180 }} />}
             {form.authType !== 'none' && <input type="password" placeholder={form.hasSecret ? '•••• set (leave blank to keep)' : 'secret'} value={form.secret} onChange={(e) => setForm({ ...form, secret: e.target.value })} style={input} />}
           </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink-mute)', marginTop: 16 }}>
-            <input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enabled
-          </label>
+          <div style={{ marginTop: 16 }}><AppSwitch compact checked={form.enabled} onChange={(enabled) => setForm({ ...form, enabled })} label="Enabled" /></div>
 
           {error && <p style={{ ...errorText, marginTop: 12 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>

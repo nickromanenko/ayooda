@@ -7,6 +7,7 @@ import {
   type DocumentData, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { ArrowLeft, Loader2, Send, Plus, Trash2, MessagesSquare, FileText, Bot, User } from 'lucide-react'
+import { Button } from '@heroui/react'
 import { db } from '@/lib/firebase'
 import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { readSSE } from '@/lib/sse'
@@ -14,7 +15,9 @@ import { Loading } from '@/components/dashboard/Loading'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { useAuth } from '@/components/providers/AuthProvider'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
-import { label, input as inputStyle } from '@/components/dashboard/ui'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
+import { label } from '@/components/dashboard/ui'
 import type { CopilotThreadDoc } from '@ayooda/shared'
 import styles from './page.module.css'
 
@@ -70,6 +73,7 @@ export default function CopilotPage() {
 }
 
 function CopilotPageInner() {
+  const confirm = useAppConfirm()
   const { workspace } = useWorkspace()
   const { user } = useAuth()
   const searchParams = useSearchParams()
@@ -213,7 +217,7 @@ function CopilotPageInner() {
   }
 
   async function removeThread(id: string) {
-    if (!window.confirm('Delete this Copilot thread?')) return
+    if (!await confirm({ title: 'Delete this thread?', description: 'The Copilot conversation and its messages will be permanently removed.', confirmLabel: 'Delete thread' })) return
     setBusyId(id)
     try {
       await apiRequestOrThrow(`/copilot/threads/${id}`, { method: 'DELETE' }, 'Could not delete this thread.')
@@ -298,19 +302,22 @@ function CopilotPageInner() {
 
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
           <p style={{ ...label, marginBottom: 8 }}>New thread</p>
-          <select value={pendingAgentId} onChange={(e) => setPendingAgentId(e.target.value)} style={{ ...inputStyle, marginBottom: 8, fontSize: 13, padding: '8px 10px' }}>
-            <option value="">Choose an agent…</option>
-            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-          <button
-            type="button"
-            onClick={startNewThread}
-            disabled={!pendingAgentId}
+          <AppSelect
+            ariaLabel="Choose an agent for the new thread"
+            emptyLabel="Choose an agent…"
+            onChange={setPendingAgentId}
+            options={agents.map((agent) => ({ value: agent.id, label: agent.name }))}
+            style={{ marginBottom: 8 }}
+            value={pendingAgentId}
+          />
+          <Button
+            onPress={startNewThread}
+            isDisabled={!pendingAgentId}
             className="btn btn-primary"
             style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '8px 12px', fontSize: 12.5, opacity: pendingAgentId ? 1 : 0.5 }}
           >
             <Plus size={13} /> New thread
-          </button>
+          </Button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>

@@ -5,6 +5,10 @@ import { ArrowDown, ArrowUp, Check, Copy, ExternalLink, Loader2, Mail, Plus, Rot
 import { TICKET_FIELD_TYPES, type TicketingConfig, type TicketIntakeField } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { AppCheckbox } from '@/components/ui/AppCheckbox'
+import { AppSwitch } from '@/components/ui/AppSwitch'
+import { toast } from '@heroui/react'
 import styles from './page.module.css'
 
 function fieldId(label: string): string {
@@ -98,6 +102,7 @@ export default function TicketSettingsPage({ params }: { params: Promise<{ agent
       savedRef.current = fingerprint(next)
       if (body.signingSecret) setSecret(body.signingSecret)
       setNotice('Ticket intake settings saved. New conversations will use them immediately.')
+      toast.success('Ticket settings saved')
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Ticket settings could not be saved.') }
     finally { setBusy('') }
   }
@@ -144,10 +149,10 @@ export default function TicketSettingsPage({ params }: { params: Promise<{ agent
 
     <section className={styles.card} aria-labelledby="behavior-title">
       <div className={styles.cardHeader}><span className={styles.cardIcon}><TicketCheck size={18} /></span><div><h3 id="behavior-title">Agent behavior</h3><p>Tickets are created only when the customer asks for follow-up—not for ordinary questions.</p></div></div>
-      <label className={styles.switchRow}><span><strong>Enable ticket intake</strong><small>Expose the trusted ticket tool in real customer conversations.</small></span><input type="checkbox" checked={config.enabled} onChange={(event) => setConfig({ ...config, enabled: event.target.checked })} /></label>
+      <AppSwitch controlPosition="end" className={styles.switchRow} checked={config.enabled} onChange={(enabled) => setConfig({ ...config, enabled })} label="Enable ticket intake" description="Expose the trusted ticket tool in real customer conversations." />
       <div className={styles.twoColumns}>
-        <label className={styles.checkRow}><input type="checkbox" checked={config.requireConfirmation} onChange={(event) => setConfig({ ...config, requireConfirmation: event.target.checked })} /><span><strong>Require customer confirmation</strong><small>Recommended to prevent accidental submissions.</small></span></label>
-        <label className={styles.field}><span>After submission</span><select value={config.afterSubmission} onChange={(event) => setConfig({ ...config, afterSubmission: event.target.value as TicketingConfig['afterSubmission'] })}><option value="continue">Continue helping</option><option value="handoff">Move to human queue</option></select></label>
+        <AppCheckbox className={styles.checkRow} checked={config.requireConfirmation} onChange={(requireConfirmation) => setConfig({ ...config, requireConfirmation })} label="Require customer confirmation" description="Recommended to prevent accidental submissions." />
+        <div className={styles.field}><span>After submission</span><AppSelect ariaLabel="After ticket submission" value={config.afterSubmission} onChange={(value) => setConfig({ ...config, afterSubmission: value as TicketingConfig['afterSubmission'] })} options={[{ value: 'continue', label: 'Continue helping' }, { value: 'handoff', label: 'Move to human queue' }]} /></div>
       </div>
       <label className={styles.field}><span>Acknowledgement message</span><textarea rows={3} maxLength={500} value={config.acknowledgementMessage} onChange={(event) => setConfig({ ...config, acknowledgementMessage: event.target.value })} /><small>Use <code>{'{number}'}</code> where the ticket number should appear.</small></label>
     </section>
@@ -158,12 +163,12 @@ export default function TicketSettingsPage({ params }: { params: Promise<{ agent
         <div className={styles.fieldEditorTop}>
           <label className={styles.field}><span>Label</span><input value={field.label} maxLength={60} placeholder="Order ID" onChange={(event) => updateField(index, { label: event.target.value, id: field.id.startsWith('field_') ? fieldId(event.target.value) : field.id })} /></label>
           <label className={styles.field}><span>Field ID</span><input value={field.id} maxLength={40} placeholder="order_id" onChange={(event) => updateField(index, { id: fieldId(event.target.value) })} /></label>
-          <label className={styles.field}><span>Type</span><select value={field.type} onChange={(event) => updateField(index, { type: event.target.value as TicketIntakeField['type'], options: event.target.value === 'select' ? field.options ?? [''] : undefined })}>{TICKET_FIELD_TYPES.map((type) => <option key={type} value={type}>{type.replace('_', ' ')}</option>)}</select></label>
+          <div className={styles.field}><span>Type</span><AppSelect ariaLabel={`Type for ${field.label || 'custom field'}`} value={field.type} onChange={(value) => updateField(index, { type: value as TicketIntakeField['type'], options: value === 'select' ? field.options ?? [''] : undefined })} options={TICKET_FIELD_TYPES.map((type) => ({ value: type, label: type.replace('_', ' ') }))} /></div>
           <div className={styles.fieldActions}><button className={styles.iconButton} type="button" onClick={() => moveField(index, -1)} disabled={index === 0} aria-label={`Move ${field.label || 'custom field'} up`} title="Move up"><ArrowUp size={15} /></button><button className={styles.iconButton} type="button" onClick={() => moveField(index, 1)} disabled={index === config.fields.length - 1} aria-label={`Move ${field.label || 'custom field'} down`} title="Move down"><ArrowDown size={15} /></button><button className={styles.iconButton} type="button" onClick={() => setConfig({ ...config, fields: config.fields.filter((_, fieldIndex) => fieldIndex !== index) })} aria-label={`Remove ${field.label || 'custom field'}`} title="Remove field"><Trash2 size={16} /></button></div>
         </div>
         <label className={styles.field}><span>Agent guidance</span><input value={field.description} maxLength={240} placeholder="Ask for the order number shown in the confirmation email." onChange={(event) => updateField(index, { description: event.target.value })} /></label>
         {field.type === 'select' && <label className={styles.field}><span>Choices</span><input value={(field.options ?? []).join(', ')} placeholder="Billing, Technical, Account" onChange={(event) => updateField(index, { options: event.target.value.split(',').map((value) => value.trim()) })} /><small>Separate choices with commas.</small></label>}
-        <label className={styles.inlineCheck}><input type="checkbox" checked={field.required} onChange={(event) => updateField(index, { required: event.target.checked })} /> Required before submission</label>
+        <AppCheckbox compact className={styles.inlineCheck} checked={field.required} onChange={(required) => updateField(index, { required })} label="Required before submission" />
       </div>)}</div>}
     </section>
 

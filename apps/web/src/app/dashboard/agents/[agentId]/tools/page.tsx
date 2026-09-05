@@ -21,6 +21,10 @@ import {
   type ToolBodyEncoding,
 } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
+import { AppCheckbox } from '@/components/ui/AppCheckbox'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
 import styles from './page.module.css'
 
@@ -68,6 +72,7 @@ function bundleSecretLabel(bundle: ToolBundle): string | null {
 }
 
 export default function AgentToolsPage({ params }: { params: Promise<{ agentId: string }> }) {
+  const confirm = useAppConfirm()
   const { agentId } = use(params)
 
   const [tools, setTools] = useState<ToolDef[]>([])
@@ -210,7 +215,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
 
   async function runTest() {
     if (!form?.id) { setTestResult('Save the tool before testing.'); return }
-    if (form.kind === 'write' && !window.confirm('This sends a real write request to the provider. Continue?')) return
+    if (form.kind === 'write' && !await confirm({ title: 'Send a real write request?', description: 'This test can change data in the connected provider. Verify the sample arguments before continuing.', confirmLabel: 'Run write test', tone: 'warning' })) return
     setTesting(true); setTestResult('')
     let args: unknown = {}
     try { args = JSON.parse(testArgs || '{}') } catch { setTestResult('Sample args must be valid JSON.'); setTesting(false); return }
@@ -222,7 +227,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
   }
 
   async function remove(id: string) {
-    if (!window.confirm('Delete this tool?')) return
+    if (!await confirm({ title: 'Delete this tool?', description: 'The agent will no longer be able to use this action. Existing conversation history is unaffected.', confirmLabel: 'Delete tool' })) return
     setBusyId(id)
     try { await apiRequestOrThrow(`/agents/${agentId}/tools/${id}`, { method: 'DELETE' }, 'Could not delete this tool.'); await load() }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not delete this tool.') }
@@ -438,9 +443,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
             <textarea placeholder="Description — tell the agent when to use this tool" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ ...input, minHeight: 60, resize: 'vertical' }} />
           </div>
           <div className="responsive-form-row" style={{ ...row }}>
-            <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value as ToolMethod })} style={{ ...input, width: 120 }}>
-              {(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as ToolMethod[]).map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
+            <AppSelect ariaLabel="HTTP method" value={form.method} onChange={(value) => setForm({ ...form, method: value as ToolMethod })} style={{ width: 130 }} options={(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as ToolMethod[]).map((method) => ({ value: method, label: method }))} />
             <input placeholder="https://api.example.com/orders/{orderId}" value={form.urlTemplate} onChange={(e) => setForm({ ...form, urlTemplate: e.target.value })} style={input} />
           </div>
 
@@ -448,13 +451,9 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
           {form.params.map((p, i) => (
             <div key={i} className="responsive-form-row" style={row}>
               <input placeholder="name" value={p.name} onChange={(e) => { const params = [...form.params]; params[i] = { ...p, name: e.target.value }; setForm({ ...form, params }) }} style={{ ...input, width: 140 }} />
-              <select value={p.type} onChange={(e) => { const params = [...form.params]; params[i] = { ...p, type: e.target.value as ToolParamType }; setForm({ ...form, params }) }} style={{ ...input, width: 110 }}>
-                {(['string', 'number', 'boolean'] as ToolParamType[]).map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <AppSelect ariaLabel={`Type for parameter ${p.name || i + 1}`} value={p.type} onChange={(value) => { const params = [...form.params]; params[i] = { ...p, type: value as ToolParamType }; setForm({ ...form, params }) }} style={{ width: 125 }} options={(['string', 'number', 'boolean'] as ToolParamType[]).map((type) => ({ value: type, label: type }))} />
               <input placeholder="description" value={p.description} onChange={(e) => { const params = [...form.params]; params[i] = { ...p, description: e.target.value }; setForm({ ...form, params }) }} style={input} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--ink-mute)', whiteSpace: 'nowrap' }}>
-                <input type="checkbox" checked={p.required} onChange={(e) => { const params = [...form.params]; params[i] = { ...p, required: e.target.checked }; setForm({ ...form, params }) }} /> req
-              </label>
+              <AppCheckbox compact checked={p.required} onChange={(required) => { const params = [...form.params]; params[i] = { ...p, required }; setForm({ ...form, params }) }} label="Required" />
               <button type="button" onClick={() => setForm({ ...form, params: form.params.filter((_, j) => j !== i) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)' }}><Trash2 size={14} /></button>
             </div>
           ))}
@@ -477,10 +476,7 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
                 Optional JSON template. Use parameter placeholders such as <code style={{ fontFamily: 'var(--font-mono)' }}>{'{email}'}</code>. Leave blank to send unused parameters automatically.
               </p>
               <div className="responsive-form-row" style={{ ...row, alignItems: 'flex-start' }}>
-                <select value={form.bodyEncoding} onChange={(e) => setForm({ ...form, bodyEncoding: e.target.value as ToolBodyEncoding })} style={{ ...input, width: 160 }}>
-                  <option value="json">JSON</option>
-                  <option value="form">Form encoded</option>
-                </select>
+                <AppSelect ariaLabel="Request body encoding" value={form.bodyEncoding} onChange={(value) => setForm({ ...form, bodyEncoding: value as ToolBodyEncoding })} style={{ width: 170 }} options={[{ value: 'json', label: 'JSON' }, { value: 'form', label: 'Form encoded' }]} />
                 <textarea
                   aria-label="Request body template"
                   placeholder={'{\n  "customer": { "email": "{email}" }\n}'}
@@ -494,30 +490,18 @@ export default function AgentToolsPage({ params }: { params: Promise<{ agentId: 
 
           <p style={{ ...label, marginTop: 16 }}>Authentication</p>
           <div className="responsive-form-row" style={row}>
-            <select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value as ToolAuthType })} style={{ ...input, width: 160 }}>
-              <option value="none">None</option>
-              <option value="bearer">Bearer token</option>
-              <option value="header">Custom header</option>
-            </select>
+            <AppSelect ariaLabel="Tool authentication" value={form.authType} onChange={(value) => setForm({ ...form, authType: value as ToolAuthType })} style={{ width: 170 }} options={[{ value: 'none', label: 'None' }, { value: 'bearer', label: 'Bearer token' }, { value: 'header', label: 'Custom header' }]} />
             {form.authType === 'header' && <input placeholder="X-API-Key" value={form.headerName} onChange={(e) => setForm({ ...form, headerName: e.target.value })} style={{ ...input, width: 180 }} />}
             {form.authType !== 'none' && <input type="password" placeholder={form.hasSecret ? '•••• set (leave blank to keep)' : 'secret'} value={form.secret} onChange={(e) => setForm({ ...form, secret: e.target.value })} style={input} />}
           </div>
 
           <p style={{ ...label, marginTop: 16 }}>Access</p>
           <div className="responsive-form-row" style={row}>
-            <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as ToolKind })} style={{ ...input, width: 160 }}>
-              <option value="read">Read (lookup)</option>
-              <option value="write">Write (changes data)</option>
-            </select>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink-mute)' }}>
-              <input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enabled
-            </label>
+            <AppSelect ariaLabel="Tool access type" value={form.kind} onChange={(value) => setForm({ ...form, kind: value as ToolKind })} style={{ width: 190 }} options={[{ value: 'read', label: 'Read (lookup)' }, { value: 'write', label: 'Write (changes data)' }]} />
+            <AppSwitch compact checked={form.enabled} onChange={(enabled) => setForm({ ...form, enabled })} label="Enabled" />
           </div>
           {form.kind === 'write' && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink)', marginTop: 8, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)' }}>
-              <input type="checkbox" checked={form.writeEnabled} onChange={(e) => setForm({ ...form, writeEnabled: e.target.checked })} />
-              Let the agent perform this action. The agent can trigger this write on its own during a conversation.
-            </label>
+            <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 'var(--r-sm)' }}><AppSwitch checked={form.writeEnabled} onChange={(writeEnabled) => setForm({ ...form, writeEnabled })} label="Let the agent perform this action" description="The agent can trigger this write on its own during a conversation." /></div>
           )}
 
           {form.id && (

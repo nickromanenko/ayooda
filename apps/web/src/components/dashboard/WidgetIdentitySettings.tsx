@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { Check, Copy, ExternalLink, KeyRound, Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 
 interface IdentitySettings {
   enabled: boolean
@@ -73,14 +74,8 @@ const identityToken = await new SignJWT({
       <div><h3 style={{ margin: 0, color: 'var(--ink)', fontSize: 14, textWrap: 'balance' }}>Authenticated visitors</h3><p style={{ margin: '2px 0 0', color: 'var(--ink-mute)', fontSize: 12, textWrap: 'pretty' }}>Recognize signed-in customers securely and continue their conversation across devices.</p></div>
     </div>
     <div style={{ padding: 20 }}>
-      <label style={{ minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, cursor: 'pointer' }}>
-        <span><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 13, fontWeight: 550 }}>Verify signed-in customers</strong><span style={{ color: 'var(--ink-mute)', fontSize: 12 }}>Accept only server-signed identity tokens.</span></span>
-        <input type="checkbox" checked={settings.enabled} disabled={busy} onChange={(event) => { const enabled = event.target.checked; void save({ enabled, requireAuthentication: enabled ? settings.requireAuthentication : false }) }} />
-      </label>
-      <label style={{ minHeight: 44, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, cursor: settings.enabled ? 'pointer' : 'not-allowed', opacity: settings.enabled ? 1 : .55 }}>
-        <span><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 13, fontWeight: 550 }}>Require authentication</strong><span style={{ color: 'var(--ink-mute)', fontSize: 12 }}>Block guest conversations. Leave off to support both guests and signed-in customers.</span></span>
-        <input type="checkbox" checked={settings.requireAuthentication} disabled={busy || !settings.enabled} onChange={(event) => void save({ requireAuthentication: event.target.checked })} />
-      </label>
+      <AppSwitch controlPosition="end" checked={settings.enabled} disabled={busy} onChange={(enabled) => { void save({ enabled, requireAuthentication: enabled ? settings.requireAuthentication : false }) }} label="Verify signed-in customers" description="Accept only server-signed identity tokens." />
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}><AppSwitch controlPosition="end" checked={settings.requireAuthentication} disabled={busy || !settings.enabled} onChange={(requireAuthentication) => void save({ requireAuthentication })} label="Require authentication" description="Block guest conversations. Leave off to support both guests and signed-in customers." /></div>
 
       {settings.enabled && <details style={{ marginTop: 16, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--bg-2)', overflow: 'hidden' }}>
         <summary style={{ minHeight: 44, padding: '0 14px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600 }}><KeyRound size={14} /> Server setup</summary>

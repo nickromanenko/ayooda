@@ -1,0 +1,47 @@
+.loading {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: var(--ink-mute);
+  font-size: 13px;
+}
+
+.spinner {
+  flex: 0 0 auto;
+  color: var(--accent-text);
+}
+
+.skeletons {
+  display: grid;
+  gap: 10px;
+}
+
+.titleSkeleton,
+.cardSkeleton {
+  display: block;
+  background: var(--panel-2);
+}
+
+.titleSkeleton {
+  height: 18px;
+  border-radius: 8px;
+}
+
+.cardSkeleton {
+  height: 52px;
+  border-radius: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .titleSkeleton,
+  .cardSkeleton {
+    animation: none;
+  }
+}

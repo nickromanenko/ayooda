@@ -17,6 +17,9 @@ import type {
 } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { input, label } from '@/components/dashboard/ui'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import styles from './WorkflowGraphEditor.module.css'
 
 const NODE_WIDTH = 220
@@ -156,6 +159,7 @@ function wouldCreateCycle(graph: WorkflowGraph, from: string, branch: WorkflowGr
 }
 
 export default function WorkflowGraphEditor({ agentId, targets }: { agentId: string; targets: WorkflowTargets }) {
+  const confirm = useAppConfirm()
   const base = `/agents/${agentId}/workflows/graph`
   const [graph, setGraph] = useState<WorkflowGraph | null>(null)
   const [persisted, setPersisted] = useState(false)
@@ -330,7 +334,7 @@ export default function WorkflowGraphEditor({ agentId, targets }: { agentId: str
   }
 
   async function returnToRules() {
-    if (!window.confirm('Deactivate and delete this graph? The ordered rules fallback will resume immediately.')) return
+    if (!await confirm({ title: 'Return to ordered rules?', description: 'This workflow graph will be deactivated and deleted. The ordered-rules fallback will resume immediately.', confirmLabel: 'Delete graph' })) return
     setSaving(true)
     setError('')
     try {
@@ -493,10 +497,7 @@ export default function WorkflowGraphEditor({ agentId, targets }: { agentId: str
             {selected.kind === 'action' && (selected.action.type !== 'reply' || !selected.action.continue) && <p className={styles.terminalHint}>This action ends the workflow path.</p>}
           </div>
 
-          <label className={styles.enabledToggle}>
-            <input type="checkbox" checked={graph.enabled} onChange={(event) => setGraph({ ...graph, enabled: event.target.checked })} />
-            <span><strong>Graph enabled</strong><small>Paused graphs remain saved but do not run.</small></span>
-          </label>
+          <AppSwitch className={styles.enabledToggle} checked={graph.enabled} onChange={(enabled) => setGraph({ ...graph, enabled })} label="Graph enabled" description="Paused graphs remain saved but do not run." />
 
           {persisted && <button type="button" className={styles.returnButton} onClick={() => void returnToRules()} disabled={saving}><Power size={14} /> Return to ordered rules</button>}
         </aside>
@@ -513,13 +514,10 @@ function ConnectionSelect({ label: title, value, options, onChange, required = f
   required?: boolean
 }) {
   return (
-    <label className={styles.connectionField}>
+    <div className={styles.connectionField}>
       <span>{title}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} style={input}>
-        <option value="">{required ? 'Choose a node' : 'End path'}</option>
-        {options.map((node) => <option key={node.id} value={node.id}>{node.name} · {node.kind}</option>)}
-      </select>
-    </label>
+      <AppSelect ariaLabel={title} value={value} onChange={onChange} placeholder={required ? 'Choose a node' : undefined} emptyLabel={required ? undefined : 'End path'} required={required} options={options.map((node) => ({ value: node.id, label: `${node.name} · ${node.kind}` }))} />
+    </div>
   )
 }
 
@@ -528,12 +526,10 @@ function ConditionFields({ node, update }: { node: ConditionNode; update: (node:
   const setTrigger = (next: WorkflowTrigger) => update({ ...node, trigger: next })
   return (
     <>
-      <label className={styles.field}>
+      <div className={styles.field}>
         <span>Condition</span>
-        <select value={trigger.type} onChange={(event) => setTrigger(emptyTrigger(event.target.value as TriggerType))} style={input}>
-          {(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((type) => <option key={type} value={type}>{TRIGGER_LABELS[type]}</option>)}
-        </select>
-      </label>
+        <AppSelect ariaLabel="Workflow condition" value={trigger.type} onChange={(value) => setTrigger(emptyTrigger(value as TriggerType))} options={(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((type) => ({ value: type, label: TRIGGER_LABELS[type] }))} />
+      </div>
       {trigger.type === 'ask_for_human' && <TextList label="Phrases" value={trigger.phrases} onChange={(phrases) => setTrigger({ ...trigger, phrases })} />}
       {trigger.type === 'keyword' && <TextList label="Keywords" value={trigger.keywords} onChange={(keywords) => setTrigger({ ...trigger, keywords })} />}
       {trigger.type === 'bot_replies' && (
@@ -585,17 +581,15 @@ function ActionFields({ node, targets, graph, setGraph }: {
   }
   return (
     <>
-      <label className={styles.field}>
+      <div className={styles.field}>
         <span>Action</span>
-        <select value={action.type} onChange={(event) => setAction(emptyAction(event.target.value as WorkflowActionType))} style={input}>
-          {(Object.keys(ACTION_LABELS) as WorkflowActionType[]).map((type) => <option key={type} value={type}>{ACTION_LABELS[type]}</option>)}
-        </select>
-      </label>
+        <AppSelect ariaLabel="Workflow action" value={action.type} onChange={(value) => setAction(emptyAction(value as WorkflowActionType))} options={(Object.keys(ACTION_LABELS) as WorkflowActionType[]).map((type) => ({ value: type, label: ACTION_LABELS[type] }))} />
+      </div>
       {action.type === 'assign_teammate' && (
-        <label className={styles.field}><span>Teammate</span><select value={action.teammateUid} onChange={(event) => setAction({ ...action, teammateUid: event.target.value })} style={input}><option value="">Choose teammate</option>{targets.teammates.map((item) => <option key={item.uid} value={item.uid}>{item.name || item.email}</option>)}</select></label>
+        <div className={styles.field}><span>Teammate</span><AppSelect ariaLabel="Teammate" value={action.teammateUid} onChange={(value) => setAction({ ...action, teammateUid: value })} emptyLabel="Choose teammate" options={targets.teammates.map((item) => ({ value: item.uid, label: item.name || item.email }))} /></div>
       )}
       {action.type === 'route_agent' && (
-        <label className={styles.field}><span>Agent</span><select value={action.agentId} onChange={(event) => setAction({ ...action, agentId: event.target.value })} style={input}><option value="">Choose agent</option>{targets.agents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <div className={styles.field}><span>Agent</span><AppSelect ariaLabel="Agent" value={action.agentId} onChange={(value) => setAction({ ...action, agentId: value })} emptyLabel="Choose agent" options={targets.agents.map((item) => ({ value: item.id, label: item.name }))} /></div>
       )}
       <label className={styles.field}>
         <span>{action.type === 'reply' ? 'Response message' : 'Customer message (optional)'}</span>
@@ -603,10 +597,7 @@ function ActionFields({ node, targets, graph, setGraph }: {
         <small className={styles.count}>{message.length}/500</small>
       </label>
       {action.type === 'reply' && (
-        <label className={styles.continueToggle}>
-          <input type="checkbox" checked={action.continue} onChange={(event) => setAction({ ...action, continue: event.target.checked })} />
-          <span><strong>Continue path</strong><small>Follow Next, or let the AI answer when Next is empty.</small></span>
-        </label>
+        <AppSwitch className={styles.continueToggle} checked={action.continue} onChange={(next) => setAction({ ...action, continue: next })} label="Continue path" description="Follow Next, or let the AI answer when Next is empty." />
       )}
     </>
   )

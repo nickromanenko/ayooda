@@ -1,0 +1,26 @@
+.trigger {
+  display: inline-flex;
+}
+
+.content {
+  z-index: 1200;
+  max-width: 260px;
+  border-radius: 8px;
+  background: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  padding: 7px 9px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.arrow {
+  fill: var(--tooltip-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content { animation-duration: 0.01ms; }
+}

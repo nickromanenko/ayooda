@@ -13,8 +13,10 @@ import AgentVersionHistory from './AgentVersionHistory'
 import DuplicateAgentDialog from './DuplicateAgentDialog'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { card, label, input, muted, errorText } from '@/components/dashboard/ui'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
 
 export default function AgentInfoPage({ params }: { params: Promise<{ agentId: string }> }) {
+  const confirm = useAppConfirm()
   const { agentId } = use(params)
   const router = useRouter()
   const { workspace } = useWorkspace()
@@ -117,7 +119,8 @@ export default function AgentInfoPage({ params }: { params: Promise<{ agentId: s
   }
 
   async function remove() {
-    if (!window.confirm(`Delete ${agent?.name ?? 'this agent'} and all of its configuration? This cannot be undone.`)) return
+    const name = agent?.name ?? 'this agent'
+    if (!await confirm({ title: `Delete ${name}?`, description: 'Its configuration, knowledge connections, and deployment settings will be permanently removed. This cannot be undone.', confirmLabel: 'Delete agent' })) return
     setBusy(true); setError('')
     try {
       await apiRequestOrThrow(`/agents/${agentId}`, { method: 'DELETE' }, 'Could not delete the agent.')

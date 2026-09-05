@@ -21,6 +21,7 @@ import { readSSE } from '@/lib/sse'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import MarkdownMessage from '@/components/dashboard/MarkdownMessage'
 import { Loading } from '@/components/dashboard/Loading'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import styles from './page.module.css'
 import EvaluationSuite from './EvaluationSuite'
 
@@ -232,21 +233,13 @@ export default function AgentSandboxPage({ params }: { params: Promise<{ agentId
 
           <div className={styles.divider} />
           <p className={styles.eyebrow}>Capabilities</p>
-          <label className={styles.toolToggle}>
+          <div className={styles.toolToggle}>
             <span className={styles.toolCopy}>
               <span className={styles.toolTitle}>Connected tools</span>
               <span className={styles.toolHint}>Off by default for safe testing</span>
             </span>
-            <input
-              type="checkbox"
-              className={styles.visuallyHidden}
-              checked={allowTools}
-              onChange={(event) => setAllowTools(event.target.checked)}
-            />
-            <span className={`${styles.switch} ${allowTools ? styles.switchOn : ''}`} aria-hidden="true">
-              <span className={styles.switchKnob} />
-            </span>
-          </label>
+            <AppSwitch hideLabel label="Allow connected tools during this test" checked={allowTools} onChange={setAllowTools} />
+          </div>
           {allowTools && (
             <p className={styles.warning}>
               Connected tools are live and may read or change external systems. Use test accounts and safe prompts.

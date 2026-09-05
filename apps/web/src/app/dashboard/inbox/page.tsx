@@ -12,6 +12,7 @@ import { Loading } from '@/components/dashboard/Loading'
 import MarkdownMessage from '@/components/dashboard/MarkdownMessage'
 import InboxCustomerDrawer, { type InboxCustomerContext } from '@/components/dashboard/InboxCustomerDrawer'
 import InboxTicketPanel from '@/components/dashboard/InboxTicketPanel'
+import { AppSelect } from '@/components/ui/AppSelect'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { useAuth } from '@/components/providers/AuthProvider'
 import styles from './page.module.css'
@@ -575,18 +576,12 @@ export default function InboxPage() {
         </div>
         {agents.length > 1 && (
           <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--line)' }}>
-            <select
-              aria-label="Filter by agent"
+            <AppSelect
+              ariaLabel="Filter by agent"
               value={agentFilter}
-              onChange={(e) => changeAgentFilter(e.target.value)}
-              style={{
-                width: '100%', minHeight: 40, fontSize: 12, padding: '5px 8px', borderRadius: 'var(--r-sm)',
-                border: '1px solid var(--line-2)', background: 'var(--bg-2)', color: 'var(--ink)',
-              }}
-            >
-              <option value="all">All agents</option>
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+              onChange={changeAgentFilter}
+              options={[{ value: 'all', label: 'All agents' }, ...agents.map((agent) => ({ value: agent.id, label: agent.name }))]}
+            />
           </div>
         )}
         {realtimeError && (
@@ -688,17 +683,15 @@ export default function InboxPage() {
               )}
             </div>
             <div className={styles.threadActions} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <select
-                aria-label="Assign conversation"
-                title="Assign conversation"
+              <AppSelect
+                ariaLabel="Assign conversation"
                 value={selectedConv.operatorId ?? ''}
                 disabled={assigning || selectedConv.status === 'resolved'}
-                onChange={(event) => void handleAssign(event.target.value)}
-                style={{ minHeight: 40, maxWidth: 160, padding: '6px 28px 6px 10px', borderRadius: 10, border: '1px solid var(--line-2)', background: 'var(--control-surface)', color: 'var(--ink-dim)', fontSize: 12 }}
-              >
-                <option value="">Unassigned</option>
-                {operators.map((operator) => <option key={operator.uid} value={operator.uid}>{operator.displayName || operator.email}{operator.uid === user?.uid ? ' (you)' : ''}</option>)}
-              </select>
+                onChange={(value) => void handleAssign(value)}
+                emptyLabel="Unassigned"
+                style={{ maxWidth: 180 }}
+                options={operators.map((operator) => ({ value: operator.uid, label: `${operator.displayName || operator.email}${operator.uid === user?.uid ? ' (you)' : ''}` }))}
+              />
               {(selectedConv.status === 'bot' || selectedConv.status === 'waiting') && (
                 <button
                   type="button"

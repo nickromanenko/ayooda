@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useCallback, useEffect, useMemo, useState } from 'react'
+import { Button } from '@heroui/react'
 import { AlertCircle, AlertTriangle, Check, CheckCircle2, Database, FileText, Globe, Loader2, Plus, RefreshCw, RotateCw, Search, ShieldCheck, Trash2, X, XCircle } from 'lucide-react'
 import type { KnowledgeDocStatus } from '@ayooda/shared'
 import { apiRequest, apiRequestOrThrow } from '@/lib/api'
@@ -8,6 +9,10 @@ import { trackProductEvent } from '@/lib/product-analytics'
 import { KnowledgeUpload } from '@/components/knowledge/KnowledgeUpload'
 import { EmptyState, Loading } from '@/components/dashboard/Loading'
 import { knowledgeDate, knowledgeHealth, summarizeKnowledge, type KnowledgeHealth, type KnowledgeTimestamp } from '@/lib/knowledge-health'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
+import { AppTooltip } from '@/components/ui/AppTooltip'
+import { AppSearchField } from '@/components/ui/AppSearchField'
 import styles from './page.module.css'
 
 interface KnowledgeDoc {
@@ -61,6 +66,7 @@ function HealthIcon({ health }: { health: KnowledgeHealth }) {
 }
 
 export default function AgentKnowledgePage({ params }: { params: Promise<{ agentId: string }> }) {
+  const confirm = useAppConfirm()
   const { agentId } = use(params)
   const [docs, setDocs] = useState<KnowledgeDoc[]>([])
   const [loading, setLoading] = useState(true)
@@ -129,7 +135,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
   }
 
   async function handleDelete(doc: KnowledgeDoc) {
-    if (!window.confirm(`Delete “${doc.source}” and all of its indexed content?`)) return
+    if (!await confirm({ title: 'Delete this knowledge source?', description: `“${doc.source}” and all of its indexed content will be permanently removed.`, confirmLabel: 'Delete source' })) return
     setDeletingId(doc.id); setActionError('')
     try {
       await apiRequestOrThrow(`/agents/${agentId}/knowledge/${doc.id}`, { method: 'DELETE' }, 'Could not delete this source.')
@@ -217,7 +223,7 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
           <header className={styles.sourcesHeader}>
             <div><h2 id="knowledge-sources-title">Sources</h2><p>{visibleDocs.length === docs.length ? `${docs.length} total` : `${visibleDocs.length} of ${docs.length}`}</p></div>
             <div className={styles.filters} aria-label="Filter knowledge sources">{([['all', 'All'], ['ready', 'Ready'], ['processing', 'Indexing'], ['attention', 'Needs attention']] as const).map(([value, label]) => <button key={value} type="button" className={filter === value ? styles.filterActive : ''} onClick={() => setFilter(value)}>{label}{value === 'attention' && summary.issues > 0 ? <span>{summary.issues}</span> : null}</button>)}</div>
-            <label className={styles.search}><Search size={13} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources" aria-label="Search knowledge sources" />{query && <button type="button" onClick={() => setQuery('')} aria-label="Clear source search"><X size={12} /></button>}</label>
+            <AppSearchField className={styles.search} value={query} onChange={setQuery} placeholder="Search sources" ariaLabel="Search knowledge sources" />
           </header>
 
           {visibleDocs.length === 0 ? <div className={styles.noResults}><Search size={18} /><p>No sources match this view.</p><button type="button" onClick={() => { setFilter('all'); setQuery('') }}>Clear filters</button></div> : (
@@ -236,9 +242,9 @@ export default function AgentKnowledgePage({ params }: { params: Promise<{ agent
                     {health === 'stale' && <p className={styles.sourceWarning}>This website has not been refreshed in over 30 days. Refresh it or enable automatic syncing.</p>}
                     {doc.type === 'webpage' && doc.autoSyncEnabled && formatTimestamp(doc.nextSyncAt) && health !== 'error' && <p className={styles.nextSync}>Next sync {formatRelative(doc.nextSyncAt)} <span>· {formatTimestamp(doc.nextSyncAt)}</span></p>}
                   </div>
-                  {doc.type === 'webpage' && <select className={styles.syncSelect} aria-label={`Automatic sync interval for ${doc.source}`} title="Automatic sync interval" value={doc.autoSyncEnabled && doc.syncIntervalHours ? String(doc.syncIntervalHours) : ''} disabled={savingSyncId === doc.id} onChange={(event) => void handleSyncInterval(doc.id, event.target.value)}><option value="">Auto-sync off</option><option value="24">Daily</option><option value="168">Weekly</option><option value="720">Monthly</option></select>}
-                  {(doc.status === 'indexed' || doc.status === 'error') && <button type="button" className={styles.iconButton} onClick={() => void handleReindex(doc.id)} disabled={reindexingId === doc.id} aria-label={doc.type === 'webpage' ? `Refresh ${doc.source}` : `Re-index ${doc.source}`} title={doc.type === 'webpage' ? 'Refresh now' : 'Re-index'}>{reindexingId === doc.id ? <Loader2 size={14} className={styles.spin} /> : <RotateCw size={14} />}</button>}
-                  <button type="button" className={`${styles.iconButton} ${styles.deleteButton}`} onClick={() => void handleDelete(doc)} disabled={deletingId === doc.id} aria-label={`Delete ${doc.source}`} title="Delete source">{deletingId === doc.id ? <Loader2 size={14} className={styles.spin} /> : <Trash2 size={14} />}</button>
+                  {doc.type === 'webpage' && <AppSelect className={styles.syncSelect} ariaLabel={`Automatic sync interval for ${doc.source}`} value={doc.autoSyncEnabled && doc.syncIntervalHours ? String(doc.syncIntervalHours) : ''} disabled={savingSyncId === doc.id} onChange={(value) => void handleSyncInterval(doc.id, value)} emptyLabel="Auto-sync off" options={[{ value: '24', label: 'Daily' }, { value: '168', label: 'Weekly' }, { value: '720', label: 'Monthly' }]} />}
+                  {(doc.status === 'indexed' || doc.status === 'error') && <AppTooltip label={doc.type === 'webpage' ? 'Refresh now' : 'Re-index'}><Button className={styles.iconButton} onPress={() => void handleReindex(doc.id)} isDisabled={reindexingId === doc.id} aria-label={doc.type === 'webpage' ? `Refresh ${doc.source}` : `Re-index ${doc.source}`} isIconOnly>{reindexingId === doc.id ? <Loader2 size={14} className={styles.spin} /> : <RotateCw size={14} />}</Button></AppTooltip>}
+                  <AppTooltip label="Delete source"><Button className={`${styles.iconButton} ${styles.deleteButton}`} onPress={() => void handleDelete(doc)} isDisabled={deletingId === doc.id} aria-label={`Delete ${doc.source}`} isIconOnly>{deletingId === doc.id ? <Loader2 size={14} className={styles.spin} /> : <Trash2 size={14} />}</Button></AppTooltip>
                 </article>
               )
             })}</div>

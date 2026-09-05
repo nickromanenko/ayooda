@@ -8,6 +8,7 @@ import { Loading } from '@/components/dashboard/Loading'
 import { label, errorText, input } from '@/components/dashboard/ui'
 import WidgetAppearance from '@/components/dashboard/WidgetAppearance'
 import WidgetIdentitySettings from '@/components/dashboard/WidgetIdentitySettings'
+import { AppSelect } from '@/components/ui/AppSelect'
 import LaunchReadiness from './LaunchReadiness'
 import {
   DEFAULT_WIDGET_APPEARANCE,
@@ -72,7 +73,7 @@ function WidgetMetrics({ stats }: { stats?: Channel['stats'] }) {
   const feedbackTotal = (stats.feedback?.helpful ?? 0) + (stats.feedback?.unhelpful ?? 0)
   const helpfulRate = feedbackTotal ? Math.round((stats.feedback?.helpful ?? 0) / feedbackTotal * 100) : null
   return <div style={{ marginTop: 12, paddingTop: 11, borderTop: '1px solid var(--line)' }}>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}><span style={{ color: 'var(--ink-mute)', fontSize: 11.5 }}>Widget engagement</span><select aria-label="Analytics time range" value={range} onChange={(event) => setRange(event.target.value as '7' | '30' | 'all')} style={{ minHeight: 36, border: '1px solid var(--line)', borderRadius: 8, padding: '0 8px', background: 'var(--panel)', color: 'var(--ink-dim)', fontSize: 12 }}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">All time</option></select></div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}><span style={{ color: 'var(--ink-mute)', fontSize: 11.5 }}>Widget engagement</span><AppSelect ariaLabel="Analytics time range" value={range} onChange={(value) => setRange(value as '7' | '30' | 'all')} style={{ width: 150, fontSize: 12 }} options={[{ value: '7', label: 'Last 7 days' }, { value: '30', label: 'Last 30 days' }, { value: 'all', label: 'All time' }]} /></div>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>{[{ label: 'Config loads', value: period.loads }, { label: 'Visible', value: period.visible }, { label: 'Opens', value: period.open }, { label: 'Conversations', value: period.conversations }].map((metric) => <div key={metric.label}><strong style={{ display: 'block', color: 'var(--ink)', font: '600 14px var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{metric.value.toLocaleString()}</strong><span style={{ color: 'var(--ink-faint)', fontSize: 11.5 }}>{metric.label}</span></div>)}</div>
     <p style={{ margin: '9px 0 0', color: 'var(--ink-faint)', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>Open rate {openRate}% · Conversation rate {conversationRate}%{helpfulRate === null ? '' : ` · Helpful answers ${helpfulRate}% (${feedbackTotal})`}</p>
   </div>

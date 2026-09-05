@@ -6,6 +6,10 @@ import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import type { WorkflowActionType, WorkflowRule, WorkflowTargets, WorkflowTrigger, TriggerType } from '@ayooda/shared'
 import { Loading } from '@/components/dashboard/Loading'
 import { card, label, input, errorText } from '@/components/dashboard/ui'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
+import { AppCheckbox } from '@/components/ui/AppCheckbox'
+import { AppSwitch } from '@/components/ui/AppSwitch'
 import WorkflowGraphEditor from './WorkflowGraphEditor'
 import styles from './page.module.css'
 
@@ -108,6 +112,7 @@ function ruleToEditor(r: WorkflowRule): Editor {
 }
 
 export default function AgentEscalationPage({ params }: { params: Promise<{ agentId: string }> }) {
+  const confirm = useAppConfirm()
   const { agentId } = use(params)
   const base = `/agents/${agentId}/workflows`
 
@@ -154,7 +159,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
   }
 
   async function remove(id: string) {
-    if (!window.confirm('Delete this escalation rule?')) return
+    if (!await confirm({ title: 'Delete this escalation rule?', description: 'Conversations will no longer follow this rule. Other rules keep their current order.', confirmLabel: 'Delete rule' })) return
     setBusyId(id)
     try { await apiRequestOrThrow(`${base}/${id}`, { method: 'DELETE' }, 'Could not delete the rule.'); await load() }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not delete the rule.') }
@@ -234,9 +239,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
           <div style={{ marginBottom: 12 }}><input placeholder="Rule name" value={editor.name} onChange={(e) => setEditor({ ...editor, name: e.target.value })} style={input} /></div>
 
           <p style={{ ...label, marginTop: 16 }}>When (trigger)</p>
-          <select value={editor.type} onChange={(e) => setEditor({ ...editor, type: e.target.value as TriggerType })} style={input}>
-            {(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((t) => <option key={t} value={t}>{TRIGGER_LABELS[t]}</option>)}
-          </select>
+          <AppSelect ariaLabel="Workflow trigger" value={editor.type} onChange={(value) => setEditor({ ...editor, type: value as TriggerType })} options={(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((type) => ({ value: type, label: TRIGGER_LABELS[type] }))} />
 
           <div style={{ marginTop: 12 }}>
             {editor.type === 'ask_for_human' && <textarea placeholder="Comma-separated phrases" value={editor.phrases} onChange={(e) => setEditor({ ...editor, phrases: e.target.value })} style={{ ...input, minHeight: 48, resize: 'vertical' }} />}
@@ -248,9 +251,7 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
                 <input placeholder="Timezone (e.g. America/New_York)" value={editor.timezone} onChange={(e) => setEditor({ ...editor, timezone: e.target.value })} style={input} />
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {DAY_NAMES.map((d, i) => (
-                    <label key={d} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--ink-mute)' }}>
-                      <input type="checkbox" checked={editor.days.includes(i)} onChange={(e) => setEditor({ ...editor, days: e.target.checked ? [...editor.days, i] : editor.days.filter((x) => x !== i) })} /> {d}
-                    </label>
+                    <AppCheckbox compact key={d} checked={editor.days.includes(i)} onChange={(checked) => setEditor({ ...editor, days: checked ? [...editor.days, i] : editor.days.filter((x) => x !== i) })} label={d} />
                   ))}
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -286,20 +287,14 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
           {editor.actionType === 'assign_teammate' && (
             <div className={styles.actionField}>
               <p style={label}>Teammate</p>
-              <select value={editor.teammateUid} onChange={(e) => setEditor({ ...editor, teammateUid: e.target.value })} style={input}>
-                <option value="">Choose a teammate</option>
-                {targets.teammates.map((item) => <option key={item.uid} value={item.uid}>{item.name || item.email}{item.name && item.email ? ` · ${item.email}` : ''}</option>)}
-              </select>
+              <AppSelect ariaLabel="Teammate" value={editor.teammateUid} onChange={(value) => setEditor({ ...editor, teammateUid: value })} emptyLabel="Choose a teammate" options={targets.teammates.map((item) => ({ value: item.uid, label: `${item.name || item.email}${item.name && item.email ? ` · ${item.email}` : ''}` }))} />
             </div>
           )}
 
           {editor.actionType === 'route_agent' && (
             <div className={styles.actionField}>
               <p style={label}>Destination agent</p>
-              <select value={editor.targetAgentId} onChange={(e) => setEditor({ ...editor, targetAgentId: e.target.value })} style={input}>
-                <option value="">Choose another agent</option>
-                {targets.agents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
+              <AppSelect ariaLabel="Destination agent" value={editor.targetAgentId} onChange={(value) => setEditor({ ...editor, targetAgentId: value })} emptyLabel="Choose another agent" options={targets.agents.map((item) => ({ value: item.id, label: item.name }))} />
             </div>
           )}
 
@@ -317,15 +312,10 @@ export default function AgentEscalationPage({ params }: { params: Promise<{ agen
           </div>
 
           {editor.actionType === 'reply' && (
-            <label className={styles.continueToggle}>
-              <input type="checkbox" checked={editor.continueProcessing} onChange={(e) => setEditor({ ...editor, continueProcessing: e.target.checked })} />
-              <span><strong>Continue processing</strong><small>Evaluate later matching rules; if none match, let the AI answer after this response.</small></span>
-            </label>
+            <AppSwitch className={styles.continueToggle} checked={editor.continueProcessing} onChange={(continueProcessing) => setEditor({ ...editor, continueProcessing })} label="Continue processing" description="Evaluate later matching rules; if none match, let the AI answer after this response." />
           )}
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink-mute)', marginTop: 16 }}>
-            <input type="checkbox" checked={editor.enabled} onChange={(e) => setEditor({ ...editor, enabled: e.target.checked })} /> Enabled
-          </label>
+          <div style={{ marginTop: 16 }}><AppSwitch compact checked={editor.enabled} onChange={(enabled) => setEditor({ ...editor, enabled })} label="Enabled" /></div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button type="button" onClick={() => void save()} disabled={saving || editorIncomplete} className="btn btn-primary" style={{ borderRadius: 'var(--r-sm)', padding: '10px 18px', opacity: saving || editorIncomplete ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save rule'}</button>

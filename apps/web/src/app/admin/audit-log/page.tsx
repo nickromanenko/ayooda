@@ -5,6 +5,7 @@ import { Loader2, Search } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { AdminAuditEvent, AdminListResponse } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { AppSelect } from '@/components/ui/AppSelect'
 import styles from '../admin.module.css'
 
 const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
@@ -42,7 +43,7 @@ export default function AdminAuditLogPage() {
     <header className={styles.header}><div><p className={styles.eyebrow}>Accountability</p><h1 className={styles.title}>Audit log</h1><p className={styles.description}>A durable record of platform role changes and administrator account actions. Sensitive tokens and customer message content are never recorded.</p></div></header>
     <form className={styles.toolbar} onSubmit={(event) => { event.preventDefault(); setTargetId(targetInput.trim()) }}>
       <div className={styles.searchWrap}><Search className={styles.searchIcon} size={16} /><label className="sr-only" htmlFor="audit-target-search">Filter target ID</label><input id="audit-target-search" className={styles.field} value={targetInput} onChange={(event) => setTargetInput(event.target.value)} placeholder="Exact target UID or workspace ID" /></div>
-      <select className={styles.select} value={action} onChange={(event) => setAction(event.target.value)} aria-label="Filter audit action"><option value="">All actions</option><option value="user.disable">User disabled</option><option value="user.enable">User enabled</option><option value="user.revoke_sessions">Sessions revoked</option><option value="platform_role.granted">Admin granted</option><option value="platform_role.revoked">Admin revoked</option></select>
+      <AppSelect ariaLabel="Filter audit action" className={styles.heroSelect} value={action} onChange={setAction} emptyLabel="All actions" options={[{ value: 'user.disable', label: 'User disabled' }, { value: 'user.enable', label: 'User enabled' }, { value: 'user.revoke_sessions', label: 'Sessions revoked' }, { value: 'platform_role.granted', label: 'Admin granted' }, { value: 'platform_role.revoked', label: 'Admin revoked' }]} />
       <button className={styles.button} type="submit">Filter</button>
     </form>
     <section className={styles.tableCard} aria-busy={loading}>

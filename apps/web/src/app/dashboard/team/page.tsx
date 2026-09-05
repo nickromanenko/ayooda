@@ -6,6 +6,7 @@ import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
 import { card, label, input as baseInput } from '@/components/dashboard/ui'
+import { useAppConfirm } from '@/components/ui/AppInteractionProvider'
 
 interface Member { uid: string; email: string; displayName: string; role: string }
 interface Invite { email: string; createdAt: string | null }
@@ -14,6 +15,7 @@ interface Invite { email: string; createdAt: string | null }
 const input: React.CSSProperties = { ...baseInput, flex: 1, width: 'auto' }
 
 export default function TeamPage() {
+  const confirm = useAppConfirm()
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +58,7 @@ export default function TeamPage() {
     finally { setBusyId('') }
   }
   async function remove(uid: string) {
-    if (!window.confirm('Remove this teammate from the workspace?')) return
+    if (!await confirm({ title: 'Remove this teammate?', description: 'They will lose access to this workspace and its agents. Their past activity will remain in the audit trail.', confirmLabel: 'Remove teammate' })) return
     setBusyId('member:' + uid); setError('')
     try { await apiRequestOrThrow(`/team/member/${uid}`, { method: 'DELETE' }, 'Could not remove this teammate.'); await load() }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not remove this teammate.') }

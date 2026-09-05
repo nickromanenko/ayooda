@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
+import { toast } from '@heroui/react'
 import {
   Check, ChevronRight, CircleAlert, Loader2, Lock, Monitor,
   Moon, Plus, Smartphone, Sun, X,
@@ -15,6 +16,9 @@ import {
   type WidgetPosition,
 } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { AppSelect } from '@/components/ui/AppSelect'
+import { AppSwitch } from '@/components/ui/AppSwitch'
+import { AppTabs } from '@/components/ui/AppTabs'
 import { errorText, input, label } from './ui'
 
 type SettingsTab = 'appearance' | 'content' | 'behavior' | 'security'
@@ -102,10 +106,7 @@ function FieldError({ id, children }: { id: string; children?: string }) {
 }
 
 function Toggle({ id, checked, onChange, title, description, disabled = false }: { id?: string; checked: boolean; onChange: (checked: boolean) => void; title: string; description?: string; disabled?: boolean }) {
-  return <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minHeight: 44, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? .65 : 1 }}>
-    <input id={id} type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} style={{ marginTop: 3 }} />
-    <span><span style={{ display: 'block', fontSize: 13, color: 'var(--ink)' }}>{title}</span>{description && <span style={{ display: 'block', marginTop: 2, fontSize: 11.5, lineHeight: 1.45, color: 'var(--ink-faint)', textWrap: 'pretty' }}>{description}</span>}</span>
-  </label>
+  return <AppSwitch id={id} checked={checked} disabled={disabled} onChange={onChange} label={title} description={description} />
 }
 
 function Disclosure({ title, forceOpen = false, children }: { title: string; forceOpen?: boolean; children: ReactNode }) {
@@ -185,7 +186,6 @@ export default function WidgetAppearance({ agentId, agentName, agentPhotoURL, in
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
   const errors = useMemo(() => validateAppearance(draft), [draft])
   const errorEntries = Object.entries(errors) as Array<[FieldErrorKey, string]>
@@ -228,7 +228,7 @@ export default function WidgetAppearance({ agentId, agentName, agentPhotoURL, in
       const response = await apiRequest(`/agents/${agentId}/channels/web-widget`, { method: 'PUT', body: JSON.stringify(draft) })
       const data = await response.json().catch(() => ({})) as Appearance & { error?: string }
       if (!response.ok) { setError(data.error ?? 'Could not save the widget settings.'); return }
-      setDraft(data); onSaved(data); setSaved(true); setTimeout(() => setSaved(false), 2500)
+      setDraft(data); onSaved(data); setSaved(true); toast.success('Widget settings saved'); setTimeout(() => setSaved(false), 2500)
     } catch { setError('Could not save the widget settings.') } finally { setSaving(false) }
   }
 
@@ -254,29 +254,18 @@ export default function WidgetAppearance({ agentId, agentName, agentPhotoURL, in
     requestAnimationFrame(() => document.getElementById(target.id)?.focus())
   }
 
-  function moveTab(event: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
-    let next = index
-    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length
-    else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length
-    else if (event.key === 'Home') next = 0
-    else if (event.key === 'End') next = tabs.length - 1
-    else return
-    event.preventDefault(); selectTab(tabs[next]!.id); tabRefs.current[next]?.focus()
-  }
-
   return <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'start', marginBottom: 14 }}>
       <div><p style={{ ...label, marginBottom: 4 }}>Widget settings</p><p style={{ margin: 0, maxWidth: 520, color: 'var(--ink-mute)', fontSize: 12, lineHeight: 1.5, textWrap: 'pretty' }}>Control what visitors see, where the widget appears, and how conversations behave.</p></div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}><span style={{ padding: '4px 9px', borderRadius: 99, background: initial.enabled ? 'rgba(52,211,153,.14)' : 'var(--panel-2)', color: initial.enabled ? 'var(--mint)' : 'var(--ink-mute)', font: '500 10.5px var(--font-mono)' }}>{initial.enabled ? 'Published · enabled' : 'Published · paused'}</span>{dirty && <span style={{ padding: '4px 9px', borderRadius: 99, background: 'rgba(245,158,11,.11)', color: '#d97706', font: '500 10.5px var(--font-mono)' }}>Unsaved changes</span>}</div>
     </div>
-    <div className="widget-settings-tabs" role="tablist" aria-label="Widget settings" style={{ display: 'flex', gap: 4, marginBottom: 18, overflowX: 'auto' }}>{tabs.map((tab, index) => <button key={tab.id} ref={(node) => { tabRefs.current[index] = node }} id={`widget-tab-${tab.id}`} type="button" role="tab" aria-selected={activeTab === tab.id} aria-controls="widget-settings-panel" tabIndex={activeTab === tab.id ? 0 : -1} onKeyDown={(event) => moveTab(event, index)} onClick={() => selectTab(tab.id)} style={{ minHeight: 40, padding: '0 13px', border: 0, borderRadius: 9, background: activeTab === tab.id ? 'var(--control-selected)' : 'transparent', color: activeTab === tab.id ? 'var(--control-selected-text)' : 'var(--ink-mute)', fontSize: 12.5, fontWeight: activeTab === tab.id ? 600 : 400, cursor: 'pointer', whiteSpace: 'nowrap', transitionProperty: 'background-color, color, transform', transitionDuration: '150ms' }}>{tab.label}</button>)}</div>
     <div className="widget-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(260px, .95fr)', gap: 24, alignItems: 'start' }}>
-      <div id="widget-settings-panel" role="tabpanel" aria-labelledby={`widget-tab-${activeTab}`}>
+      <AppTabs tabs={tabs} selectedKey={activeTab} onSelectionChange={(key) => selectTab(key as SettingsTab)} ariaLabel="Widget settings">
         {activeTab === 'appearance' && <AppearanceSettings draft={draft} setDraft={setDraft} errors={errors} validColor={validColor} contrast={contrast} brandingLocked={brandingLocked} />}
         {activeTab === 'content' && <ContentSettings draft={draft} setDraft={setDraft} errors={errors} agentId={agentId} agentName={agentName} />}
         {activeTab === 'behavior' && <BehaviorSettings draft={draft} setDraft={setDraft} errors={errors} testPath={testPath} setTestPath={setTestPath} pathVisible={pathVisible} />}
         {activeTab === 'security' && <SecuritySettings draft={draft} setDraft={setDraft} errors={errors} domainEntry={domainEntry} setDomainEntry={setDomainEntry} domainError={domainError} setDomainError={setDomainError} suggestedDomains={suggestedDomains} addDomain={addDomain} />}
-      </div>
+      </AppTabs>
       <Preview appearance={draft} agentName={agentName} agentPhotoURL={agentPhotoURL} />
     </div>
     <div aria-live="polite">{error && <p style={{ ...errorText, marginTop: 14 }}>{error}</p>}{errorEntries.length > 0 && dirty && <p style={{ ...errorText, marginTop: 14 }}>{errorEntries.length === 1 ? errorEntries[0]![1] : `Fix ${errorEntries.length} highlighted settings before saving.`}</p>}</div>
@@ -290,8 +279,8 @@ type SettingsProps = { draft: Appearance; setDraft: (draft: Appearance) => void;
 function AppearanceSettings({ draft, setDraft, errors, validColor, contrast, brandingLocked }: SettingsProps & { validColor: boolean; contrast: number; brandingLocked: boolean }) {
   return <>
     <div style={group}><label htmlFor="w-color" style={fieldLabel}>Brand colour</label><div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><input id="w-color" type="color" value={normalizeWidgetHexColor(draft.widgetColor) ?? '#6366f1'} onChange={(event) => setDraft({ ...draft, widgetColor: event.target.value })} style={{ width: 44, height: 40, padding: 3, borderRadius: 9, border: '1px solid var(--line-2)', background: 'var(--bg-2)' }} /><input id="w-color-hex" aria-label="Colour hex value" value={draft.widgetColor} aria-invalid={!validColor} aria-describedby="w-color-error" onChange={(event) => setDraft({ ...draft, widgetColor: event.target.value })} style={{ ...input, width: 120, padding: '9px 10px', fontFamily: 'var(--font-mono)', fontSize: 13 }} /><span style={{ padding: '4px 8px', borderRadius: 99, background: validColor ? 'rgba(52,211,153,.14)' : 'rgba(239,68,68,.12)', color: validColor ? 'var(--mint)' : 'var(--danger)', font: '500 10.5px var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{validColor ? `${contrast.toFixed(1)}:1 · Accessible` : 'Invalid'}</span></div><FieldError id="w-color-error">{errors.widgetColor}</FieldError></div>
-    <div style={group}><label htmlFor="w-theme" style={fieldLabel}>Panel theme</label><select id="w-theme" value={draft.theme} onChange={(event) => setDraft({ ...draft, theme: event.target.value as Appearance['theme'] })} style={{ ...input, padding: '9px 10px', fontSize: 13 }}>{WIDGET_THEMES.map((theme) => <option key={theme} value={theme}>{theme === 'auto' ? 'Match visitor device' : `${theme[0]!.toUpperCase()}${theme.slice(1)}`}</option>)}</select></div>
-    <div className="widget-two-column-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}><div style={group}><label htmlFor="w-pos" style={fieldLabel}>Position</label><select id="w-pos" value={draft.widgetPosition} onChange={(event) => setDraft({ ...draft, widgetPosition: event.target.value as WidgetPosition })} style={{ ...input, padding: '9px 10px', fontSize: 13 }}>{WIDGET_POSITIONS.map((position) => <option key={position.id} value={position.id}>{position.label}</option>)}</select></div><div style={group}><label htmlFor="w-offset-y" style={fieldLabel}>Bottom offset</label><input id="w-offset-y" type="number" min={8} max={96} value={draft.verticalOffset} aria-invalid={Boolean(errors.verticalOffset)} aria-describedby="w-offset-y-error" onChange={(event) => setDraft({ ...draft, verticalOffset: Number(event.target.value) })} style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-offset-y-error">{errors.verticalOffset}</FieldError></div></div>
+    <div style={group}><label style={fieldLabel}>Panel theme</label><AppSelect ariaLabel="Panel theme" value={draft.theme} onChange={(value) => setDraft({ ...draft, theme: value as Appearance['theme'] })} options={WIDGET_THEMES.map((theme) => ({ value: theme, label: theme === 'auto' ? 'Match visitor device' : `${theme[0]!.toUpperCase()}${theme.slice(1)}` }))} /></div>
+    <div className="widget-two-column-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}><div style={group}><label style={fieldLabel}>Position</label><AppSelect ariaLabel="Widget position" value={draft.widgetPosition} onChange={(value) => setDraft({ ...draft, widgetPosition: value as WidgetPosition })} options={WIDGET_POSITIONS.map((position) => ({ value: position.id, label: position.label }))} /></div><div style={group}><label htmlFor="w-offset-y" style={fieldLabel}>Bottom offset</label><input id="w-offset-y" type="number" min={8} max={96} value={draft.verticalOffset} aria-invalid={Boolean(errors.verticalOffset)} aria-describedby="w-offset-y-error" onChange={(event) => setDraft({ ...draft, verticalOffset: Number(event.target.value) })} style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-offset-y-error">{errors.verticalOffset}</FieldError></div></div>
     <div style={group}><label htmlFor="w-offset-x" style={fieldLabel}>Side offset</label><input id="w-offset-x" type="number" min={8} max={96} value={draft.horizontalOffset} aria-invalid={Boolean(errors.horizontalOffset)} aria-describedby="w-offset-x-error" onChange={(event) => setDraft({ ...draft, horizontalOffset: Number(event.target.value) })} style={{ ...input, maxWidth: 150, padding: '9px 10px', fontSize: 13 }} /><p style={help}>Useful around cookie banners and floating controls.</p><FieldError id="w-offset-x-error">{errors.horizontalOffset}</FieldError></div>
     <Toggle checked={draft.showBranding} disabled={brandingLocked} onChange={(checked) => setDraft({ ...draft, showBranding: checked })} title="Show “Powered by Ayooda”" description={brandingLocked ? 'Removing attribution is available on Core and above.' : 'Turn this off to run the widget unbranded.'} />{brandingLocked && <p style={{ ...help, marginLeft: 25 }}><Lock size={10} /> <Link href="/dashboard/billing" style={{ color: 'var(--accent-text)' }}>Upgrade to unlock</Link></p>}
   </>
@@ -304,7 +293,7 @@ function ContentSettings({ draft, setDraft, errors, agentId, agentName }: Settin
     <div style={group}><label htmlFor="w-welcome" style={fieldLabel}>Welcome message</label><textarea id="w-welcome" value={draft.welcomeMessage} aria-invalid={Boolean(errors.welcomeMessage)} aria-describedby="w-welcome-count w-welcome-error" onChange={(event) => setDraft({ ...draft, welcomeMessage: event.target.value })} style={{ ...input, minHeight: 76, resize: 'vertical', padding: '9px 10px', fontSize: 13 }} /><p id="w-welcome-count" style={{ ...help, color: errors.welcomeMessage ? 'var(--danger)' : 'var(--ink-faint)', fontVariantNumeric: 'tabular-nums' }}>{draft.welcomeMessage.length}/{MAX_WELCOME_MESSAGE_CHARS}</p><FieldError id="w-welcome-error">{errors.welcomeMessage}</FieldError></div>
     <div style={group}><label htmlFor="w-placeholder" style={fieldLabel}>Message placeholder</label><input id="w-placeholder" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.inputPlaceholder} aria-invalid={Boolean(errors.inputPlaceholder)} aria-describedby="w-placeholder-error" onChange={(event) => setDraft({ ...draft, inputPlaceholder: event.target.value })} placeholder="Compose your message…" style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-placeholder-error">{errors.inputPlaceholder}</FieldError></div>
     <div style={group}><label htmlFor="w-greeting" style={fieldLabel}>Launcher greeting</label><input id="w-greeting" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.launcherGreeting} aria-invalid={Boolean(errors.launcherGreeting)} aria-describedby="w-greeting-help w-greeting-error" onChange={(event) => setDraft({ ...draft, launcherGreeting: event.target.value })} placeholder="Need help? Chat with us." style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><p id="w-greeting-help" style={help}>Optional. Its delay appears in Behavior after you add text.</p><FieldError id="w-greeting-error">{errors.launcherGreeting}</FieldError></div>
-    <div style={group}><label htmlFor="w-locale" style={fieldLabel}>Interface language</label><select id="w-locale" value={draft.locale} onChange={(event) => setDraft({ ...draft, locale: event.target.value as Appearance['locale'] })} style={{ ...input, padding: '9px 10px', fontSize: 13 }}>{WIDGET_LOCALES.map((locale) => <option key={locale} value={locale}>{({ auto: 'Automatic', en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', ar: 'العربية' } as const)[locale]}</option>)}</select><p style={help}>Built-in controls are translated. Your custom text stays exactly as entered.</p></div>
+    <div style={group}><label style={fieldLabel}>Interface language</label><AppSelect ariaLabel="Interface language" value={draft.locale} onChange={(value) => setDraft({ ...draft, locale: value as Appearance['locale'] })} options={WIDGET_LOCALES.map((locale) => ({ value: locale, label: ({ auto: 'Automatic', en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', ar: 'العربية' } as const)[locale] }))} /><p style={help}>Built-in controls are translated. Your custom text stays exactly as entered.</p></div>
     <LocalizedContentSettings draft={draft} setDraft={setDraft} />
   </>
 }
@@ -335,8 +324,8 @@ function LocalizedContentSettings({ draft, setDraft }: Pick<SettingsProps, 'draf
     <summary style={{ minHeight: 44, padding: '0 13px', display: 'flex', alignItems: 'center', cursor: 'pointer', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600 }}>Localized custom copy</summary>
     <div style={{ padding: '4px 13px 14px' }}>
       <p style={{ ...help, margin: '0 0 11px' }}>Add optional visitor-language versions. Empty fields fall back to the default copy above.</p>
-      <label htmlFor="w-content-locale" style={fieldLabel}>Translation language</label>
-      <select id="w-content-locale" value={locale} onChange={(event) => setLocale(event.target.value as WidgetContentLocale)} style={{ ...input, marginBottom: 13, padding: '9px 10px', fontSize: 13 }}>{Object.entries(names).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select>
+      <label style={fieldLabel}>Translation language</label>
+      <AppSelect ariaLabel="Translation language" value={locale} onChange={(value) => setLocale(value as WidgetContentLocale)} style={{ marginBottom: 13 }} options={Object.entries(names).map(([value, name]) => ({ value, label: name }))} />
       {fields.map((field) => <div key={field.key} style={{ marginBottom: 11 }}><label htmlFor={`w-localized-${field.key}`} style={fieldLabel}>{field.label}</label>{field.key === 'welcomeMessage' || field.key === 'privacyNotice' ? <textarea id={`w-localized-${field.key}`} maxLength={field.max} value={values[field.key] ?? ''} onChange={(event) => update(field.key, event.target.value)} placeholder={field.placeholder} style={{ ...input, minHeight: 64, resize: 'vertical', padding: '9px 10px', fontSize: 13 }} /> : <input id={`w-localized-${field.key}`} maxLength={field.max} value={values[field.key] ?? ''} onChange={(event) => update(field.key, event.target.value)} placeholder={field.placeholder} style={{ ...input, padding: '9px 10px', fontSize: 13 }} />}</div>)}
     </div>
   </details>
@@ -353,7 +342,7 @@ function BehaviorSettings({ draft, setDraft, errors, testPath, setTestPath, path
     <div style={{ ...group, marginTop: 12 }}><label htmlFor="w-include" style={fieldLabel}>Only show on paths</label><PathRulesInput id="w-include" value={draft.includePaths} onChange={(value) => setDraft({ ...draft, includePaths: value })} placeholder="/pricing or /help/*" error={errors.includePaths} /><p id="w-include-help" style={help}>Empty includes every page. Add one pattern at a time.</p></div>
     <div style={group}><label htmlFor="w-exclude" style={fieldLabel}>Hide on paths</label><PathRulesInput id="w-exclude" value={draft.excludePaths} onChange={(value) => setDraft({ ...draft, excludePaths: value })} placeholder="/checkout/*" error={errors.excludePaths} /><p id="w-exclude-help" style={help}>Hide rules win when a path matches both lists.</p></div>
     <div style={{ ...group, padding: 12, borderRadius: 12, background: 'var(--bg-2)', boxShadow: '0 0 0 1px rgba(0,0,0,.06)' }}><label htmlFor="w-test-path" style={fieldLabel}>Test a website path</label><input id="w-test-path" value={testPath} onChange={(event) => setTestPath(event.target.value)} placeholder="/pricing" style={{ ...input, padding: '9px 10px', fontFamily: 'var(--font-mono)', fontSize: 12 }} /><p style={{ ...help, color: testPath.startsWith('/') ? (pathVisible ? 'var(--mint)' : '#d97706') : 'var(--danger)' }}>{!testPath.startsWith('/') ? 'Start the path with /.' : pathVisible ? 'The widget will appear on this path.' : 'The widget will be hidden on this path.'}</p></div>
-    <div style={group}><label htmlFor="w-persistence" style={fieldLabel}>Conversation memory</label><select id="w-persistence" value={draft.conversationPersistence} onChange={(event) => setDraft({ ...draft, conversationPersistence: event.target.value as Appearance['conversationPersistence'] })} style={{ ...input, padding: '9px 10px', fontSize: 13 }}><option value="session">Remember in this browser tab</option><option value="visitor">Remember returning visitors</option><option value="fresh">Always start fresh</option></select>{draft.conversationPersistence === 'visitor' && <p style={help}>Stores a conversation identifier in the visitor’s browser. Mention this in your privacy notice where required.</p>}</div>
+    <div style={group}><label style={fieldLabel}>Conversation memory</label><AppSelect ariaLabel="Conversation memory" value={draft.conversationPersistence} onChange={(value) => setDraft({ ...draft, conversationPersistence: value as Appearance['conversationPersistence'] })} options={[{ value: 'session', label: 'Remember in this browser tab' }, { value: 'visitor', label: 'Remember returning visitors' }, { value: 'fresh', label: 'Always start fresh' }]} />{draft.conversationPersistence === 'visitor' && <p style={help}>Stores a conversation identifier in the visitor’s browser. Mention this in your privacy notice where required.</p>}</div>
     {draft.conversationPersistence === 'visitor' && <div style={group}><label htmlFor="w-days" style={fieldLabel}>Remember for days</label><input id="w-days" type="number" min={1} max={30} value={draft.persistenceDays} aria-invalid={Boolean(errors.persistenceDays)} aria-describedby="w-days-error" onChange={(event) => setDraft({ ...draft, persistenceDays: Number(event.target.value) })} style={{ ...input, maxWidth: 150, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-days-error">{errors.persistenceDays}</FieldError></div>}
     <Toggle checked={draft.soundEnabled} onChange={(checked) => setDraft({ ...draft, soundEnabled: checked })} title="Reply sound" description="Play a subtle sound for replies received while closed." />
     </Disclosure>

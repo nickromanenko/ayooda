@@ -5,6 +5,7 @@ import { Loader2, Search } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { AdminListResponse, AdminWorkspaceSummary } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
+import { AppSelect } from '@/components/ui/AppSelect'
 import styles from '../admin.module.css'
 
 const date = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -45,8 +46,8 @@ export default function AdminWorkspacesPage() {
     <header className={styles.header}><div><p className={styles.eyebrow}>Tenant operations</p><h1 className={styles.title}>Workspaces</h1><p className={styles.description}>Inspect customer setup, subscription health, and aggregate usage without exposing secrets or conversation content.</p></div></header>
     <form className={styles.toolbar} onSubmit={(event) => { event.preventDefault(); setQuery(queryInput.trim()) }}>
       <div className={styles.searchWrap}><Search className={styles.searchIcon} size={16} /><label className="sr-only" htmlFor="admin-workspace-search">Search workspaces</label><input id="admin-workspace-search" className={styles.field} value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder="Workspace name or exact ID" /></div>
-      <select className={styles.select} value={subscriptionStatus} onChange={(event) => setSubscriptionStatus(event.target.value)} aria-label="Filter subscription status"><option value="">All subscriptions</option><option value="trialing">Trialing</option><option value="active">Active</option><option value="past_due">Past due</option><option value="canceled">Canceled</option><option value="expired">Expired</option></select>
-      <select className={styles.select} value={tier} onChange={(event) => setTier(event.target.value)} aria-label="Filter plan"><option value="">All plans</option><option value="lite">Lite</option><option value="core">Core</option><option value="max">Max</option></select>
+      <AppSelect ariaLabel="Filter subscription status" className={styles.heroSelect} value={subscriptionStatus} onChange={setSubscriptionStatus} emptyLabel="All subscriptions" options={[{ value: 'trialing', label: 'Trialing' }, { value: 'active', label: 'Active' }, { value: 'past_due', label: 'Past due' }, { value: 'canceled', label: 'Canceled' }, { value: 'expired', label: 'Expired' }]} />
+      <AppSelect ariaLabel="Filter plan" className={styles.heroSelect} value={tier} onChange={setTier} emptyLabel="All plans" options={[{ value: 'lite', label: 'Lite' }, { value: 'core', label: 'Core' }, { value: 'max', label: 'Max' }]} />
       <button className={styles.button} type="submit">Search</button>
     </form>
     <section className={styles.tableCard} aria-busy={loading}>
