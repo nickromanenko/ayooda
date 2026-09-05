@@ -1,0 +1,31 @@
+.shell { display: flex; height: 100%; min-height: 0; background: var(--bg-2); color: var(--ink); }
+.sidebar { width: 232px; flex: 0 0 232px; display: flex; flex-direction: column; padding: 16px 10px 12px; background: var(--panel); border-right: 1px solid var(--line); }
+.sidebarHeader { min-height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; }
+.brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); font-size: 15px; font-weight: 650; letter-spacing: -.02em; }
+.brand svg { color: var(--accent-text); }
+.adminBadge { align-self: flex-start; margin: 8px 8px 18px; padding: 5px 8px; border-radius: 999px; color: var(--accent-text); background: var(--accent-soft); font: 600 9px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.nav { display: flex; flex: 1; flex-direction: column; gap: 3px; }
+.navLink, .navButton { box-sizing: border-box; width: 100%; min-height: 42px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border: 0; border-radius: var(--r-sm); color: var(--ink-mute); background: transparent; font: 13.5px var(--font-ui); text-align: left; cursor: pointer; transition-property: color, background-color, scale; transition-duration: 150ms; transition-timing-function: ease-out; }
+.navLink:hover, .navButton:hover { color: var(--ink); background: var(--panel-2); }
+.navLink[data-active='true'] { color: var(--control-selected-text); background: var(--control-selected); }
+.navLink:active, .navButton:active, .iconButton:active { scale: .96; }
+.footer { display: flex; flex-direction: column; gap: 3px; padding-top: 10px; border-top: 1px solid var(--line); }
+.account { min-width: 0; padding: 7px 12px 3px; overflow: hidden; color: var(--ink-faint); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.main { flex: 1; min-width: 0; overflow-y: auto; padding: 28px; }
+.mobileHeader, .backdrop, .mobileClose { display: none; }
+.iconButton { box-sizing: border-box; width: 44px; height: 44px; place-items: center; border: 0; border-radius: 12px; color: var(--ink); background: var(--panel-2); box-shadow: var(--shadow-control); cursor: pointer; transition-property: scale, background-color, box-shadow; transition-duration: 150ms; transition-timing-function: ease-out; }
+
+@media (max-width: 760px) {
+  .shell { flex-direction: column; }
+  .mobileHeader { z-index: 42; min-height: 64px; flex: 0 0 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: color-mix(in oklab, var(--panel) 94%, transparent); box-shadow: 0 1px 0 var(--line); backdrop-filter: blur(18px); }
+  .mobileHeader .iconButton, .mobileClose { display: grid; }
+  .sidebar { position: fixed; z-index: 50; inset: 0 0 0 auto; width: min(88vw, 340px); padding: 12px; transform: translateX(102%); visibility: hidden; pointer-events: none; box-shadow: -20px 0 60px rgba(0,0,0,.3); transition-property: transform, visibility; transition-duration: 220ms; transition-timing-function: cubic-bezier(.2,0,0,1); }
+  .sidebar[data-open='true'] { transform: translateX(0); visibility: visible; pointer-events: auto; }
+  .backdrop { position: fixed; z-index: 49; inset: 0; display: block; border: 0; background: rgba(0,0,0,.48); opacity: 0; visibility: hidden; pointer-events: none; transition-property: opacity, visibility; transition-duration: 180ms; }
+  .backdrop[data-open='true'] { opacity: 1; visibility: visible; pointer-events: auto; }
+  .main { padding: 18px 16px 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .backdrop, .navLink, .navButton, .iconButton { transition: none; }
+}

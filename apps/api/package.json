@@ -7,7 +7,10 @@
     "start": "bun run src/index.ts",
     "build": "bun build src/index.ts --outfile dist/index.js --target bun",
     "typecheck": "tsc --noEmit",
-    "kb:import": "bun run src/scripts/import-knowledge-base.ts"
+    "kb:import": "bun run src/scripts/import-knowledge-base.ts",
+    "admin:grant": "bun run src/scripts/manage-platform-admin.ts grant",
+    "admin:revoke": "bun run src/scripts/manage-platform-admin.ts revoke",
+    "admin:backfill-users": "bun run src/scripts/backfill-admin-user-fields.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.35",

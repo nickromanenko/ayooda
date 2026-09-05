@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Check, Copy, ExternalLink, Loader2, Mail, Plus, RotateCcw, Send, TicketCheck, Trash2, Webhook } from 'lucide-react'
-import { DEFAULT_TICKETING_CONFIG, TICKET_FIELD_TYPES, type TicketingConfig, type TicketIntakeField } from '@ayooda/shared'
+import { TICKET_FIELD_TYPES, type TicketingConfig, type TicketIntakeField } from '@ayooda/shared'
 import { apiRequest } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import styles from './page.module.css'

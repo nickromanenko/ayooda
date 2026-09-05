@@ -6,9 +6,17 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // Users can only read/write their own user document
+    // User identity, workspace assignment, and platform authorization are
+    // server-managed. Clients may read their own profile but must use the API
+    // for updates so protected fields cannot be self-assigned.
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Platform administration is API-only and never browser-readable.
+    match /adminAuditLogs/{eventId} {
+      allow read, write: if false;
     }
 
     // Workspace document: server-only. The Admin SDK (the Hono API and the dashboard

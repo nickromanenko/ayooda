@@ -42,7 +42,7 @@ workspace.put('/', requireOwner, async (c) => {
   if (!name || name.length > 80) {
     return c.json({ error: 'name is required (max 80 chars)' }, 400)
   }
-  await adminDb.doc(`workspaces/${workspaceId}`).update({ name })
+  await adminDb.doc(`workspaces/${workspaceId}`).update({ name, nameLower: name.toLowerCase(), updatedAt: new Date() })
   return c.json({ ok: true })
 })
 

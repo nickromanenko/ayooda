@@ -31,6 +31,7 @@ updated_at: 2026-09-04
 - `slug` is the public URL segment for a future help center.
 - `route` is the dashboard page the article explains. Dynamic agent routes use `:agentId`.
 - `roles` identifies who can use the page. An owner-only article may still be searchable by members if it helps explain why a control is unavailable.
+- `admin` articles describe the separately guarded platform console and are returned only to platform administrators.
 - `summary` should make sense in search results without the article body.
 - `keywords` contains product terms and likely user queries, not keyword stuffing.
 - `related_articles` contains article IDs, not file paths.
@@ -71,6 +72,17 @@ updated_at: 2026-09-04
 | Settings | [Profile and workspace settings](dashboard/settings.md) |
 | Knowledge Base | [Use the dashboard Knowledge Base](dashboard/knowledge-base.md) |
 
+## Admin coverage
+
+| Admin page | Article |
+| --- | --- |
+| Overview | [Admin platform overview](admin/overview.md) |
+| Users | [Admin user directory](admin/users.md) |
+| User detail | [Admin user details and account actions](admin/user-detail.md) |
+| Workspaces | [Admin workspace directory](admin/workspaces.md) |
+| Workspace detail | [Admin workspace details](admin/workspace-detail.md) |
+| Audit log | [Admin audit log](admin/audit-log.md) |
+
 ## Database publishing
 
 Published articles are synchronized to the separate `knowledgeBaseArticles` collection. One document represents one article and includes the frontmatter fields plus:
@@ -95,4 +107,3 @@ pnpm kb:import
 ```
 
 The importer upserts by `article_id`, validates the complete corpus before writing, and skips unchanged content by `contentHash`. It does not delete or archive missing database records automatically. Database edits are not the authoring workflow: update the Markdown, review it, then republish and re-index the changed article.
-

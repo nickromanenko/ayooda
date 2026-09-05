@@ -27,7 +27,7 @@ user.put('/', async (c) => {
   if (!displayName || displayName.length > 80) {
     return c.json({ error: 'displayName is required (max 80 chars)' }, 400)
   }
-  await adminDb.doc(`users/${uid}`).update({ displayName })
+  await adminDb.doc(`users/${uid}`).update({ displayName, displayNameLower: displayName.toLowerCase(), updatedAt: new Date() })
   await adminAuth.updateUser(uid, { displayName })
   return c.json({ ok: true })
 })

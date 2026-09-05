@@ -16,7 +16,10 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "kb:validate": "node scripts/validate-knowledge-base.mjs",
-    "kb:import": "pnpm --filter api kb:import"
+    "kb:import": "pnpm --filter api kb:import",
+    "admin:grant": "pnpm --filter api admin:grant",
+    "admin:revoke": "pnpm --filter api admin:revoke",
+    "admin:backfill-users": "pnpm --filter api admin:backfill-users"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",

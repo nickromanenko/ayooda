@@ -15,7 +15,9 @@ export function serializeKnowledgeBaseArticle(id: string, data: Record<string, u
     slug: String(data.slug ?? ''),
     category: String(data.category ?? ''),
     route: String(data.route ?? ''),
-    roles: Array.isArray(data.roles) ? data.roles.filter((role): role is 'owner' | 'member' => role === 'owner' || role === 'member') : [],
+    roles: Array.isArray(data.roles)
+      ? data.roles.filter((role): role is 'owner' | 'member' | 'admin' => role === 'owner' || role === 'member' || role === 'admin')
+      : [],
     summary: String(data.summary ?? ''),
     keywords: Array.isArray(data.keywords) ? data.keywords.filter((keyword): keyword is string => typeof keyword === 'string') : [],
     relatedArticleIds: Array.isArray(data.relatedArticleIds) ? data.relatedArticleIds.filter((articleId): articleId is string => typeof articleId === 'string') : [],

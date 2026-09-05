@@ -7,14 +7,17 @@ import { parseKnowledgeBaseArticle, validateKnowledgeBaseArticles } from '../lib
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = path.resolve(scriptDirectory, '../../../..')
-const articleDirectory = path.join(repositoryRoot, 'docs/knowledge-base/dashboard')
+const articleDirectories = ['dashboard', 'admin']
 const dryRun = process.argv.includes('--dry-run')
 
-const files = (await readdir(articleDirectory)).filter((file) => file.endsWith('.md')).sort()
-const articles = await Promise.all(files.map(async (file) => {
-  const sourcePath = path.posix.join('docs/knowledge-base/dashboard', file)
-  return parseKnowledgeBaseArticle(await readFile(path.join(articleDirectory, file), 'utf8'), sourcePath)
-}))
+const articles = (await Promise.all(articleDirectories.map(async (directory) => {
+  const articleDirectory = path.join(repositoryRoot, 'docs/knowledge-base', directory)
+  const files = (await readdir(articleDirectory)).filter((file) => file.endsWith('.md')).sort()
+  return Promise.all(files.map(async (file) => {
+    const sourcePath = path.posix.join('docs/knowledge-base', directory, file)
+    return parseKnowledgeBaseArticle(await readFile(path.join(articleDirectory, file), 'utf8'), sourcePath)
+  }))
+}))).flat()
 validateKnowledgeBaseArticles(articles)
 
 let created = 0

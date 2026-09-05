@@ -22,6 +22,7 @@ import {
   X,
   BookOpen,
   CircleHelp,
+  ShieldCheck,
 } from 'lucide-react'
 import type { KnowledgeBaseArticle } from '@ayooda/shared'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -74,7 +75,7 @@ function setCollapsedPersisted(next: boolean) {
   collapsedListeners.forEach((l) => l())
 }
 
-export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'member'; hasAgentAccess?: boolean }) {
+export function Sidebar({ role, hasAgentAccess = false, isPlatformAdmin = false }: { role: 'owner' | 'member'; hasAgentAccess?: boolean; isPlatformAdmin?: boolean }) {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const { workspace } = useWorkspace()
@@ -249,6 +250,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
         {visibleNav.map(mobileLink)}
         {helpArticle && <Link href={`/dashboard/knowledge-base?article=${encodeURIComponent(helpArticle.slug)}`} className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}><CircleHelp size={18} />Help for this page</Link>}
         {visibleBottom.map(mobileLink)}
+        {isPlatformAdmin && <Link href="/admin" className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}><ShieldCheck size={18} />Admin</Link>}
       </nav>
       <div className={styles.mobileFooter}>
         <ThemeToggle className="dashboard-theme-toggle" showLabel />
@@ -330,6 +332,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
       <div style={{ padding: '8px 8px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {!collapsed && <p className={styles.navSectionLabel}>Workspace</p>}
         {visibleBottom.map(renderLink)}
+        {isPlatformAdmin && renderLink({ label: 'Admin', href: '/admin', icon: ShieldCheck })}
 
         <ThemeToggle className="dashboard-theme-toggle" showLabel={!collapsed} />
 

@@ -1,5 +1,5 @@
 export type KnowledgeBaseArticleStatus = 'draft' | 'published' | 'archived'
-export type KnowledgeBaseArticleRole = 'owner' | 'member'
+export type KnowledgeBaseArticleRole = 'owner' | 'member' | 'admin'
 
 /** Safe article shape returned to authenticated dashboard clients. */
 export interface KnowledgeBaseArticle {

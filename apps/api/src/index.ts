@@ -46,6 +46,7 @@ import connectorOAuthRoutes from './routes/connector-oauth'
 import ticketingRoutes from './routes/ticketing'
 import ticketRoutes from './routes/tickets'
 import knowledgeBaseRoutes from './routes/knowledge-base'
+import adminRoutes from './routes/admin'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -71,6 +72,7 @@ app.route('/agents/:agentId/evaluations', evaluationRoutes)
 app.route('/agents/:agentId/ticketing', ticketingRoutes)
 app.route('/tickets', ticketRoutes)
 app.route('/knowledge-base', knowledgeBaseRoutes)
+app.route('/admin', adminRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)

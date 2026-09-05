@@ -7,6 +7,7 @@ export type {
   KnowledgeBaseArticleStatus,
   KnowledgeBaseArticleSummary,
 } from './knowledge-base'
+export * from './admin'
 
 export {
   KNOWLEDGE_SYNC_INTERVAL_HOURS,
@@ -135,6 +136,13 @@ export interface UserDoc {
   workspaceId: string
   createdAt: Date
   role?: WorkspaceRole
+  platformRole?: import('./admin').PlatformRole
+  accessStatus?: import('./admin').UserAccessStatus
+  emailLower?: string
+  displayNameLower?: string
+  disabledAt?: Date | null
+  disabledBy?: string | null
+  updatedAt?: Date
 }
 
 export interface AgentConfig {
@@ -161,6 +169,7 @@ export interface WorkspaceUsage {
 
 export interface WorkspaceDoc {
   name: string
+  nameLower?: string
   ownerId: string
   createdAt: Date
   onboardingComplete: boolean

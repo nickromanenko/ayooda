@@ -20,7 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     const userSnap = await db.doc(`users/${decoded.uid}`).get()
     if (!userSnap.exists) redirect('/api/session')
 
-    const { workspaceId } = userSnap.data()!
+    const { workspaceId, platformRole } = userSnap.data()!
     const workspaceSnap = await db.doc(`workspaces/${workspaceId}`).get()
 
     if (!workspaceSnap.data()?.onboardingComplete) redirect('/onboarding')
@@ -37,7 +37,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
     return (
       <div className={`${styles.shell} dashboard-shell`}>
-        <Sidebar role={role} hasAgentAccess={hasAgentAccess} />
+        <Sidebar role={role} hasAgentAccess={hasAgentAccess} isPlatformAdmin={platformRole === 'admin'} />
         <DashboardSearch role={role} hasAgentAccess={hasAgentAccess} />
         <DashboardAttention role={role} />
         <div className={styles.content}>

@@ -40,4 +40,12 @@ describe('knowledge-base articles', () => {
       .replace('slug: dashboard-overview', 'slug: other'), 'other.md')
     expect(() => validateKnowledgeBaseArticles([first, second])).toThrow('duplicate route /dashboard')
   })
+
+  test('accepts administrator-only help for admin routes', () => {
+    const article = parseKnowledgeBaseArticle(source
+      .replace('route: /dashboard', 'route: /admin')
+      .replace('roles: [owner, member]', 'roles: [admin]'), 'admin.md')
+    expect(article.roles).toEqual(['admin'])
+    expect(article.route).toBe('/admin')
+  })
 })

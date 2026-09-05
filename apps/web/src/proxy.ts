@@ -12,7 +12,7 @@ export function proxy(request: NextRequest) {
   }
 
   // Redirect unauthenticated users away from dashboard
-  if (pathname.startsWith('/dashboard') && !hasSession) {
+  if ((pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) && !hasSession) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('from', pathname)
     return NextResponse.redirect(loginUrl)
@@ -22,5 +22,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/onboarding', '/login', '/signup'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/onboarding', '/login', '/signup'],
 }

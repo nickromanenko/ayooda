@@ -191,6 +191,20 @@ Run each from a machine with the production env loaded (`cd apps/api && set -a &
 1. **`scripts/migrate-agents.ts`** — *required.* Creates the default agent per workspace, reparents `knowledge` + `tools` under it, tags channels with `agentId`. Without it, agent resolution / knowledge / tools break for pre-existing workspaces. Idempotent.
 2. **`scripts/backfill-trials.ts`** — grants existing workspaces a fresh 14-day trial so pre-billing workspaces aren't immediately gated. Run before customers hit the billing gate.
 3. **`scripts/backfill-overage-item.ts`** — adds the metered overage price (`STRIPE_PRICE_OVERAGE`) to existing `active`/`past_due`/`trialing` subscriptions so overage bills. Requires `STRIPE_PRICE_OVERAGE` in the env. Idempotent.
+4. **`pnpm admin:backfill-users`** — adds normalized admin-search fields and mirrors Firebase disabled state onto existing users, then adds normalized workspace names. Idempotent. Run it before opening the platform directories.
+
+Deploy `firestore.rules` and `firestore.indexes.json` before using the admin console so platform roles remain server-managed and directory filters have their required indexes.
+
+### Bootstrap and revoke platform administrators
+
+The target must be an existing Firebase Authentication user who has signed in to Ayooda at least once. From a trusted machine with production Firebase Admin credentials loaded:
+
+```bash
+pnpm admin:grant -- administrator@example.com
+pnpm admin:revoke -- administrator@example.com
+```
+
+These commands modify only the separate `platformRole`; they do not change workspace ownership or membership. They write a server-only audit event, and the revoke command refuses to remove the final platform administrator. If an administrator account is suspected compromised, grant a replacement first, revoke the compromised platform role, disable the Firebase account, and revoke its refresh tokens.
 
 ---
 
@@ -211,6 +225,7 @@ Because the deployment stays on **`ayooda-dev`**, existing vectors are preserved
 - [ ] Create a **Tool** and run **Test** → a live response comes back.
 - [ ] (Optional) Connect **Telegram** and message the bot.
 - [ ] (Optional) Connect **Slack**, configure the generated Events API request URL, subscribe to `app_mention` and `message.im`, then test both a DM and a channel mention.
+- [ ] As a platform administrator, open **Admin** from the dashboard sidebar and verify Overview, Users, Workspaces, and Audit log. Confirm a normal owner receives the access-denied page and `403` from `/admin/*` APIs.
 
 ---
 

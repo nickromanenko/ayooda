@@ -73,8 +73,8 @@ export function parseKnowledgeBaseArticle(markdown: string, sourcePath: string):
 
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(articleId)) throw new Error(`${sourcePath}: invalid article_id`)
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error(`${sourcePath}: invalid slug`)
-  if (!route.startsWith('/dashboard')) throw new Error(`${sourcePath}: route must start with /dashboard`)
-  if (!roles.length || roles.some((role) => !['owner', 'member'].includes(role))) throw new Error(`${sourcePath}: invalid roles`)
+  if (!route.startsWith('/dashboard') && !route.startsWith('/admin')) throw new Error(`${sourcePath}: route must start with /dashboard or /admin`)
+  if (!roles.length || roles.some((role) => !['owner', 'member', 'admin'].includes(role))) throw new Error(`${sourcePath}: invalid roles`)
   if (keywords.length < 2) throw new Error(`${sourcePath}: at least two keywords are required`)
   if (!['draft', 'published', 'archived'].includes(status)) throw new Error(`${sourcePath}: invalid status`)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(updatedAt)) throw new Error(`${sourcePath}: invalid updated_at`)

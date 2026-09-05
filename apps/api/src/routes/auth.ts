@@ -19,7 +19,7 @@ auth.post('/verify', async (c) => {
 
   let decodedToken
   try {
-    decodedToken = await adminAuth.verifyIdToken(idToken)
+    decodedToken = await adminAuth.verifyIdToken(idToken, true)
   } catch {
     return c.json({ error: 'Invalid token' }, 401)
   }
@@ -32,6 +32,17 @@ auth.post('/verify', async (c) => {
 
   if (userSnap.exists) {
     const userData = userSnap.data()!
+    if (userData.accessStatus === 'disabled') return c.json({ error: 'Account disabled' }, 403)
+    const normalized = {
+      email: email ?? userData.email ?? '',
+      emailLower: (email ?? userData.email ?? '').trim().toLowerCase(),
+      displayName: name ?? userData.displayName ?? '',
+      displayNameLower: (name ?? userData.displayName ?? '').trim().toLowerCase(),
+      photoURL: picture ?? userData.photoURL ?? null,
+      accessStatus: 'active',
+      updatedAt: new Date(),
+    }
+    await userRef.set(normalized, { merge: true })
     return c.json({ workspaceId: userData.workspaceId })
   }
 
@@ -50,7 +61,11 @@ auth.post('/verify', async (c) => {
           photoURL: picture ?? null,
           workspaceId: invite.workspaceId,
           role: 'member',
+          emailLower,
+          displayNameLower: (name ?? '').trim().toLowerCase(),
+          accessStatus: 'active',
           createdAt: new Date(),
+          updatedAt: new Date(),
         })
         batch.delete(inviteRef)
         await batch.commit()
@@ -85,11 +100,16 @@ auth.post('/verify', async (c) => {
     photoURL: picture ?? null,
     workspaceId,
     role: 'owner',
+    emailLower,
+    displayNameLower: (name ?? '').trim().toLowerCase(),
+    accessStatus: 'active',
     createdAt: now,
+    updatedAt: now,
   })
 
   batch.set(workspaceRef, {
     name: name ? `${name}'s workspace` : 'My workspace',
+    nameLower: (name ? `${name}'s workspace` : 'My workspace').toLowerCase(),
     ownerId: uid,
     createdAt: now,
     onboardingComplete: false,
