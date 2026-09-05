@@ -14,7 +14,8 @@
     "dev:widget": "pnpm --filter widget dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "kb:validate": "node scripts/validate-knowledge-base.mjs"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",
