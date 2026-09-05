@@ -69,10 +69,11 @@ updated_at: 2026-09-04
 | Billing | [Billing and plans](dashboard/billing.md) |
 | Team | [Team members and invitations](dashboard/team.md) |
 | Settings | [Profile and workspace settings](dashboard/settings.md) |
+| Knowledge Base | [Use the dashboard Knowledge Base](dashboard/knowledge-base.md) |
 
-## Future database representation
+## Database publishing
 
-Use a separate `knowledgeBaseArticles` collection. One document should represent one article and should include the frontmatter fields plus:
+Published articles are synchronized to the separate `knowledgeBaseArticles` collection. One document represents one article and includes the frontmatter fields plus:
 
 - `bodyMarkdown`: the Markdown body without frontmatter;
 - `sourcePath`: the repository-relative path to the file;
@@ -80,5 +81,18 @@ Use a separate `knowledgeBaseArticles` collection. One document should represent
 - `publishedAt`, `createdAt`, and `updatedAt`: server timestamps;
 - `searchText` or separate search-index metadata as required by the selected search service.
 
-Import articles by `article_id` with an idempotent upsert. The importer should validate unique IDs and slugs, valid related IDs, supported roles and statuses, and route coverage before writing. Database edits should not be the authoring workflow: update the Markdown, review it, then republish and re-index the changed article.
+Validate without database access:
+
+```bash
+pnpm kb:validate
+pnpm kb:import -- --dry-run
+```
+
+Publish with Firebase Admin credentials configured:
+
+```bash
+pnpm kb:import
+```
+
+The importer upserts by `article_id`, validates the complete corpus before writing, and skips unchanged content by `contentHash`. It does not delete or archive missing database records automatically. Database edits are not the authoring workflow: update the Markdown, review it, then republish and re-index the changed article.
 

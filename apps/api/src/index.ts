@@ -45,6 +45,7 @@ import evaluationRoutes from './routes/evaluations'
 import connectorOAuthRoutes from './routes/connector-oauth'
 import ticketingRoutes from './routes/ticketing'
 import ticketRoutes from './routes/tickets'
+import knowledgeBaseRoutes from './routes/knowledge-base'
 
 app.route('/auth', authRoutes)
 app.route('/workspace', workspaceRoutes)
@@ -69,6 +70,7 @@ app.route('/agents/:agentId/sandbox', sandboxRoutes)
 app.route('/agents/:agentId/evaluations', evaluationRoutes)
 app.route('/agents/:agentId/ticketing', ticketingRoutes)
 app.route('/tickets', ticketRoutes)
+app.route('/knowledge-base', knowledgeBaseRoutes)
 
 app.route('/widget', widgetRoutes)
 app.route('/telegram', telegramRoutes)

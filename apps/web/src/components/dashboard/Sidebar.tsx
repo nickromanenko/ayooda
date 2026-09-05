@@ -20,7 +20,10 @@ import {
   Search,
   Bell,
   X,
+  BookOpen,
+  CircleHelp,
 } from 'lucide-react'
+import type { KnowledgeBaseArticle } from '@ayooda/shared'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { apiRequest } from '@/lib/api'
@@ -28,6 +31,7 @@ import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import styles from './Sidebar.module.css'
 import { DASHBOARD_SEARCH_EVENT } from './DashboardSearch'
 import { DASHBOARD_ATTENTION_EVENT } from './DashboardAttention'
+import { normalizeDashboardHelpRoute } from '@/lib/knowledge-base'
 
 // Knowledge, tools, escalation rules and deployment all configure one agent, so
 // they are reached through that agent's tabs rather than as siblings here.
@@ -36,6 +40,7 @@ const navItems = [
   { label: 'Inbox', href: '/dashboard/inbox', icon: MessageSquare, badge: 'inbox' as const },
   { label: 'Copilot', href: '/dashboard/copilot', icon: MessagesSquare },
   { label: 'Agents', href: '/dashboard/agents', icon: Bot },
+  { label: 'Knowledge Base', href: '/dashboard/knowledge-base', icon: BookOpen },
 ]
 
 const bottomItems = [
@@ -76,6 +81,9 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
   const collapsed = useSyncExternalStore(subscribeCollapsed, getCollapsedSnapshot, getCollapsedServerSnapshot)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [badges, setBadges] = useState({ inbox: 0, channels: 0, tickets: 0 })
+  const [helpResult, setHelpResult] = useState<{ route: string; article: KnowledgeBaseArticle | null }>({ route: '', article: null })
+  const helpRoute = pathname.startsWith('/dashboard/knowledge-base') ? '' : normalizeDashboardHelpRoute(pathname)
+  const helpArticle = helpResult.route === helpRoute ? helpResult.article : null
   const shortcutLabel = '⌘/Ctrl K'
 
   useEffect(() => {
@@ -98,6 +106,16 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
     const timer = setInterval(() => void refresh(), 60_000)
     return () => { cancelled = true; clearInterval(timer) }
   }, [role, workspace?.id])
+
+  useEffect(() => {
+    if (!helpRoute) return
+    let cancelled = false
+    apiRequest(`/knowledge-base/context?route=${encodeURIComponent(helpRoute)}`)
+      .then(async (response) => response.ok ? response.json() as Promise<KnowledgeBaseArticle> : null)
+      .then((article) => { if (!cancelled) setHelpResult({ route: helpRoute, article }) })
+      .catch(() => { if (!cancelled) setHelpResult({ route: helpRoute, article: null }) })
+    return () => { cancelled = true }
+  }, [helpRoute])
 
   useEffect(() => {
     if (!mobileOpen) return
@@ -129,6 +147,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
     : navItems.filter((i) =>
         i.href === '/dashboard/inbox' ||
         i.href === '/dashboard/copilot' ||
+        i.href === '/dashboard/knowledge-base' ||
         // Members see Agents only once they hold at least one; otherwise the
         // link would lead to an empty list.
         (i.href === '/dashboard/agents' && hasAgentAccess))
@@ -228,6 +247,7 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
       </div>
       <nav className={styles.mobileNav} aria-label="Dashboard navigation">
         {visibleNav.map(mobileLink)}
+        {helpArticle && <Link href={`/dashboard/knowledge-base?article=${encodeURIComponent(helpArticle.slug)}`} className={styles.mobileNavLink} onClick={() => setMobileOpen(false)}><CircleHelp size={18} />Help for this page</Link>}
         {visibleBottom.map(mobileLink)}
       </nav>
       <div className={styles.mobileFooter}>
@@ -292,6 +312,18 @@ export function Sidebar({ role, hasAgentAccess = false }: { role: 'owner' | 'mem
           {attentionCount > 0 && <span className={styles.navBadge} data-collapsed={collapsed}>{collapsed ? '' : attentionCount > 99 ? '99+' : attentionCount}</span>}
         </button>
         {visibleNav.map(renderLink)}
+        {helpArticle && <Link
+          href={`/dashboard/knowledge-base?article=${encodeURIComponent(helpArticle.slug)}`}
+          className={styles.desktopNavLink}
+          data-tooltip={collapsed ? `Help: ${helpArticle.title}` : undefined}
+          aria-label={`Help: ${helpArticle.title}`}
+          style={itemStyle(false)}
+          onMouseEnter={(e) => hoverIn(e, false)}
+          onMouseLeave={(e) => hoverOut(e, false)}
+        >
+          <CircleHelp size={15} strokeWidth={1.6} style={{ flexShrink: 0 }} />
+          {!collapsed && <span>Help for this page</span>}
+        </Link>}
       </nav>
 
       {/* Bottom */}

@@ -15,7 +15,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "kb:validate": "node scripts/validate-knowledge-base.mjs"
+    "kb:validate": "node scripts/validate-knowledge-base.mjs",
+    "kb:import": "pnpm --filter api kb:import"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",

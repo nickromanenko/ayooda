@@ -6,7 +6,8 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "build": "bun build src/index.ts --outfile dist/index.js --target bun",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "kb:import": "bun run src/scripts/import-knowledge-base.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.35",
