@@ -16,7 +16,8 @@ import { rateLimit } from '../lib/rate-limit'
 import { DEFAULT_WIDGET_APPEARANCE } from '@ayooda/shared'
 import {
   channelIdentitySecrets, createWidgetSession, resolveWidgetSession, revokeWidgetSession,
-  verifyWidgetIdentityToken, type VerifiedWidgetCustomer,
+  normalizeUnverifiedWidgetCustomer, resumeUnverifiedWidgetSession,
+  verifyWidgetIdentityToken, type WidgetCustomer,
 } from '../lib/widget-identity'
 
 const widget = new Hono()
@@ -69,7 +70,7 @@ function domainAllowed(c: { req: { header: (name: string) => string | undefined 
     : host === domain)
 }
 
-type WidgetIdentity = { visitorId: string; customer?: VerifiedWidgetCustomer }
+type WidgetIdentity = { visitorId: string; customer?: WidgetCustomer }
 
 async function resolveIdentity(
   workspaceId: string,
@@ -169,37 +170,60 @@ widget.get('/config/:channelId', async (c) => {
     identityVerification: {
       enabled: Boolean(data.identityVerification?.enabled),
       requireAuthentication: Boolean(data.identityVerification?.requireAuthentication),
+      allowUnverifiedIdentification: data.identityVerification?.allowUnverifiedIdentification !== false,
     },
   })
 })
 
-// Exchange a short-lived, server-signed customer identity JWT for an opaque
-// browser session. The signing secret never enters customer-side JavaScript.
+// Exchange either a short-lived, server-signed JWT or browser-provided profile
+// for an opaque session. Browser profiles improve operator context but never
+// prove identity and cannot restore history from their public ID alone.
 widget.post('/session', async (c) => {
   c.header('Cache-Control', 'no-store')
-  const body = await c.req.json<{ channelId?: string; identityToken?: string }>().catch(() => ({} as { channelId?: string; identityToken?: string }))
-  if (!body.channelId || !body.identityToken || body.identityToken.length > 8192) return c.json({ error: 'channelId and a valid identityToken are required' }, 400)
+  type SessionBody = { channelId?: string; identityToken?: string; user?: unknown; resumeToken?: string }
+  const body: SessionBody = await c.req.json<SessionBody>().catch(() => ({}))
+  const hasToken = typeof body.identityToken === 'string' && Boolean(body.identityToken)
+  const hasUser = body.user !== undefined
+  if (!body.channelId || hasToken === hasUser || (hasToken && body.identityToken!.length > 8192)) {
+    return c.json({ error: 'Provide channelId and exactly one of identityToken or user.' }, 400)
+  }
   if (!rateLimit(`widget-session:${clientIp(c)}`, 120, RATE_WINDOW_MS).ok) return c.json({ error: 'Too many requests' }, 429)
   const channelDoc = await findChannel(body.channelId)
   if (!channelDoc || channelDoc.data().isActive === false || !domainAllowed(c, channelDoc.data())) return c.json({ error: 'Not found' }, 404)
   const data = channelDoc.data()
-  if (!data.identityVerification?.enabled) return c.json({ error: 'Authenticated visitors are not enabled for this widget.' }, 403)
-  const secrets = channelIdentitySecrets(data)
-  if (!secrets.length) return c.json({ error: 'Widget identity verification is not configured.' }, 503)
-  let customer: VerifiedWidgetCustomer
-  try {
-    let verified: VerifiedWidgetCustomer | null = null
-    for (const secret of secrets) {
-      try { verified = verifyWidgetIdentityToken(body.identityToken, secret, body.channelId); break } catch { /* try rotation grace key */ }
+  const identitySettings = data.identityVerification ?? {}
+  let customer: WidgetCustomer
+  let session
+  if (hasToken) {
+    if (!identitySettings.enabled) return c.json({ error: 'Verified visitors are not enabled for this widget.' }, 403)
+    const secrets = channelIdentitySecrets(data)
+    if (!secrets.length) return c.json({ error: 'Widget identity verification is not configured.' }, 503)
+    try {
+      let verified: WidgetCustomer | null = null
+      for (const secret of secrets) {
+        try { verified = verifyWidgetIdentityToken(body.identityToken!, secret, body.channelId); break } catch { /* try rotation grace key */ }
+      }
+      if (!verified) throw new Error('Invalid identity token')
+      customer = verified
+    } catch (error) {
+      await channelDoc.ref.update({ 'identityVerification.lastFailureAt': new Date(), 'identityVerification.failureCount': FieldValue.increment(1) }).catch(() => {})
+      return c.json({ error: error instanceof Error ? error.message : 'Invalid identity token.' }, 401)
     }
-    if (!verified) throw new Error('Invalid identity token')
-    customer = verified
-  } catch (error) {
-    await channelDoc.ref.update({ 'identityVerification.lastFailureAt': new Date(), 'identityVerification.failureCount': FieldValue.increment(1) }).catch(() => {})
-    return c.json({ error: error instanceof Error ? error.message : 'Invalid identity token.' }, 401)
+    session = await createWidgetSession(data.workspaceId, body.channelId, customer)
+    await channelDoc.ref.update({ 'identityVerification.lastVerifiedAt': new Date() }).catch(() => {})
+  } else {
+    if (identitySettings.requireAuthentication || identitySettings.allowUnverifiedIdentification === false) {
+      return c.json({ error: identitySettings.requireAuthentication ? 'Verified identity is required.' : 'Browser identification is disabled.' }, 403)
+    }
+    let unverifiedCustomer: ReturnType<typeof normalizeUnverifiedWidgetCustomer>
+    try { unverifiedCustomer = normalizeUnverifiedWidgetCustomer(body.user) }
+    catch (error) { return c.json({ error: error instanceof Error ? error.message : 'Invalid user.' }, 400) }
+    customer = unverifiedCustomer
+    session = await resumeUnverifiedWidgetSession(data.workspaceId, body.channelId, body.resumeToken, unverifiedCustomer)
+      ?? await createWidgetSession(data.workspaceId, body.channelId, unverifiedCustomer)
+    await channelDoc.ref.update({ 'identityVerification.lastUnverifiedAt': new Date() }).catch(() => {})
   }
   const workspaceId: string = data.workspaceId
-  const session = await createWidgetSession(workspaceId, body.channelId, customer)
   const conversations = await adminDb.collection(`workspaces/${workspaceId}/conversations`)
     .where('channelId', '==', body.channelId)
     .where('visitorId', '==', session.visitorId)
@@ -207,8 +231,12 @@ widget.post('/session', async (c) => {
     .limit(1)
     .get()
   const existing = conversations.docs[0]
-  await channelDoc.ref.update({ 'identityVerification.lastVerifiedAt': new Date() }).catch(() => {})
-  return c.json({ sessionToken: session.token, expiresAt: session.expiresAt.toISOString(), conversationId: existing?.id ?? crypto.randomUUID() })
+  return c.json({
+    sessionToken: session.token,
+    expiresAt: session.expiresAt.toISOString(),
+    conversationId: existing?.id ?? crypto.randomUUID(),
+    identityTrust: customer.trust,
+  })
 })
 
 widget.delete('/session', async (c) => {

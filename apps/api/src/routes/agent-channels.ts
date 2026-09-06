@@ -89,8 +89,10 @@ agentChannels.get('/', async (c) => {
         identityVerification: {
           enabled: Boolean((safe.identityVerification as { enabled?: boolean } | undefined)?.enabled),
           requireAuthentication: Boolean((safe.identityVerification as { requireAuthentication?: boolean } | undefined)?.requireAuthentication),
+          allowUnverifiedIdentification: (safe.identityVerification as { allowUnverifiedIdentification?: boolean } | undefined)?.allowUnverifiedIdentification !== false,
           hasSigningSecret: typeof d.data().identitySigningSecretEnc === 'string',
           lastVerifiedAt: (d.data().identityVerification?.lastVerifiedAt?.toDate?.() as Date | undefined)?.toISOString?.() ?? null,
+          lastUnverifiedAt: (d.data().identityVerification?.lastUnverifiedAt?.toDate?.() as Date | undefined)?.toISOString?.() ?? null,
           failureCount: d.data().identityVerification?.failureCount ?? 0,
         },
         config: {
@@ -200,15 +202,20 @@ agentChannels.put('/web-widget/identity', requireOwner, async (c) => {
   const agentId = c.get('agentId')!
   const existing = await channelOfType(workspaceId, agentId, 'web_widget')
   if (!existing) return c.json({ error: 'This agent has no widget yet.' }, 404)
-  const body = await c.req.json<{ enabled?: unknown; requireAuthentication?: unknown }>().catch(() => ({} as { enabled?: unknown; requireAuthentication?: unknown }))
+  const body = await c.req.json<{ enabled?: unknown; requireAuthentication?: unknown; allowUnverifiedIdentification?: unknown }>().catch(() => ({} as { enabled?: unknown; requireAuthentication?: unknown; allowUnverifiedIdentification?: unknown }))
   if (typeof body.enabled !== 'boolean' || typeof body.requireAuthentication !== 'boolean') {
     return c.json({ error: 'enabled and requireAuthentication must be booleans.' }, 400)
   }
+  if (body.allowUnverifiedIdentification !== undefined && typeof body.allowUnverifiedIdentification !== 'boolean') {
+    return c.json({ error: 'allowUnverifiedIdentification must be a boolean.' }, 400)
+  }
   if (body.requireAuthentication && !body.enabled) return c.json({ error: 'Enable identity verification before requiring sign-in.' }, 400)
+  const allowUnverifiedIdentification = body.requireAuthentication ? false : body.allowUnverifiedIdentification !== false
   let signingSecret: string | undefined
   const updates: Record<string, unknown> = {
     'identityVerification.enabled': body.enabled,
     'identityVerification.requireAuthentication': body.requireAuthentication,
+    'identityVerification.allowUnverifiedIdentification': allowUnverifiedIdentification,
     'identityVerification.updatedAt': new Date(),
   }
   if (body.enabled && typeof existing.data().identitySigningSecretEnc !== 'string') {
@@ -219,6 +226,7 @@ agentChannels.put('/web-widget/identity', requireOwner, async (c) => {
   return c.json({
     enabled: body.enabled,
     requireAuthentication: body.requireAuthentication,
+    allowUnverifiedIdentification,
     hasSigningSecret: typeof existing.data().identitySigningSecretEnc === 'string' || Boolean(signingSecret),
     ...(signingSecret ? { signingSecret } : {}),
   })

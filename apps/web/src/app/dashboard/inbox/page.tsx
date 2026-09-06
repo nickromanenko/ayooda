@@ -5,7 +5,7 @@ import {
   collection, query, orderBy, onSnapshot, Timestamp, limit, limitToLast,
   doc, getDocs, startAfter, endBefore, type DocumentData, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
-import { ArrowLeft, Bot, Contact, Loader2, MessageSquare, Search, Send, StickyNote, Ticket, User, X } from 'lucide-react'
+import { ArrowLeft, BadgeCheck, Bot, Contact, Loader2, MessageSquare, Search, Send, StickyNote, Ticket, User, X } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
@@ -42,6 +42,7 @@ interface Conversation {
   customerEmail?: string
   customerExternalId?: string
   customerVerified?: boolean
+  customerIdentityTrust?: 'unverified' | 'verified'
 }
 
 interface Message {
@@ -671,8 +672,10 @@ export default function InboxPage() {
               <ArrowLeft size={18} />
             </button>
             <div className={styles.threadIdentity}>
-              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {conversationLabel(selectedConv)}
+                {(selectedConv.customerVerified || selectedConv.customerIdentityTrust === 'verified') && <span title="Verified by the customer's application" aria-label="Verified customer" style={{ display: 'inline-flex', color: 'var(--mint)' }}><BadgeCheck size={14} /></span>}
+                {!selectedConv.customerVerified && selectedConv.customerIdentityTrust === 'unverified' && <span title="Provided by the website; not verified" style={{ padding: '2px 6px', borderRadius: 999, background: 'var(--panel-2)', color: 'var(--ink-mute)', font: '10px var(--font-mono)' }}>Unverified</span>}
               </p>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
                 Status: <span style={{ textTransform: 'capitalize' }}>{selectedConv.status}</span>

@@ -4,8 +4,8 @@ name: Deploy Widget to Firebase Hosting
 # sites, and it was the only one without a workflow — so widget changes merged
 # to master and silently never shipped until someone deployed by hand.
 #
-# Unlike the other apps the widget does not depend on packages/shared, so a
-# change there must not trigger a pointless redeploy. test.html is excluded too:
+# The widget imports its appearance contract from packages/shared, so changes to
+# that package must rebuild and publish the bundle too. test.html is excluded:
 # it is a local harness and is not part of the published bundle.
 on:
   push:
@@ -15,6 +15,9 @@ on:
       - 'apps/widget/package.json'
       - 'apps/widget/vite.config.ts'
       - 'apps/widget/tsconfig.json'
+      - 'packages/shared/src/**'
+      - 'packages/shared/package.json'
+      - 'pnpm-lock.yaml'
       - 'firebase.json'
       - '.firebaserc'
       - '.github/workflows/deploy-widget.yml'
@@ -42,6 +45,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - run: pnpm install --frozen-lockfile
+
+      # The widget consumes @ayooda/shared through its package export, which
+      # points at dist/. A clean CI checkout does not have that generated output.
+      - name: Build shared package
+        run: pnpm --filter @ayooda/shared build
 
       - name: Typecheck
         run: pnpm --filter widget typecheck

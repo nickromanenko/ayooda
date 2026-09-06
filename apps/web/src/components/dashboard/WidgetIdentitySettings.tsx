@@ -1,13 +1,14 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Check, Copy, ExternalLink, KeyRound, Loader2, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Check, Copy, ExternalLink, KeyRound, Loader2, RefreshCw, ShieldCheck, UserRound } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import { AppSwitch } from '@/components/ui/AppSwitch'
 
 interface IdentitySettings {
   enabled: boolean
   requireAuthentication: boolean
+  allowUnverifiedIdentification: boolean
   hasSigningSecret: boolean
   lastVerifiedAt?: string | null
   failureCount?: number
@@ -18,12 +19,30 @@ export default function WidgetIdentitySettings({ agentId, channelId, initial }: 
   channelId: string
   initial?: IdentitySettings
 }) {
-  const [settings, setSettings] = useState<IdentitySettings>(initial ?? { enabled: false, requireAuthentication: false, hasSigningSecret: false })
+  const [settings, setSettings] = useState<IdentitySettings>({
+    enabled: initial?.enabled ?? false,
+    requireAuthentication: initial?.requireAuthentication ?? false,
+    allowUnverifiedIdentification: initial?.allowUnverifiedIdentification ?? true,
+    hasSigningSecret: initial?.hasSigningSecret ?? false,
+    lastVerifiedAt: initial?.lastVerifiedAt,
+    failureCount: initial?.failureCount,
+  })
   const [secret, setSecret] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [confirmRotate, setConfirmRotate] = useState(false)
+  const quickExample = useMemo(() => `// After your application signs the user in
+window.Ayooda('boot', {
+  user: {
+    id: user.id,       // stable ID in your system
+    name: user.name,
+    email: user.email,
+  },
+})
+
+// Before your application signs the user out
+window.Ayooda('shutdown')`, [])
   const tokenExample = useMemo(() => `// Run on your server — never expose the signing secret in browser code.
 import { SignJWT } from 'jose'
 
@@ -43,7 +62,11 @@ const identityToken = await new SignJWT({
     setBusy(true); setError('')
     try {
       const response = await apiRequest(`/agents/${agentId}/channels/web-widget/identity`, {
-        method: 'PUT', body: JSON.stringify({ enabled: value.enabled, requireAuthentication: value.requireAuthentication }),
+        method: 'PUT', body: JSON.stringify({
+          enabled: value.enabled,
+          requireAuthentication: value.requireAuthentication,
+          allowUnverifiedIdentification: value.requireAuthentication ? false : value.allowUnverifiedIdentification,
+        }),
       })
       const data = await response.json().catch(() => ({})) as IdentitySettings & { signingSecret?: string; error?: string }
       if (!response.ok) throw new Error(data.error ?? 'Could not save identity settings.')
@@ -71,11 +94,20 @@ const identityToken = await new SignJWT({
   return <section style={{ marginTop: 20, border: '1px solid var(--line)', borderRadius: 'var(--r-md)', background: 'var(--panel)', overflow: 'hidden' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--line)' }}>
       <span style={{ width: 36, height: 36, borderRadius: 10, display: 'grid', placeItems: 'center', background: 'var(--accent-soft)', color: 'var(--accent-text)' }}><ShieldCheck size={17} /></span>
-      <div><h3 style={{ margin: 0, color: 'var(--ink)', fontSize: 14, textWrap: 'balance' }}>Authenticated visitors</h3><p style={{ margin: '2px 0 0', color: 'var(--ink-mute)', fontSize: 12, textWrap: 'pretty' }}>Recognize signed-in customers securely and continue their conversation across devices.</p></div>
+      <div><h3 style={{ margin: 0, color: 'var(--ink)', fontSize: 14, textWrap: 'balance' }}>Visitor identity</h3><p style={{ margin: '2px 0 0', color: 'var(--ink-mute)', fontSize: 12, textWrap: 'pretty' }}>Add customer context in minutes, then enable verification when identity needs to be trusted.</p></div>
     </div>
     <div style={{ padding: 20 }}>
-      <AppSwitch controlPosition="end" checked={settings.enabled} disabled={busy} onChange={(enabled) => { void save({ enabled, requireAuthentication: enabled ? settings.requireAuthentication : false }) }} label="Verify signed-in customers" description="Accept only server-signed identity tokens." />
-      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}><AppSwitch controlPosition="end" checked={settings.requireAuthentication} disabled={busy || !settings.enabled} onChange={(requireAuthentication) => void save({ requireAuthentication })} label="Require authentication" description="Block guest conversations. Leave off to support both guests and signed-in customers." /></div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}><span style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', color: 'var(--accent-text)', background: 'var(--accent-soft)', flexShrink: 0 }}><UserRound size={15} /></span><div><strong style={{ display: 'block', color: 'var(--ink)', fontSize: 12.5 }}>Quick setup</strong><span style={{ display: 'block', marginTop: 2, color: 'var(--ink-mute)', fontSize: 12, lineHeight: 1.5, textWrap: 'pretty' }}>Pass the signed-in user from browser code. No endpoint or secret is required. Ayooda labels this identity as unverified.</span></div></div>
+      <AppSwitch controlPosition="end" checked={settings.allowUnverifiedIdentification} disabled={busy || settings.requireAuthentication} onChange={(allowUnverifiedIdentification) => { void save({ allowUnverifiedIdentification }) }} label="Accept browser-provided identity" description="Show the supplied ID, name, and email as unverified customer context." />
+      <details style={{ marginTop: 12, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--bg-2)', overflow: 'hidden' }}>
+        <summary style={{ minHeight: 44, padding: '0 14px', display: 'flex', alignItems: 'center', cursor: 'pointer', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600 }}>Quick setup code</summary>
+        <div style={{ borderTop: '1px solid var(--line)', padding: 14 }}><pre style={{ margin: 0, padding: 12, borderRadius: 8, background: 'var(--panel)', color: 'var(--ink-dim)', font: '11.5px/1.55 var(--font-mono)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{quickExample}</pre><p style={{ margin: '10px 0 0', color: 'var(--ink-faint)', fontSize: 11.5, lineHeight: 1.5 }}>Unverified identity improves support context but cannot unlock cross-device history or identity-sensitive actions.</p></div>
+      </details>
+
+      <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--line)' }}>
+        <AppSwitch controlPosition="end" checked={settings.enabled} disabled={busy} onChange={(enabled) => { void save({ enabled, requireAuthentication: enabled ? settings.requireAuthentication : false }) }} label="Verify signed-in customers" description="Use short-lived server-signed tokens for trusted identity and cross-device continuity." />
+      </div>
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}><AppSwitch controlPosition="end" checked={settings.requireAuthentication} disabled={busy || !settings.enabled} onChange={(requireAuthentication) => void save({ requireAuthentication, allowUnverifiedIdentification: requireAuthentication ? false : settings.allowUnverifiedIdentification })} label="Require verified identity" description="Block guests and browser-provided identities. Enable only after the secure integration is live." /></div>
 
       {settings.enabled && <details style={{ marginTop: 16, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--bg-2)', overflow: 'hidden' }}>
         <summary style={{ minHeight: 44, padding: '0 14px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: 'var(--ink)', fontSize: 12.5, fontWeight: 600 }}><KeyRound size={14} /> Server setup</summary>

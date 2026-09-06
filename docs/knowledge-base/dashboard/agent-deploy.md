@@ -9,7 +9,7 @@ summary: "Check launch readiness, install and customize the website widget, and 
 keywords: [deploy, widget, embed code, Next.js, Angular, Telegram, Resend, email, Slack, Twilio, SMS, channel]
 related_articles: [channel-health, agent-test, agent-info, agent-security]
 status: published
-updated_at: 2026-09-04
+updated_at: 2026-09-06
 ---
 
 # Deploy agents and channels
@@ -43,7 +43,7 @@ The interactive preview uses the production renderer but keeps preview messages 
 
 Use desktop/mobile and light/dark preview modes plus welcome, Markdown, hand-off, error, long-content, and streaming scenarios before saving. Widget engagement reports configuration loads, visibility, opens, conversations, conversion rates, and helpful-answer feedback for the selected range.
 
-Authenticated websites can identify signed-in visitors through the documented widget identity API. Set stable application user ID, name, and email only after authentication, and clear identity on sign-out; never place trusted identity data directly in public HTML.
+Authenticated websites can identify signed-in visitors with `Ayooda('boot', { user: { id, name, email } })`; this quick setup needs no customer-owned endpoint and appears as **Unverified** context in Inbox. It cannot unlock cross-device history or identity-sensitive actions. For trusted identity, use a short-lived server-signed token delivered through an existing session response or a dedicated endpoint. Always use a stable application user ID, call `Ayooda('shutdown')` on logout, and never expose the signing secret or application access tokens in browser code.
 
 Removing the widget makes existing embed code stop working immediately but does not delete conversation history.
 
@@ -55,4 +55,3 @@ Removing the widget makes existing embed code stop working immediately but does 
 - **SMS via Twilio** uses an Account SID, Auth Token, E.164 Twilio number, and the displayed incoming-message webhook URL.
 
 Credentials are sensitive and should have the minimum required permissions. After connecting, send a controlled message and verify both the conversation in Inbox and transport health on Channel health. Disconnecting stops future channel traffic but does not delete prior conversations.
-

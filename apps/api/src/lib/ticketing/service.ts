@@ -63,6 +63,9 @@ export async function createSupportTicket(input: CreateTicketInput) {
       phone: typeof conversationData.smsFrom === 'string' ? conversationData.smsFrom : typeof conversationData.customerPhone === 'string' ? conversationData.customerPhone : null,
       visitorId: typeof conversationData.visitorId === 'string' ? conversationData.visitorId : null,
       externalId: typeof conversationData.customerExternalId === 'string' ? conversationData.customerExternalId : null,
+      identityTrust: conversationData.customerVerified === true || conversationData.customerIdentityTrust === 'verified'
+        ? 'verified'
+        : conversationData.customerIdentityTrust === 'unverified' ? 'unverified' : 'anonymous',
     }
     const dashboardBase = (process.env.WEB_PUBLIC_URL ?? 'https://app.ayooda.live').replace(/\/$/, '')
     const payload = {

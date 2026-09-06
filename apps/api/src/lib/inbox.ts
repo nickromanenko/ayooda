@@ -10,6 +10,8 @@ export interface InboxConversationSearchFields {
   customerName?: unknown
   customerEmail?: unknown
   customerExternalId?: unknown
+  customerVerified?: unknown
+  customerIdentityTrust?: unknown
 }
 
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
@@ -38,6 +40,7 @@ export function inboxCustomerIdentity(row: InboxConversationSearchFields): {
   email: string | null
   phone: string | null
   externalId: string
+  identityTrust: 'anonymous' | 'unverified' | 'verified'
 } {
   const visitorId = text(row.visitorId) || 'Unknown visitor'
   const email = text(row.customerEmail) || text(row.emailReplyTo) || (visitorId.startsWith('email_') ? visitorId.slice(6) : '')
@@ -47,5 +50,8 @@ export function inboxCustomerIdentity(row: InboxConversationSearchFields): {
   const name = text(row.customerName)
   const externalId = text(row.customerExternalId) || visitorId
   const label = name || email || phone || (slackUser ? `Slack ${slackUser}` : '') || (telegramChat ? `Telegram ${telegramChat}` : '') || externalId
-  return { label, email: email || null, phone: phone || null, externalId }
+  const identityTrust = row.customerVerified === true || row.customerIdentityTrust === 'verified'
+    ? 'verified'
+    : row.customerIdentityTrust === 'unverified' ? 'unverified' : 'anonymous'
+  return { label, email: email || null, phone: phone || null, externalId, identityTrust }
 }

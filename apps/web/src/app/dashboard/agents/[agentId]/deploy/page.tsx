@@ -32,7 +32,7 @@ interface Channel {
     daily?: Record<string, { loads?: number; visible?: number; open?: number; conversations?: number }>
   }
   brandingLocked?: boolean
-  identityVerification?: { enabled: boolean; requireAuthentication: boolean; hasSigningSecret: boolean; lastVerifiedAt?: string | null; failureCount?: number }
+  identityVerification?: { enabled: boolean; requireAuthentication: boolean; allowUnverifiedIdentification: boolean; hasSigningSecret: boolean; lastVerifiedAt?: string | null; lastUnverifiedAt?: string | null; failureCount?: number }
   config?: Partial<Appearance> & { agentName?: string; agentPhotoURL?: string | null; fromAddress?: string; inboxAddress?: string; accountSid?: string; fromNumber?: string }
   telegram?: { botUsername: string; botId: number }
   slack?: { teamId: string; teamName: string; botUserId: string }

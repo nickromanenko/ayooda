@@ -33,7 +33,7 @@ export interface PrepareTurnInput {
   telegramChatId?: number
   agentId?: string
   sandbox?: { ownerUid: string; allowTools: boolean }
-  customer?: { externalId: string; name?: string; email?: string }
+  customer?: { externalId: string; name?: string; email?: string; trust: 'unverified' | 'verified' }
 }
 
 export interface ReadyTurn {
@@ -128,12 +128,14 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
   if (convSnap.exists && convSnap.data()!.visitorId !== visitorId) {
     return { kind: 'error', error: 'Not found' }
   }
-  if (convSnap.exists && customer && !isSandbox) {
+  const existingCustomerVerified = convSnap.data()?.customerVerified === true || convSnap.data()?.customerIdentityTrust === 'verified'
+  if (convSnap.exists && customer && !isSandbox && (customer.trust === 'verified' || !existingCustomerVerified)) {
     await convRef.update({
       customerExternalId: customer.externalId,
       customerName: customer.name ?? null,
       customerEmail: customer.email ?? null,
-      customerVerified: true,
+      customerIdentityTrust: customer.trust,
+      customerVerified: customer.trust === 'verified',
     })
   }
   // A workflow route persists on the conversation. Channel defaults only choose
@@ -220,7 +222,8 @@ export async function prepareTurn(input: PrepareTurnInput): Promise<PreparedTurn
         customerExternalId: customer.externalId,
         customerName: customer.name ?? null,
         customerEmail: customer.email ?? null,
-        customerVerified: true,
+        customerIdentityTrust: customer.trust,
+        customerVerified: customer.trust === 'verified',
       } : {}),
       status: 'bot',
       operatorId: null,

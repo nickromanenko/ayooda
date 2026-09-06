@@ -14,7 +14,7 @@ describe('widget identity JWT', () => {
   test('accepts valid claims and normalizes customer data', async () => {
     const { verifyWidgetIdentityToken } = await import('./widget-identity')
     const now = 2_000_000_000
-    expect(verifyWidgetIdentityToken(token({ sub: 'customer-42', aud: 'ayooda-widget:channel-1', iat: now, exp: now + 600, name: ' Ada ', email: 'ADA@EXAMPLE.COM' }), 'customer-secret', 'channel-1', now * 1000)).toEqual({ externalId: 'customer-42', name: 'Ada', email: 'ada@example.com' })
+    expect(verifyWidgetIdentityToken(token({ sub: 'customer-42', aud: 'ayooda-widget:channel-1', iat: now, exp: now + 600, name: ' Ada ', email: 'ADA@EXAMPLE.COM' }), 'customer-secret', 'channel-1', now * 1000)).toEqual({ externalId: 'customer-42', name: 'Ada', email: 'ada@example.com', trust: 'verified' })
   })
 
   test('rejects tampering, a wrong audience, expiry, and long-lived tokens', async () => {
@@ -32,6 +32,16 @@ describe('widget identity JWT', () => {
     const first = authenticatedVisitorId('workspace', 'channel', 'customer@example.com')
     expect(first).toBe(authenticatedVisitorId('workspace', 'channel', 'customer@example.com'))
     expect(first).not.toContain('customer@example.com')
+  })
+
+  test('validates and normalizes browser-provided identity without trusting it', async () => {
+    const { normalizeUnverifiedWidgetCustomer } = await import('./widget-identity')
+    expect(normalizeUnverifiedWidgetCustomer({ id: ' customer-42 ', name: ' Ada ', email: 'ADA@EXAMPLE.COM' })).toEqual({
+      externalId: 'customer-42', name: 'Ada', email: 'ada@example.com', trust: 'unverified',
+    })
+    expect(() => normalizeUnverifiedWidgetCustomer({ id: '' })).toThrow()
+    expect(() => normalizeUnverifiedWidgetCustomer({ id: '42', role: 'admin' })).toThrow()
+    expect(() => normalizeUnverifiedWidgetCustomer({ id: '42', email: 'invalid' })).toThrow()
   })
 
   test('accepts a previous signing secret only during the rotation grace period', async () => {

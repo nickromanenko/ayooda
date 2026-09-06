@@ -1,12 +1,12 @@
 'use client'
 
-import { Clock3, Hash, Mail, MessageSquare, Phone, X } from 'lucide-react'
+import { BadgeCheck, Clock3, Hash, Mail, MessageSquare, Phone, UserRound, X } from 'lucide-react'
 import styles from '@/app/dashboard/inbox/page.module.css'
 
 export type InboxTimestamp = string | { _seconds?: number; seconds?: number } | null
 
 export interface InboxCustomerContext {
-  customer: { label: string; email: string | null; phone: string | null; externalId: string }
+  customer: { label: string; email: string | null; phone: string | null; externalId: string; identityTrust: 'anonymous' | 'unverified' | 'verified' }
   channelType: string | null
   conversationCount: number
   truncated: boolean
@@ -66,6 +66,7 @@ export default function InboxCustomerDrawer({
       ) : context ? (
         <div className={styles.drawerContent}>
           <dl className={styles.customerFacts}>
+            {context.customer.identityTrust !== 'anonymous' && <div><dt>{context.customer.identityTrust === 'verified' ? <BadgeCheck size={13} /> : <UserRound size={13} />} Identity</dt><dd title={context.customer.identityTrust === 'verified' ? "Verified by the customer's application" : 'Provided by the website; not verified'}>{context.customer.identityTrust === 'verified' ? 'Verified' : 'Unverified'}</dd></div>}
             {context.customer.email && <div><dt><Mail size={13} /> Email</dt><dd>{context.customer.email}</dd></div>}
             {context.customer.phone && <div><dt><Phone size={13} /> Phone</dt><dd>{context.customer.phone}</dd></div>}
             <div><dt><MessageSquare size={13} /> Channel</dt><dd>{channelName(context.channelType)}</dd></div>

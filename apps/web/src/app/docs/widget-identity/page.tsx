@@ -4,9 +4,25 @@ import { ResourceCTA, ResourcePage, resourceStyles } from '@/components/marketin
 import styles from './page.module.css'
 
 export const metadata: Metadata = {
-  title: 'Authenticated widget visitors — Ayooda',
-  description: 'Securely identify signed-in customers in the Ayooda support widget using short-lived server-signed JWTs.',
+  title: 'Identify widget visitors — Ayooda',
+  description: 'Attach customer context to Ayooda in one browser call, with optional server-signed verification for trusted identity.',
 }
+
+const simpleExample = `// Safe to call before or after the async widget script loads
+window.Ayooda = window.Ayooda || function (...args) {
+  (window.Ayooda.q = window.Ayooda.q || []).push(args)
+}
+
+window.Ayooda('boot', {
+  user: {
+    id: currentUser.id,       // required: stable ID in your system
+    name: currentUser.name,   // optional
+    email: currentUser.email, // optional
+  },
+})
+
+// Always clear the support session when your user logs out
+window.Ayooda('shutdown')`
 
 const serverExample = `import { SignJWT } from 'jose'
 
@@ -159,13 +175,14 @@ export default function WidgetIdentityGuidePage() {
   return (
     <ResourcePage
       eyebrow="Widget identity"
-      title="Recognize signed-in customers securely."
-      lede="Connect your application’s authenticated users to Ayooda without exposing a signing secret or trusting identity data supplied by the browser."
+      title="Know who you are helping."
+      lede="Attach a signed-in customer’s name and email with one browser call. Add server verification when you need trusted identity or cross-device conversation history."
     >
       <nav className={styles.toc} aria-label="On this page">
         <strong>On this page</strong>
         <div>
-          <a href="#how-it-works">How it works</a>
+          <a href="#simple">Quick setup</a>
+          <a href="#how-it-works">Secure setup</a>
           <a href="#token">Create a token</a>
           <a href="#browser">Initialize the widget</a>
           <a href="#frameworks">Framework examples</a>
@@ -177,15 +194,22 @@ export default function WidgetIdentityGuidePage() {
 
       <section className={resourceStyles.grid} aria-label="Identity benefits">
         {[
-          ['Trusted identity', 'Name, email, and customer ID are accepted only after a valid server signature.'],
-          ['Conversation continuity', 'The same customer can continue their latest conversation in another browser or on another device.'],
+          ['Quick identification', 'Add ID, name, and email from browser code without creating an endpoint.'],
+          ['Optional verification', 'Use a signed token when the identity must be trusted or work across devices.'],
           ['Guest compatible', 'Allow guests alongside signed-in customers, or require authentication for every conversation.'],
           ['Safe logout', 'A shutdown command revokes the browser session and clears the customer conversation from the widget.'],
         ].map(([title, body]) => <article key={title} className={resourceStyles.card}><div className={resourceStyles.cardTop}><h2 className={resourceStyles.cardTitle}>{title}</h2></div><p className={resourceStyles.cardBody}>{body}</p></article>)}
       </section>
 
+      <section id="simple" className={resourceStyles.section}>
+        <h2 className={resourceStyles.sectionTitle}>Quick setup — no endpoint required</h2>
+        <p className={styles.copy}>After your application signs a user in, pass their stable application ID and optional profile fields to the widget. Ayooda shows these details in Inbox with an <strong>Unverified</strong> label.</p>
+        <Code>{simpleExample}</Code>
+        <aside className={styles.warning}><strong>Browser identity is customer context, not authentication.</strong><span>It cannot unlock cross-device history or identity-sensitive actions because browser values can be changed by the visitor. Use the secure setup below when identity must be trusted.</span></aside>
+      </section>
+
       <section id="how-it-works" className={resourceStyles.section}>
-        <h2 className={resourceStyles.sectionTitle}>How it works</h2>
+        <h2 className={resourceStyles.sectionTitle}>Secure setup — verified identity</h2>
         <ol className={resourceStyles.steps}>
           <li className={resourceStyles.step}><div><strong>Enable authenticated visitors</strong><span>Open the agent’s Deploy page, enable identity verification, and copy the signing secret. Only workspace owners can manage this secret.</span></div></li>
           <li className={resourceStyles.step}><div><strong>Sign identity on your server</strong><span>After your application authenticates a user, issue a short-lived HS256 JWT. The secret must never be sent to the browser.</span></div></li>
@@ -197,7 +221,7 @@ export default function WidgetIdentityGuidePage() {
 
       <section id="token" className={resourceStyles.section}>
         <h2 className={resourceStyles.sectionTitle}>Create the identity token</h2>
-        <p className={styles.copy}>Install <code>jose</code> on your server, then create an authenticated endpoint in your application that returns <code>{`{ "identityToken": "…" }`}</code> for the currently signed-in user. Generate a fresh token on each authenticated page load or login.</p>
+        <p className={styles.copy}>Install <code>jose</code> on your server and mint a token for the currently signed-in user. Return it from an existing session or <code>/me</code> response, or create a small authenticated endpoint if that fits your architecture. Generate a fresh token on each authenticated page load or login.</p>
         <Code>{serverExample}</Code>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -233,12 +257,14 @@ export default function WidgetIdentityGuidePage() {
       <section id="lifecycle" className={resourceStyles.section}>
         <h2 className={resourceStyles.sectionTitle}>Lifecycle reference</h2>
         <div className={styles.commandList}>
+          <article><code>Ayooda(&apos;boot&apos;, {`{ user }`})</code><p>Attach browser-provided ID, name, and email without server work. The identity is explicitly unverified and resumes only through this browser’s opaque session.</p></article>
           <article><code>Ayooda(&apos;boot&apos;, {`{ identityToken }`})</code><p>Verify the current signed-in customer and restore their latest conversation. Call this after login or on the initial authenticated page load.</p></article>
-          <article><code>Ayooda(&apos;update&apos;, {`{ identityToken }`})</code><p>Refresh changed customer details or safely switch identity after obtaining a newly signed token.</p></article>
+          <article><code>Ayooda(&apos;update&apos;, {`{ user }`})</code><p>Refresh an unverified customer’s name or email. A different ID starts a separate identity session.</p></article>
+          <article><code>Ayooda(&apos;update&apos;, {`{ identityToken }`})</code><p>Refresh verified customer details or safely switch identity after obtaining a newly signed token.</p></article>
           <article><code>Ayooda(&apos;shutdown&apos;)</code><p>Revoke the widget session, close live updates, and clear the customer’s visible conversation. Call this before your application finishes logout.</p></article>
         </div>
-        <h3 className={styles.subheading}>Guest and authenticated modes</h3>
-        <p className={styles.copy}>With <strong>Require authentication</strong> off, visitors without a token remain anonymous while signed-in visitors receive verified identity and continuity. With it on, the composer stays disabled until a valid boot or update command succeeds.</p>
+        <h3 className={styles.subheading}>Guest, identified, and verified modes</h3>
+        <p className={styles.copy}>Guests have no supplied profile. Browser-identified visitors show unverified context and resume through an opaque session on the same browser. Verified visitors use a signed token and may continue across devices. With <strong>Require verified identity</strong> on, the composer stays disabled until a valid signed token succeeds.</p>
         <h3 className={styles.subheading}>Secret rotation</h3>
         <p className={styles.copy}>After rotating in the Deploy page, copy the new secret into your server configuration and deploy it. The previous secret remains accepted for one hour to prevent downtime. Existing browser sessions continue until logout or their 24-hour expiry.</p>
       </section>
@@ -247,7 +273,7 @@ export default function WidgetIdentityGuidePage() {
         <h2 className={resourceStyles.sectionTitle}>Production checklist</h2>
         <ul className={styles.checklist}>
           <li><span>01</span><div><strong>Restrict allowed domains</strong><p>Add every production hostname in the widget’s Security settings. Include each subdomain explicitly or use a supported wildcard.</p></div></li>
-          <li><span>02</span><div><strong>Protect the token endpoint</strong><p>Require your normal application authentication, use HTTPS, and derive the user from the authenticated server session—not browser input.</p></div></li>
+          <li><span>02</span><div><strong>Protect verified token delivery</strong><p>If you use verification, derive the user from the authenticated server session and return the token through an existing protected response or endpoint.</p></div></li>
           <li><span>03</span><div><strong>Keep the secret server-side</strong><p>Store it in a secret manager or protected environment variable. Exclude it from frontend bundles, source control, analytics, and logs.</p></div></li>
           <li><span>04</span><div><strong>Test customer isolation</strong><p>Confirm two different customer IDs cannot see one another’s history, while the same ID can resume on another browser.</p></div></li>
           <li><span>05</span><div><strong>Test logout on a shared device</strong><p>Verify that calling <code>shutdown</code> removes the previous customer’s messages before the next person signs in.</p></div></li>
@@ -262,6 +288,7 @@ export default function WidgetIdentityGuidePage() {
             <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
             <tbody>
               <tr><td>Invalid identity token</td><td>Confirm the HS256 secret, exact audience, current server clock, and a lifetime of 15 minutes or less.</td></tr>
+              <tr><td>Browser identification is disabled</td><td>Enable <strong>Accept browser-provided identity</strong>, or initialize with a valid signed identity token.</td></tr>
               <tr><td>Authentication required</td><td>Call <code>boot</code> after login and confirm the token endpoint returned successfully.</td></tr>
               <tr><td>Authenticated visitors are not enabled</td><td>Enable <strong>Verify signed-in customers</strong> in the agent’s Deploy page.</td></tr>
               <tr><td>Widget does not load</td><td>Allow <code>https://cdn.ayooda.live</code> in <code>script-src</code> and the API origin shown in your browser Network panel in <code>connect-src</code>.</td></tr>
@@ -272,7 +299,7 @@ export default function WidgetIdentityGuidePage() {
         <aside className={styles.privacy}><strong>Privacy note</strong><span>Verified names, emails, and external IDs become part of the customer conversation record and may be included in support-ticket deliveries. Reflect this in your privacy notice and send only the fields your support team needs.</span></aside>
       </section>
 
-      <ResourceCTA title="Configure authenticated visitors" body="Open your agents, choose Deploy, and enable authenticated visitors in the widget settings." href="/dashboard/agents" label="Open agents" />
+      <ResourceCTA title="Configure visitor identity" body="Open your agents, choose Deploy, and select quick browser identification or secure verified identity." href="/dashboard/agents" label="Open agents" />
       <p className={styles.footerLink}>Looking for tool integration instead? <Link href="/docs/mcp">Read the MCP guide</Link>.</p>
     </ResourcePage>
   )

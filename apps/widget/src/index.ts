@@ -29,7 +29,7 @@ const PREVIEW_CONFIG_RAW = $script?.getAttribute('data-preview-config') ?? ''
 const PREVIEW_SCENARIO = $script?.getAttribute('data-preview-scenario') ?? 'welcome'
 const API_BASE =
   $script?.getAttribute('data-api-url') ??
-  'https://ayooda-api-uc.a.run.app' // placeholder: update with real Cloud Run URL
+  'https://api.ayooda.live'
 
 if (!CHANNEL_ID && !PREVIEW_CONFIG_RAW) {
   console.error('[Ayooda] Missing data-agent-id attribute on widget script tag')
@@ -46,21 +46,26 @@ if (!CHANNEL_ID && !PREVIEW_CONFIG_RAW) {
 interface WidgetConfig extends WidgetAppearance {
   agentName: string
   agentPhotoURL: string | null
-  identityVerification?: { enabled: boolean; requireAuthentication: boolean }
+  identityVerification?: { enabled: boolean; requireAuthentication: boolean; allowUnverifiedIdentification?: boolean }
 }
 
-interface WidgetSession { sessionToken: string; conversationId: string; expiresAt: string }
+interface AyoodaUser { id: string; name?: string; email?: string }
+type PendingIdentity = { identityToken: string } | { user: AyoodaUser }
+interface WidgetSession { sessionToken: string; conversationId: string; expiresAt: string; identityTrust: 'unverified' | 'verified' }
+interface StoredIdentitySession { token: string; expiresAt: string; externalIdFingerprint: string }
 interface AyoodaCommandQueue { (...args: unknown[]): void; q?: unknown[][] }
 
 declare global { interface Window { Ayooda?: AyoodaCommandQueue } }
 
 let widgetInstance: AyoodaWidget | null = null
-let pendingIdentityToken: string | null = null
+let pendingIdentity: PendingIdentity | null = null
 const queuedCommands = Array.isArray(window.Ayooda?.q) ? [...window.Ayooda.q] : []
 for (const args of queuedCommands) {
-  if ((args[0] === 'boot' || args[0] === 'update') && typeof (args[1] as { identityToken?: unknown } | undefined)?.identityToken === 'string') {
-    pendingIdentityToken = (args[1] as { identityToken: string }).identityToken
-  } else if (args[0] === 'shutdown') pendingIdentityToken = null
+  if (args[0] === 'boot' || args[0] === 'update') {
+    const options = args[1] as { identityToken?: unknown; user?: unknown } | undefined
+    if (typeof options?.identityToken === 'string' && options.identityToken) pendingIdentity = { identityToken: options.identityToken }
+    else if (options?.user && typeof options.user === 'object') pendingIdentity = { user: options.user as AyoodaUser }
+  } else if (args[0] === 'shutdown') pendingIdentity = null
 }
 
 interface ChatDone {
@@ -211,14 +216,72 @@ function identityParams(visitorId: string, sessionToken?: string | null): string
     : `visitorId=${encodeURIComponent(visitorId)}`
 }
 
-async function createAuthenticatedSession(identityToken: string): Promise<WidgetSession> {
+async function createIdentitySession(identity: PendingIdentity, resumeToken?: string): Promise<WidgetSession> {
   const res = await fetch(`${API_BASE}/widget/session`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId: CHANNEL_ID, identityToken }),
+    body: JSON.stringify({ channelId: CHANNEL_ID, ...identity, ...(resumeToken ? { resumeToken } : {}) }),
   })
   const payload = await res.json().catch(() => ({})) as WidgetSession & { error?: string }
-  if (!res.ok) throw new Error(payload.error ?? 'Could not verify this customer.')
+  if (!res.ok) throw new Error(payload.error ?? 'Could not identify this customer.')
   return payload
+}
+
+function identityStorage(config: WidgetConfig): Storage | null {
+  if (config.conversationPersistence === 'fresh') return null
+  return config.conversationPersistence === 'visitor' ? localStorage : sessionStorage
+}
+
+const identityStorageKey = () => `ayooda_identity_${CHANNEL_ID}`
+
+async function identityFingerprint(externalId: string): Promise<string> {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${CHANNEL_ID}\0${externalId}`))
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function readStoredIdentity(config: WidgetConfig): StoredIdentitySession | null {
+  const storage = identityStorage(config)
+  if (!storage) return null
+  try {
+    const parsed = JSON.parse(storage.getItem(identityStorageKey()) ?? 'null') as Partial<StoredIdentitySession> | null
+    if (!parsed || typeof parsed.token !== 'string' || typeof parsed.expiresAt !== 'string' || typeof parsed.externalIdFingerprint !== 'string') return null
+    if (new Date(parsed.expiresAt).getTime() <= Date.now()) {
+      storage.removeItem(identityStorageKey())
+      return null
+    }
+    return parsed as StoredIdentitySession
+  } catch { return null }
+}
+
+function persistIdentity(config: WidgetConfig, session: WidgetSession, externalIdFingerprint: string) {
+  if (session.identityTrust !== 'unverified') return
+  identityStorage(config)?.setItem(identityStorageKey(), JSON.stringify({ token: session.sessionToken, expiresAt: session.expiresAt, externalIdFingerprint }))
+}
+
+function clearStoredIdentity(config: WidgetConfig): string | null {
+  const stored = readStoredIdentity(config)
+  identityStorage(config)?.removeItem(identityStorageKey())
+  return stored?.token ?? null
+}
+
+async function sessionForIdentity(identity: PendingIdentity, config: WidgetConfig): Promise<WidgetSession> {
+  if ('identityToken' in identity) return createIdentitySession(identity)
+  const fingerprint = await identityFingerprint(identity.user.id)
+  const stored = readStoredIdentity(config)
+  const resumeToken = stored?.externalIdFingerprint === fingerprint ? stored.token : undefined
+  if (stored && !resumeToken) {
+    void revokeIdentitySession(stored.token)
+    identityStorage(config)?.removeItem(identityStorageKey())
+  }
+  const session = await createIdentitySession(identity, resumeToken)
+  persistIdentity(config, session, fingerprint)
+  return session
+}
+
+function revokeIdentitySession(sessionToken: string) {
+  return fetch(`${API_BASE}/widget/session`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+    body: JSON.stringify({ channelId: CHANNEL_ID, sessionToken }),
+  }).catch(() => {})
 }
 
 async function fetchHistory(conversationId: string, visitorId: string, sessionToken?: string | null): Promise<ConversationHistory | null> {
@@ -930,6 +993,7 @@ class AyoodaWidget {
   private conversationId: string
   private visitorId: string
   private sessionToken: string | null
+  private identityTrust: 'anonymous' | 'unverified' | 'verified'
   private config: WidgetConfig
   private strings: WidgetStrings
   private messageBuffer = new MessageBuffer()
@@ -948,6 +1012,7 @@ class AyoodaWidget {
   private newChatDialog!: HTMLElement
   private newChatButton!: HTMLButtonElement
   private sessionVersion = 0
+  private identityOperation = 0
 
   constructor(host: HTMLElement, config: WidgetConfig, preview = false, session: WidgetSession | null = null) {
     this.config = localizeConfig(config)
@@ -956,6 +1021,7 @@ class AyoodaWidget {
     this.conversationId = preview ? crypto.randomUUID() : session?.conversationId ?? getConversationId(config)
     this.visitorId = preview ? 'preview' : getVisitorId()
     this.sessionToken = session?.sessionToken ?? null
+    this.identityTrust = session?.identityTrust ?? 'anonymous'
 
     this.shadow = host.attachShadow({ mode: 'open' })
     this.build()
@@ -1242,10 +1308,19 @@ class AyoodaWidget {
     this.input.focus()
   }
 
-  async identify(identityToken: string) {
-    if (this.preview || !identityToken) return
-    const session = await createAuthenticatedSession(identityToken)
-    this.resetSession(session.conversationId, session.sessionToken)
+  async identify(identity: PendingIdentity) {
+    if (this.preview) return
+    if ('user' in identity && this.identityTrust === 'verified') {
+      console.warn('[Ayooda] Browser-provided identity cannot update a verified customer. Use a new identityToken or call shutdown first.')
+      return
+    }
+    const operation = ++this.identityOperation
+    const session = await sessionForIdentity(identity, this.config)
+    if (operation !== this.identityOperation) {
+      void revokeIdentitySession(session.sessionToken)
+      return
+    }
+    this.resetSession(session.conversationId, session.sessionToken, session.identityTrust)
     this.setAuthenticationRequired(false)
     this.historyReady = this.loadHistory()
     await this.historyReady
@@ -1253,14 +1328,12 @@ class AyoodaWidget {
 
   async shutdown() {
     if (this.preview) return
+    this.identityOperation++
     const oldToken = this.sessionToken
-    if (oldToken) {
-      void fetch(`${API_BASE}/widget/session`, {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, keepalive: true,
-        body: JSON.stringify({ channelId: CHANNEL_ID, sessionToken: oldToken }),
-      }).catch(() => {})
-    }
-    this.resetSession(createConversationId(this.config), null)
+    const storedToken = clearStoredIdentity(this.config)
+    if (oldToken) void revokeIdentitySession(oldToken)
+    if (storedToken && storedToken !== oldToken) void revokeIdentitySession(storedToken)
+    this.resetSession(createConversationId(this.config), null, 'anonymous')
     if (this.config.identityVerification?.requireAuthentication) {
       this.setAuthenticationRequired(true)
       this.appendBotMessage(this.strings.authenticationRequired, true)
@@ -1273,7 +1346,7 @@ class AyoodaWidget {
     this.sendBtn.disabled = required || !this.input.value.trim()
   }
 
-  private resetSession(conversationId: string, sessionToken: string | null) {
+  private resetSession(conversationId: string, sessionToken: string | null, identityTrust: 'anonymous' | 'unverified' | 'verified') {
     this.sessionVersion++
     this.sending = false
     this.eventSource?.close()
@@ -1282,6 +1355,7 @@ class AyoodaWidget {
     this.reconnectTimer = null
     this.conversationId = conversationId
     this.sessionToken = sessionToken
+    this.identityTrust = identityTrust
     this.messageBuffer = new MessageBuffer()
     this.feedSuspended = false
     this.messages.replaceChildren()
@@ -1636,7 +1710,14 @@ async function init() {
     document.body.appendChild(host)
     if (preview) host.style.setProperty('--aw-keyboard-inset', '0px')
     else observeWidgetVisibility(host, config, () => recordWidgetEvent('visible'))
-    const session = !preview && pendingIdentityToken ? await createAuthenticatedSession(pendingIdentityToken) : null
+    let session: WidgetSession | null = null
+    if (!preview && pendingIdentity) {
+      try { session = await sessionForIdentity(pendingIdentity, config) }
+      catch (error) {
+        if ('identityToken' in pendingIdentity || config.identityVerification?.requireAuthentication) throw error
+        console.error('[Ayooda] Browser identification failed; continuing as a guest:', error)
+      }
+    }
     widgetInstance = new AyoodaWidget(host, config, Boolean(preview), session)
   } catch (err) {
     if (PREVIEW_CONFIG_RAW) document.body.dataset.ayoodaPreviewError = err instanceof Error ? err.message : 'Preview failed to initialize'
@@ -1646,12 +1727,15 @@ async function init() {
 
 window.Ayooda = ((command: unknown, options?: unknown) => {
   if (command === 'boot' || command === 'update') {
-    const identityToken = (options as { identityToken?: unknown } | undefined)?.identityToken
-    if (typeof identityToken !== 'string' || !identityToken) return
-    pendingIdentityToken = identityToken
-    if (widgetInstance) void widgetInstance.identify(identityToken).catch((error) => console.error('[Ayooda] Identity update failed:', error))
+    const input = options as { identityToken?: unknown; user?: unknown } | undefined
+    let identity: PendingIdentity | null = null
+    if (typeof input?.identityToken === 'string' && input.identityToken) identity = { identityToken: input.identityToken }
+    else if (input?.user && typeof input.user === 'object') identity = { user: input.user as AyoodaUser }
+    if (!identity) return
+    pendingIdentity = identity
+    if (widgetInstance) void widgetInstance.identify(identity).catch((error) => console.error('[Ayooda] Identity update failed:', error))
   } else if (command === 'shutdown') {
-    pendingIdentityToken = null
+    pendingIdentity = null
     if (widgetInstance) void widgetInstance.shutdown()
   }
 }) as AyoodaCommandQueue

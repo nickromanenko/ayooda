@@ -40,7 +40,14 @@ export interface SupportTicket {
   subject: string
   description: string
   fields: Record<string, string | number | boolean>
-  customer: { name: string | null; email: string | null; phone: string | null; visitorId: string | null }
+  customer: {
+    name: string | null
+    email: string | null
+    phone: string | null
+    visitorId: string | null
+    externalId?: string | null
+    identityTrust?: 'anonymous' | 'unverified' | 'verified'
+  }
   assigneeUid: string | null
   deliveryState: TicketDeliveryState
   externalId: string | null
