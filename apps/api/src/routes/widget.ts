@@ -224,13 +224,18 @@ widget.post('/session', async (c) => {
     await channelDoc.ref.update({ 'identityVerification.lastUnverifiedAt': new Date() }).catch(() => {})
   }
   const workspaceId: string = data.workspaceId
+  // A visitor ID is already scoped to the widget channel. Keep this query on a
+  // single field so identity initialization does not depend on a separately
+  // deployed composite index, then choose the newest matching conversation.
   const conversations = await adminDb.collection(`workspaces/${workspaceId}/conversations`)
-    .where('channelId', '==', body.channelId)
     .where('visitorId', '==', session.visitorId)
-    .orderBy('updatedAt', 'desc')
-    .limit(1)
     .get()
-  const existing = conversations.docs[0]
+  const existing = conversations.docs
+    .filter((doc) => doc.data().channelId === body.channelId)
+    .sort((a, b) => {
+      const updatedAt = (doc: typeof a) => doc.data().updatedAt?.toMillis?.() ?? 0
+      return updatedAt(b) - updatedAt(a)
+    })[0]
   return c.json({
     sessionToken: session.token,
     expiresAt: session.expiresAt.toISOString(),
