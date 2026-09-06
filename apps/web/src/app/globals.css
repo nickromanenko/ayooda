@@ -596,6 +596,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .landing-cta:active { scale: .96; }
 
+.landing-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 18px;
+}
+.landing-footer-links a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-mute);
+  transition-property: color;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+.landing-footer-links a:hover { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-footer-links a { transition-duration: 0ms; }
+}
+
 .card {
   background: var(--panel);
   border: 1px solid var(--line);

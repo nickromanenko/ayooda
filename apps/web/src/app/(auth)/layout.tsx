@@ -32,6 +32,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </Link>
 
         {children}
+
+        <nav aria-label="Legal links" style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '4px 18px', marginTop: 24, color: 'var(--ink-faint)', fontSize: 11.5 }}>
+          <Link href="/privacy" style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center' }}>Privacy Policy</Link>
+          <Link href="/terms" style={{ minHeight: 40, display: 'inline-flex', alignItems: 'center' }}>Terms of Use</Link>
+        </nav>
       </div>
     </div>
   )

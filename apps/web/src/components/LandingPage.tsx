@@ -1306,7 +1306,12 @@ function Footer() {
       <div className="container">
         <div className="landing-footer-row" style={{ display: 'flex', gap: 16, justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
           <span>© 2026 Ayooda · All rights reserved</span>
-          <span>Made for the humans behind the inbox.</span>
+          <nav className="landing-footer-links" aria-label="Legal links">
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">Terms of Use</Link>
+            <a href="mailto:legal@ayooda.live">Contact</a>
+          </nav>
+          <span className="landing-footer-tagline">Made for the humans behind the inbox.</span>
         </div>
       </div>
     </footer>
