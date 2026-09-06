@@ -37,14 +37,22 @@ function mentionsPhrase(response: string, expected: string): boolean {
   const expectedWords = words(expected)
   if (expectedWords.length === 0) return false
 
-  let previousIndex = -1
-  for (const expectedWord of expectedWords) {
-    const nextIndex = responseWords.indexOf(expectedWord, previousIndex + 1)
-    if (nextIndex === -1) return false
-    if (previousIndex !== -1 && nextIndex - previousIndex - 1 > MAX_WORD_GAP) return false
-    previousIndex = nextIndex
+  let candidateIndexes = responseWords
+    .map((word, index) => word === expectedWords[0] ? index : -1)
+    .filter((index) => index !== -1)
+
+  for (const expectedWord of expectedWords.slice(1)) {
+    const nextCandidates = new Set<number>()
+    for (const previousIndex of candidateIndexes) {
+      const lastIndex = Math.min(responseWords.length - 1, previousIndex + MAX_WORD_GAP + 1)
+      for (let index = previousIndex + 1; index <= lastIndex; index += 1) {
+        if (responseWords[index] === expectedWord) nextCandidates.add(index)
+      }
+    }
+    candidateIndexes = [...nextCandidates]
+    if (candidateIndexes.length === 0) return false
   }
-  return true
+  return candidateIndexes.length > 0
 }
 
 function cleanStringList(value: unknown, field: string): { ok: true; value: string[] } | { ok: false; error: string } {

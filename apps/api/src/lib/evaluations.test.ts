@@ -48,6 +48,16 @@ describe('scoreEvaluation', () => {
     expect(result.checks[1]).toEqual({ label: 'Mentions “Upskiller Copilot MacOS app”', passed: true })
   })
 
+  test('retries repeated phrase openings instead of committing to an incomplete occurrence', () => {
+    const result = scoreEvaluation(
+      { expectedOutcome: 'answer', expectedIncludes: ['Upskiller Copilot MacOS app'], forbiddenIncludes: [] },
+      "Hello! I'd be happy to tell you about Upskiller Copilot.\n\nUpskiller Copilot is a native macOS app designed to assist you.",
+      'answer',
+    )
+    expect(result.passed).toBe(true)
+    expect(result.checks[1]?.passed).toBe(true)
+  })
+
   test('matches words across punctuation and Markdown formatting', () => {
     const result = scoreEvaluation(
       { expectedOutcome: 'answer', expectedIncludes: ['screen sharing'], forbiddenIncludes: ['legal advice'] },
