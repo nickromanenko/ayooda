@@ -37,4 +37,33 @@ describe('scoreEvaluation', () => {
     expect(result.passed).toBe(false)
     expect(result.checks.map((check) => check.passed)).toEqual([false, false])
   })
+
+  test('accepts expected words separated by natural connector words', () => {
+    const result = scoreEvaluation(
+      { expectedOutcome: 'answer', expectedIncludes: ['Upskiller Copilot MacOS app'], forbiddenIncludes: [] },
+      'Upskiller Copilot is a native macOS app designed to assist during interviews.',
+      'answer',
+    )
+    expect(result.passed).toBe(true)
+    expect(result.checks[1]).toEqual({ label: 'Mentions “Upskiller Copilot MacOS app”', passed: true })
+  })
+
+  test('matches words across punctuation and Markdown formatting', () => {
+    const result = scoreEvaluation(
+      { expectedOutcome: 'answer', expectedIncludes: ['screen sharing'], forbiddenIncludes: ['legal advice'] },
+      'It is **invisible to screen-sharing** and does not provide legal or financial advice.',
+      'answer',
+    )
+    expect(result.checks.map((check) => check.passed)).toEqual([true, true, false])
+    expect(result.passed).toBe(false)
+  })
+
+  test('matches whole words rather than substrings', () => {
+    const result = scoreEvaluation(
+      { expectedOutcome: 'answer', expectedIncludes: ['plan'], forbiddenIncludes: [] },
+      'This planet is interesting.',
+      'answer',
+    )
+    expect(result.passed).toBe(false)
+  })
 })

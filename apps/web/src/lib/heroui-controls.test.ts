@@ -7,11 +7,13 @@ const root = join(import.meta.dirname, '..')
 const appSelect = readFileSync(join(root, 'components/ui/AppSelect.tsx'), 'utf8')
 const appSelectStyles = readFileSync(join(root, 'components/ui/AppSelect.module.css'), 'utf8')
 const appSwitch = readFileSync(join(root, 'components/ui/AppSwitch.tsx'), 'utf8')
+const appSwitchStyles = readFileSync(join(root, 'components/ui/AppSwitch.module.css'), 'utf8')
 const appCheckbox = readFileSync(join(root, 'components/ui/AppCheckbox.tsx'), 'utf8')
 const appTabs = readFileSync(join(root, 'components/ui/AppTabs.tsx'), 'utf8')
 const appSearch = readFileSync(join(root, 'components/ui/AppSearchField.tsx'), 'utf8')
 const interactions = readFileSync(join(root, 'components/ui/AppInteractionProvider.tsx'), 'utf8')
 const globals = readFileSync(join(root, 'app/globals.css'), 'utf8')
+const evaluationStyles = readFileSync(join(root, 'app/dashboard/agents/[agentId]/test/evaluation.module.css'), 'utf8')
 
 function tsxFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
@@ -58,6 +60,13 @@ test('shared HeroUI controls preserve compound semantics', () => {
   assert.match(appSearch, /SearchField\.ClearButton/)
   assert.match(interactions, /AlertDialog\.Backdrop/)
   assert.match(interactions, /Toast\.Provider/)
+})
+
+test('switch styling keeps HeroUI thumb positioning isolated from page styles', () => {
+  assert.match(appSwitchStyles, /\.control\s+\.thumb\s*\{[\s\S]*?margin-inline-start:\s*0;/)
+  assert.match(appSwitchStyles, /\.root\[data-selected='true'\]\s+\.control\s+\.thumb\s*\{[\s\S]*?margin-inline-start:\s*0;[\s\S]*?translate:\s*14px 0;/)
+  assert.doesNotMatch(evaluationStyles, /\.caseToggle\s+span/)
+  assert.doesNotMatch(evaluationStyles, /\.caseToggle\s+input/)
 })
 
 test('dashboard settings use shared boolean controls', () => {

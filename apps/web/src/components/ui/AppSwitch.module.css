@@ -53,7 +53,12 @@
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-.root[data-selected='true'] .thumb {
+.control .thumb {
+  margin-inline-start: 0;
+}
+
+.root[data-selected='true'] .control .thumb {
+  margin-inline-start: 0;
   translate: 14px 0;
 }
 

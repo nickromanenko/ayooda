@@ -18,6 +18,35 @@ export type EvaluationCheck = {
   passed: boolean
 }
 
+const MAX_WORD_GAP = 4
+
+function words(value: string): string[] {
+  return value
+    .normalize('NFKD')
+    .toLocaleLowerCase()
+    .match(/[\p{L}\p{N}]+/gu) ?? []
+}
+
+/**
+ * Match the expected words in order while allowing short connector phrases.
+ * This keeps checks deterministic but accepts natural wording such as
+ * “Upskiller Copilot is a native macOS app” for “Upskiller Copilot macOS app”.
+ */
+function mentionsPhrase(response: string, expected: string): boolean {
+  const responseWords = words(response)
+  const expectedWords = words(expected)
+  if (expectedWords.length === 0) return false
+
+  let previousIndex = -1
+  for (const expectedWord of expectedWords) {
+    const nextIndex = responseWords.indexOf(expectedWord, previousIndex + 1)
+    if (nextIndex === -1) return false
+    if (previousIndex !== -1 && nextIndex - previousIndex - 1 > MAX_WORD_GAP) return false
+    previousIndex = nextIndex
+  }
+  return true
+}
+
 function cleanStringList(value: unknown, field: string): { ok: true; value: string[] } | { ok: false; error: string } {
   if (value === undefined) return { ok: true, value: [] }
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
@@ -70,7 +99,6 @@ export function scoreEvaluation(
   response: string,
   actualOutcome: Exclude<EvaluationOutcome, 'any'>,
 ): { passed: boolean; checks: EvaluationCheck[] } {
-  const normalized = response.toLowerCase()
   const checks: EvaluationCheck[] = []
   if (input.expectedOutcome !== 'any') {
     const labels: Record<Exclude<EvaluationOutcome, 'any'>, string> = {
@@ -81,10 +109,10 @@ export function scoreEvaluation(
     checks.push({ label: labels[input.expectedOutcome], passed: actualOutcome === input.expectedOutcome })
   }
   for (const value of input.expectedIncludes) {
-    checks.push({ label: `Mentions “${value}”`, passed: normalized.includes(value.toLowerCase()) })
+    checks.push({ label: `Mentions “${value}”`, passed: mentionsPhrase(response, value) })
   }
   for (const value of input.forbiddenIncludes) {
-    checks.push({ label: `Avoids “${value}”`, passed: !normalized.includes(value.toLowerCase()) })
+    checks.push({ label: `Avoids “${value}”`, passed: !mentionsPhrase(response, value) })
   }
   return { passed: checks.every((check) => check.passed), checks }
 }
