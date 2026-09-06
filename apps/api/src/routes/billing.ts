@@ -145,6 +145,7 @@ billing.post('/checkout', async (c) => {
     mode: 'subscription',
     customer: customerId,
     client_reference_id: workspaceId,
+    allow_promotion_codes: true,
     line_items: lineItems,
     subscription_data: { metadata: { workspaceId } },
     success_url: process.env.BILLING_SUCCESS_URL!,
