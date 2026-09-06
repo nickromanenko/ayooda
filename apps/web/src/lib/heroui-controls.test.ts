@@ -43,6 +43,12 @@ test('select motion is explicit, reduced-motion aware, and never transitions all
   assert.match(appSelectStyles, /@media \(prefers-reduced-motion: reduce\)/)
 })
 
+test('select trigger and value stay vertically centered', () => {
+  assert.match(appSelectStyles, /\.trigger\s*\{[\s\S]*?align-items:\s*center;/)
+  assert.match(appSelectStyles, /\.value\s*\{[\s\S]*?align-self:\s*stretch;[\s\S]*?align-items:\s*center;/)
+  assert.match(appSelectStyles, /\.value\s*\{[\s\S]*?line-height:\s*1\.35;/)
+})
+
 test('shared HeroUI controls preserve compound semantics', () => {
   assert.match(appSwitch, /Switch\.Content/)
   assert.match(appSwitch, /Switch\.Control/)
