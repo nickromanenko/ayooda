@@ -5,6 +5,8 @@ import {
   WIDGET_CONVERSATION_PERSISTENCE,
   MAX_WELCOME_MESSAGE_CHARS,
   MAX_WIDGET_COPY_CHARS,
+  MAX_WIDGET_TOPIC_STARTERS,
+  MAX_WIDGET_TOPIC_STARTER_CHARS,
   MAX_WIDGET_PATH_RULES,
   DEFAULT_WIDGET_APPEARANCE,
   isWidgetPathRule,
@@ -39,6 +41,14 @@ function pathRules(a: Record<string, unknown>, key: string): string[] | null {
   return rules.every(isWidgetPathRule)
     ? rules
     : null
+}
+
+function topicStarters(a: Record<string, unknown>): string[] | null {
+  if (a.topicStarters === undefined) return []
+  if (!Array.isArray(a.topicStarters) || a.topicStarters.length > MAX_WIDGET_TOPIC_STARTERS) return null
+  const starters = [...new Set(a.topicStarters.map((value) => typeof value === 'string' ? value.trim() : ''))]
+    .filter(Boolean)
+  return starters.every((value) => value.length <= MAX_WIDGET_TOPIC_STARTER_CHARS) ? starters : null
 }
 
 const LOCALIZED_COPY_FIELDS = ['headerTitle', 'statusText', 'welcomeMessage', 'inputPlaceholder', 'launcherGreeting', 'privacyNotice'] as const
@@ -134,6 +144,8 @@ export function validateWidgetAppearance(
     : DEFAULT_WIDGET_APPEARANCE.conversationPersistence
   const localized = localizedContent(a)
   if (!localized) return fail('Check the translated widget copy and its length.')
+  const starters = topicStarters(a)
+  if (!starters) return fail(`Add up to ${MAX_WIDGET_TOPIC_STARTERS} topic starters, each under ${MAX_WIDGET_TOPIC_STARTER_CHARS} characters.`)
 
   return {
     ok: true,
@@ -149,6 +161,7 @@ export function validateWidgetAppearance(
       statusText: copy(a, 'statusText'),
       inputPlaceholder: copy(a, 'inputPlaceholder'),
       launcherGreeting: copy(a, 'launcherGreeting'),
+      topicStarters: starters,
       launcherGreetingDelaySeconds: launcherGreetingDelaySeconds!,
       autoOpenDelaySeconds: autoOpenDelaySeconds!,
       autoOpenOncePerSession: a.autoOpenOncePerSession !== false,

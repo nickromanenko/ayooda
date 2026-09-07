@@ -37,7 +37,7 @@ Installation status reports whether Ayooda has observed a configuration load, th
 The interactive preview uses the production renderer but keeps preview messages local.
 
 - **Appearance** controls brand colour and contrast, light/dark/automatic theme, launcher position and offsets, and plan-dependent Ayooda branding.
-- **Content** controls header title and subtitle, welcome message, composer placeholder, launcher greeting, interface language, and localized custom copy. A blank title uses the agent name from Info.
+- **Content** controls header title and subtitle, welcome message, composer placeholder, launcher greeting, interface language, localized custom copy, and up to three optional topic starters. Topic starters appear above the composer before a conversation begins; selecting one sends that question immediately. A blank title uses the agent name from Info.
 - **Behavior** can pause the widget without changing embed code, auto-open it, delay the greeting, control desktop/mobile visibility, include or exclude path patterns, choose conversation persistence, and enable reply sound. Exclude rules win. Returning-visitor persistence stores a conversation identifier in the browser.
 - **Security** restricts embedding to allowed domains and configures a privacy-policy URL and notice. Add detected domains or explicit hostnames and wildcards.
 

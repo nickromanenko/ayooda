@@ -10,6 +10,7 @@ import {
 import {
   WIDGET_LOCALES, WIDGET_POSITIONS, WIDGET_THEMES,
   MAX_WELCOME_MESSAGE_CHARS, MAX_WIDGET_COPY_CHARS, MAX_WIDGET_PATH_RULES,
+  MAX_WIDGET_TOPIC_STARTERS, MAX_WIDGET_TOPIC_STARTER_CHARS,
   isWidgetHexColor, isWidgetPathRule, normalizeWidgetHexColor,
   widgetContrastRatio,
   widgetVisibleOnPath, type WidgetAppearance as Appearance, type WidgetContentLocale,
@@ -26,6 +27,7 @@ type PreviewScenario = 'welcome' | 'markdown' | 'handoff' | 'error' | 'long' | '
 type FieldErrorKey =
   | 'widgetColor' | 'welcomeMessage' | 'headerTitle' | 'statusText'
   | 'inputPlaceholder' | 'launcherGreeting' | 'privacyNotice'
+  | 'topicStarters'
   | 'privacyPolicyURL' | 'verticalOffset' | 'horizontalOffset'
   | 'autoOpenDelaySeconds' | 'launcherGreetingDelaySeconds'
   | 'persistenceDays' | 'devices' | 'includePaths' | 'excludePaths'
@@ -45,6 +47,7 @@ const FIELD_TARGETS: Record<FieldErrorKey, { tab: SettingsTab; id: string }> = {
   statusText: { tab: 'content', id: 'w-status' },
   inputPlaceholder: { tab: 'content', id: 'w-placeholder' },
   launcherGreeting: { tab: 'content', id: 'w-greeting' },
+  topicStarters: { tab: 'content', id: 'w-topic-starter' },
   autoOpenDelaySeconds: { tab: 'behavior', id: 'w-auto-open' },
   launcherGreetingDelaySeconds: { tab: 'behavior', id: 'w-greeting-delay' },
   persistenceDays: { tab: 'behavior', id: 'w-days' },
@@ -97,6 +100,9 @@ function validateAppearance(draft: Appearance): Partial<Record<FieldErrorKey, st
     else if (rules.some((rule) => !isWidgetPathRule(rule))) errors[key] = 'Patterns must begin with / and may use * or ? wildcards.'
   }
   if (draft.allowedDomains.some((domain) => !validDomain(domain))) errors.allowedDomains = 'Use hostnames such as example.com or *.example.com.'
+  if (draft.topicStarters.length > MAX_WIDGET_TOPIC_STARTERS || draft.topicStarters.some((starter) => !starter.trim() || starter.length > MAX_WIDGET_TOPIC_STARTER_CHARS)) {
+    errors.topicStarters = `Add up to ${MAX_WIDGET_TOPIC_STARTERS} questions, each under ${MAX_WIDGET_TOPIC_STARTER_CHARS} characters.`
+  }
   return errors
 }
 
@@ -287,12 +293,27 @@ function AppearanceSettings({ draft, setDraft, errors, validColor, contrast, bra
 }
 
 function ContentSettings({ draft, setDraft, errors, agentId, agentName }: SettingsProps & { agentId: string; agentName: string }) {
+  function updateTopicStarter(index: number, value: string) {
+    setDraft({ ...draft, topicStarters: draft.topicStarters.map((starter, current) => current === index ? value : starter) })
+  }
   return <>
     <div style={group}><label htmlFor="w-title" style={fieldLabel}>Header title</label><input id="w-title" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.headerTitle} aria-invalid={Boolean(errors.headerTitle)} aria-describedby="w-title-help w-title-error" onChange={(event) => setDraft({ ...draft, headerTitle: event.target.value })} placeholder={agentName} style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><p id="w-title-help" style={help}>Leave blank to use the agent name from <Link href={`/dashboard/agents/${agentId}`} style={{ color: 'var(--accent-text)' }}>Info settings</Link>.</p><FieldError id="w-title-error">{errors.headerTitle}</FieldError></div>
     <div style={group}><label htmlFor="w-status" style={fieldLabel}>Header subtitle</label><input id="w-status" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.statusText} aria-invalid={Boolean(errors.statusText)} aria-describedby="w-status-error" onChange={(event) => setDraft({ ...draft, statusText: event.target.value })} placeholder="Online" style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-status-error">{errors.statusText}</FieldError></div>
     <div style={group}><label htmlFor="w-welcome" style={fieldLabel}>Welcome message</label><textarea id="w-welcome" value={draft.welcomeMessage} aria-invalid={Boolean(errors.welcomeMessage)} aria-describedby="w-welcome-count w-welcome-error" onChange={(event) => setDraft({ ...draft, welcomeMessage: event.target.value })} style={{ ...input, minHeight: 76, resize: 'vertical', padding: '9px 10px', fontSize: 13 }} /><p id="w-welcome-count" style={{ ...help, color: errors.welcomeMessage ? 'var(--danger)' : 'var(--ink-faint)', fontVariantNumeric: 'tabular-nums' }}>{draft.welcomeMessage.length}/{MAX_WELCOME_MESSAGE_CHARS}</p><FieldError id="w-welcome-error">{errors.welcomeMessage}</FieldError></div>
     <div style={group}><label htmlFor="w-placeholder" style={fieldLabel}>Message placeholder</label><input id="w-placeholder" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.inputPlaceholder} aria-invalid={Boolean(errors.inputPlaceholder)} aria-describedby="w-placeholder-error" onChange={(event) => setDraft({ ...draft, inputPlaceholder: event.target.value })} placeholder="Compose your message…" style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><FieldError id="w-placeholder-error">{errors.inputPlaceholder}</FieldError></div>
     <div style={group}><label htmlFor="w-greeting" style={fieldLabel}>Launcher greeting</label><input id="w-greeting" maxLength={MAX_WIDGET_COPY_CHARS} value={draft.launcherGreeting} aria-invalid={Boolean(errors.launcherGreeting)} aria-describedby="w-greeting-help w-greeting-error" onChange={(event) => setDraft({ ...draft, launcherGreeting: event.target.value })} placeholder="Need help? Chat with us." style={{ ...input, padding: '9px 10px', fontSize: 13 }} /><p id="w-greeting-help" style={help}>Optional. Its delay appears in Behavior after you add text.</p><FieldError id="w-greeting-error">{errors.launcherGreeting}</FieldError></div>
+    <div style={group}>
+      <label htmlFor="w-topic-starter" style={fieldLabel}>Topic starters</label>
+      <p style={{ ...help, margin: '0 0 9px' }}>Optional example questions shown above the composer until the visitor starts chatting.</p>
+      <div style={{ display: 'grid', gap: 7 }}>
+        {draft.topicStarters.map((starter, index) => <div key={index} style={{ display: 'flex', gap: 7 }}>
+          <input id={index === 0 ? 'w-topic-starter' : undefined} maxLength={MAX_WIDGET_TOPIC_STARTER_CHARS} value={starter} aria-label={`Topic starter ${index + 1}`} aria-invalid={Boolean(errors.topicStarters)} onChange={(event) => updateTopicStarter(index, event.target.value)} placeholder="How do I get started?" style={{ ...input, padding: '9px 10px', fontSize: 13 }} />
+          <button type="button" aria-label={`Remove topic starter ${index + 1}`} onClick={() => setDraft({ ...draft, topicStarters: draft.topicStarters.filter((_, current) => current !== index) })} className="btn btn-ghost" style={{ width: 44, height: 44, padding: 0, borderRadius: '50%', display: 'grid', placeItems: 'center', flexShrink: 0 }}><X size={14} /></button>
+        </div>)}
+      </div>
+      {draft.topicStarters.length < MAX_WIDGET_TOPIC_STARTERS && <button id={draft.topicStarters.length === 0 ? 'w-topic-starter' : undefined} type="button" onClick={() => setDraft({ ...draft, topicStarters: [...draft.topicStarters, ''] })} className="btn btn-ghost" style={{ minHeight: 40, marginTop: 8, padding: '0 11px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Plus size={13} /> Add question</button>}
+      <FieldError id="w-topic-starter-error">{errors.topicStarters}</FieldError>
+    </div>
     <div style={group}><label style={fieldLabel}>Interface language</label><AppSelect ariaLabel="Interface language" value={draft.locale} onChange={(value) => setDraft({ ...draft, locale: value as Appearance['locale'] })} options={WIDGET_LOCALES.map((locale) => ({ value: locale, label: ({ auto: 'Automatic', en: 'English', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', ar: 'العربية' } as const)[locale] }))} /><p style={help}>Built-in controls are translated. Your custom text stays exactly as entered.</p></div>
     <LocalizedContentSettings draft={draft} setDraft={setDraft} />
   </>

@@ -1039,6 +1039,8 @@ export const DEFAULT_WIDGET_COLOR = '#6366f1'
 export const DEFAULT_WIDGET_POSITION: WidgetPosition = 'bottom-right'
 export const MAX_WELCOME_MESSAGE_CHARS = 200
 export const MAX_WIDGET_COPY_CHARS = 160
+export const MAX_WIDGET_TOPIC_STARTERS = 3
+export const MAX_WIDGET_TOPIC_STARTER_CHARS = 80
 export const MAX_WIDGET_PATH_RULES = 20
 export const MAX_WIDGET_PATH_RULE_CHARS = 120
 const WIDGET_PATH_RULE = /^[/a-zA-Z0-9._~!*?&=\-{}:]+$/
@@ -1099,6 +1101,8 @@ export interface WidgetAppearance {
   statusText: string
   inputPlaceholder: string
   launcherGreeting: string
+  /** Short example questions shown above the composer before a conversation starts. */
+  topicStarters: string[]
   launcherGreetingDelaySeconds: number
   autoOpenDelaySeconds: number
   autoOpenOncePerSession: boolean
@@ -1130,6 +1134,7 @@ export const DEFAULT_WIDGET_APPEARANCE: WidgetAppearance = {
   statusText: '',
   inputPlaceholder: '',
   launcherGreeting: '',
+  topicStarters: [],
   launcherGreetingDelaySeconds: 5,
   autoOpenDelaySeconds: 0,
   autoOpenOncePerSession: true,

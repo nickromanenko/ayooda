@@ -544,6 +544,8 @@ function buildCSS(config: WidgetConfig): string {
       align-items: center;
       gap: 10px;
       flex-shrink: 0;
+      box-shadow: 0 1px 0 rgba(0,0,0,.07);
+      z-index: 1;
     }
     #avatar {
       width: 36px;
@@ -633,6 +635,40 @@ function buildCSS(config: WidgetConfig): string {
     #jump-latest:hover { transform: translateX(-50%) translateY(-1px); box-shadow: 0 0 0 1px rgba(0,0,0,0.1), 0 7px 20px rgba(0,0,0,0.18); }
     #jump-latest:active { transform: translateX(-50%) scale(0.96); }
 
+    #topic-starters {
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      padding: 10px 16px 4px;
+      background: var(--aw-panel);
+      scrollbar-width: none;
+      flex-shrink: 0;
+    }
+    #topic-starters::-webkit-scrollbar { display: none; }
+    #topic-starters[hidden] { display: none; }
+    .topic-starter {
+      min-height: 38px;
+      max-width: 230px;
+      flex: 0 0 auto;
+      border: 0;
+      border-radius: 999px;
+      padding: 0 13px;
+      background: color-mix(in srgb, ${color} 9%, var(--aw-panel));
+      color: ${accent};
+      box-shadow: 0 0 0 1px color-mix(in srgb, ${color} 22%, transparent);
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font: 600 11.5px/1 system-ui, -apple-system, sans-serif;
+      transition-property: background-color, box-shadow, transform;
+      transition-duration: 150ms;
+      transition-timing-function: cubic-bezier(0.2,0,0,1);
+    }
+    .topic-starter:hover { background: color-mix(in srgb, ${color} 15%, var(--aw-panel)); box-shadow: 0 0 0 1px color-mix(in srgb, ${color} 34%, transparent); }
+    .topic-starter:focus-visible { outline: 2px solid ${accent}; outline-offset: 2px; }
+    .topic-starter:active { transform: scale(.96); }
+
     .msg {
       max-width: 80%;
       padding: 9px 13px;
@@ -648,6 +684,7 @@ function buildCSS(config: WidgetConfig): string {
       background: ${color};
       color: ${foreground};
       border-bottom-right-radius: 4px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.07);
     }
     .msg.bot {
       align-self: flex-start;
@@ -1011,6 +1048,7 @@ class AyoodaWidget {
   private readonly preview: boolean
   private newChatDialog!: HTMLElement
   private newChatButton!: HTMLButtonElement
+  private topicStarters!: HTMLElement
   private sessionVersion = 0
   private identityOperation = 0
 
@@ -1038,7 +1076,7 @@ class AyoodaWidget {
   }
 
   private build() {
-    const { agentName, agentPhotoURL, privacyPolicyURL, privacyNotice, launcherGreeting } = this.config
+    const { agentName, agentPhotoURL, privacyPolicyURL, privacyNotice, launcherGreeting, topicStarters = [] } = this.config
     const photoURL = safeAgentPhotoURL(agentPhotoURL)
     const escapedAgentName = escapeHtmlAttribute(agentName)
     const escapedInitial = escapeHtmlAttribute(agentName.charAt(0).toUpperCase())
@@ -1077,6 +1115,9 @@ class AyoodaWidget {
         <div id="message-stage">
           <div id="messages" role="log" aria-live="polite" dir="auto"></div>
           <button id="jump-latest" type="button" hidden>${escapeHtmlAttribute(this.strings.newMessages)}</button>
+        </div>
+        <div id="topic-starters" aria-label="Suggested questions"${topicStarters.length ? '' : ' hidden'}>
+          ${topicStarters.map((starter, index) => `<button class="topic-starter" type="button" data-topic-index="${index}" title="${escapeHtmlAttribute(starter)}">${escapeHtmlAttribute(starter)}</button>`).join('')}
         </div>
         <div id="input-area">
           <div id="composer">
@@ -1123,6 +1164,7 @@ class AyoodaWidget {
     this.statusText = container.querySelector<HTMLElement>('#agent-status')!
     this.newChatDialog = container.querySelector<HTMLElement>('#new-chat-confirm')!
     this.newChatButton = container.querySelector<HTMLButtonElement>('#new-chat-btn')!
+    this.topicStarters = container.querySelector<HTMLElement>('#topic-starters')!
     container.querySelector('#launcher-greeting')?.addEventListener('click', () => this.toggle(true))
 
     // Event listeners
@@ -1153,6 +1195,14 @@ class AyoodaWidget {
       }
     })
     this.sendBtn.addEventListener('click', () => this.submit())
+    this.topicStarters.querySelectorAll<HTMLButtonElement>('.topic-starter').forEach((button) => {
+      button.addEventListener('click', () => {
+        const starter = topicStarters[Number(button.dataset.topicIndex)]
+        if (!starter || this.sending) return
+        this.input.value = starter
+        void this.submit()
+      })
+    })
     this.jumpLatestBtn.addEventListener('click', () => this.scrollToBottom(true))
     this.messages.addEventListener('scroll', () => {
       if (this.isNearBottom()) this.jumpLatestBtn.hidden = true
@@ -1216,6 +1266,7 @@ class AyoodaWidget {
     }
     const greeting = this.shadow.querySelector<HTMLElement>('#launcher-greeting')
     if (greeting) greeting.hidden = false
+    this.updateTopicStartersVisibility()
     this.toggle(true)
   }
 
@@ -1234,6 +1285,7 @@ class AyoodaWidget {
         else if (history.status === 'waiting') this.appendSystemNote(this.strings.waiting, true)
         else if (history.status === 'resolved') this.appendSystemNote(this.strings.resolved, true)
       }
+      this.updateTopicStartersVisibility()
       this.openFeed()
     } catch {
       this.appendBotMessage(this.config.welcomeMessage, true)
@@ -1302,6 +1354,7 @@ class AyoodaWidget {
     this.feedSuspended = true
     this.messages.replaceChildren()
     this.hasConversationActivity = false
+    this.updateTopicStartersVisibility()
     this.setUnreadCount(0)
     this.setStatus('online')
     this.appendBotMessage(this.config.welcomeMessage, true)
@@ -1344,6 +1397,11 @@ class AyoodaWidget {
     this.input.disabled = required
     this.input.placeholder = required ? this.strings.authenticationRequired : (this.config.inputPlaceholder || this.strings.compose)
     this.sendBtn.disabled = required || !this.input.value.trim()
+    this.topicStarters.hidden = required || this.hasConversationActivity || !(this.config.topicStarters?.length)
+  }
+
+  private updateTopicStartersVisibility() {
+    this.topicStarters.hidden = this.hasConversationActivity || !(this.config.topicStarters?.length) || this.input.disabled
   }
 
   private resetSession(conversationId: string, sessionToken: string | null, identityTrust: 'anonymous' | 'unverified' | 'verified') {
@@ -1360,6 +1418,7 @@ class AyoodaWidget {
     this.feedSuspended = false
     this.messages.replaceChildren()
     this.hasConversationActivity = false
+    this.updateTopicStartersVisibility()
     this.setUnreadCount(0)
     this.setStatus('online')
   }
@@ -1616,6 +1675,7 @@ class AyoodaWidget {
     this.shadow.querySelector('#composer')?.classList.remove('has-content')
 
     this.hasConversationActivity = true
+    this.updateTopicStartersVisibility()
     if (appendUser) this.appendMessage(text, 'user', false, { createdAt: new Date().toISOString() })
     const startedKey = `ayooda_started_${this.conversationId}`
     if (!sessionStorage.getItem(startedKey)) {
@@ -1681,6 +1741,7 @@ class AyoodaWidget {
 
   private submitPreview(text: string, appendUser: boolean) {
     this.hasConversationActivity = true
+    this.updateTopicStartersVisibility()
     this.input.value = ''
     this.input.style.height = 'auto'
     this.shadow.querySelector('#composer')?.classList.remove('has-content')

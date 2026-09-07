@@ -114,7 +114,21 @@ describe('validateWidgetAppearance', () => {
         expect(r.value.enabled).toBe(true)
         expect(r.value.showOnMobile).toBe(true)
         expect(r.value.conversationPersistence).toBe('session')
+        expect(r.value.topicStarters).toEqual([])
       }
+    })
+
+    test('normalizes topic starters and enforces their limits', () => {
+      const r = validateWidgetAppearance({
+        ...base,
+        topicStarters: ['  How do I install the widget?  ', 'Which plan should I choose?', 'How do I install the widget?'],
+      })
+      expect(r.ok).toBe(true)
+      if (r.ok) expect(r.value.topicStarters).toEqual(['How do I install the widget?', 'Which plan should I choose?'])
+
+      expect(validateWidgetAppearance({ ...base, topicStarters: ['One', 'Two', 'Three', 'Four'] }).ok).toBe(false)
+      expect(validateWidgetAppearance({ ...base, topicStarters: ['x'.repeat(81)] }).ok).toBe(false)
+      expect(validateWidgetAppearance({ ...base, topicStarters: 'Not an array' }).ok).toBe(false)
     })
 
     test('accepts valid visibility and persistence settings', () => {
