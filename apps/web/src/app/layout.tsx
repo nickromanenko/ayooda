@@ -5,6 +5,7 @@ import { JetBrains_Mono } from 'next/font/google'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import { MixpanelAnalytics } from '@/components/providers/MixpanelAnalytics'
 import { AppInteractionProvider } from '@/components/ui/AppInteractionProvider'
+import { AyoodaSupportWidget } from '@/components/providers/AyoodaSupportWidget'
 import './globals.css'
 
 const montserrat = Montserrat({
@@ -34,7 +35,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full">
         <MixpanelAnalytics />
-        <AppInteractionProvider><AuthProvider>{children}</AuthProvider></AppInteractionProvider>
+        <AppInteractionProvider>
+          <AuthProvider>
+            {children}
+            <AyoodaSupportWidget />
+          </AuthProvider>
+        </AppInteractionProvider>
       </body>
     </html>
   )

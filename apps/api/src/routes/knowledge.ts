@@ -62,13 +62,17 @@ knowledge.post('/scrape', async (c) => {
     syncError: null,
   })
 
-  // Fire-and-forget: Cloud Run Job in prod, local Bun spawn in dev
-  void triggerIngestion({ workspaceId, docId: docRef.id, docType: 'webpage', url: normalised, agentId, namespace: c.get('agentNamespace')! })
-    .catch(async (err) => {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('[knowledge] scraper launch failed:', message)
-      await docRef.update({ status: 'error', errorMessage: message }).catch(() => {})
-    })
+  // Wait until the ingestion execution is accepted before reporting success.
+  // Cloud Run may suspend background work as soon as the response finishes,
+  // which otherwise leaves the source stuck in `pending` indefinitely.
+  try {
+    await triggerIngestion({ workspaceId, docId: docRef.id, docType: 'webpage', url: normalised, agentId, namespace: c.get('agentNamespace')! })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[knowledge] scraper launch failed:', message)
+    await docRef.update({ status: 'error', errorMessage: message }).catch(() => {})
+    return c.json({ error: 'Could not start indexing. Please try again.' }, 502)
+  }
 
   return c.json({ docId: docRef.id, status: 'pending' }, 201)
 })
@@ -118,12 +122,14 @@ knowledge.post('/upload', async (c) => {
     indexedAt: null,
   })
 
-  void triggerIngestion({ workspaceId, docId: docRef.id, docType: 'file', storagePath, agentId, namespace: c.get('agentNamespace')! })
-    .catch(async (err) => {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('[knowledge] ingestor launch failed:', message)
-      await docRef.update({ status: 'error', errorMessage: message }).catch(() => {})
-    })
+  try {
+    await triggerIngestion({ workspaceId, docId: docRef.id, docType: 'file', storagePath, agentId, namespace: c.get('agentNamespace')! })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[knowledge] ingestor launch failed:', message)
+    await docRef.update({ status: 'error', errorMessage: message }).catch(() => {})
+    return c.json({ error: 'Could not start indexing. Please try again.' }, 502)
+  }
 
   return c.json({ docId: docRef.id, status: 'pending' }, 201)
 })
