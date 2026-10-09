@@ -382,6 +382,9 @@ function buildCSS(config: WidgetConfig): string {
       bottom: max(${verticalOffset}px, env(safe-area-inset-bottom));
       ${left ? `left: max(${horizontalOffset}px, env(safe-area-inset-left));` : `right: max(${horizontalOffset}px, env(safe-area-inset-right));`}
       z-index: 2147483647;
+      /* The closed panel keeps its layout box, so the container must not
+         capture clicks; interactive children opt back in below. */
+      pointer-events: none;
       display: flex;
       flex-direction: column;
       align-items: ${left ? 'flex-start' : 'flex-end'};
@@ -489,6 +492,7 @@ function buildCSS(config: WidgetConfig): string {
       transition-delay: 0s;
       transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
     }
+    #toggle, #launcher-greeting, #panel { pointer-events: auto; }
     #panel.hidden {
       opacity: 0;
       pointer-events: none;
