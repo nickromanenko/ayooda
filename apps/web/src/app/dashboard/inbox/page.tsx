@@ -15,6 +15,7 @@ import InboxTicketPanel from '@/components/dashboard/InboxTicketPanel'
 import { AppSelect } from '@/components/ui/AppSelect'
 import { useWorkspace } from '@/hooks/useWorkspace'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { MessageSources, StatusPill, type MessageSource, type PillTone } from '@/components/dashboard/kit'
 import styles from './page.module.css'
 
 interface Conversation {
@@ -50,6 +51,7 @@ interface Message {
   role: 'user' | 'assistant' | 'operator'
   content: string
   createdAt: Timestamp | null
+  metadata?: { sources?: MessageSource[]; llmModel?: string; promptTokens?: number; completionTokens?: number }
 }
 
 interface InternalNote {
@@ -75,12 +77,7 @@ function isInboxFilter(value: string | null): value is InboxFilter {
   return value !== null && INBOX_FILTERS.includes(value as InboxFilter)
 }
 
-const STATUS_STYLE: Record<Conversation['status'], React.CSSProperties> = {
-  bot: { background: 'var(--accent-soft)', color: 'var(--accent-text)' },
-  waiting: { background: 'rgba(239,68,68,0.15)', color: 'var(--danger)' },
-  human: { background: 'rgba(245,165,36,0.18)', color: 'var(--accent-2)' },
-  resolved: { background: 'var(--panel-2)', color: 'var(--ink-mute)' },
-}
+const STATUS_TONE: Record<Conversation['status'], PillTone> = { bot: 'lime', waiting: 'red', human: 'blue', resolved: 'neutral' }
 
 const CONVERSATION_PAGE_SIZE = 50
 const MESSAGE_PAGE_SIZE = 100
@@ -625,9 +622,7 @@ export default function InboxPage() {
                 </div>
                 <p style={{ fontSize: 12, fontWeight: conv.unread ? 550 : 400, color: conv.unread ? 'var(--ink-dim)' : 'var(--ink-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '0 0 6px' }}>{conv.lastMessage}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 500, fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: 20, ...STATUS_STYLE[conv.status] }}>
-                    {conv.status}
-                  </span>
+                  <StatusPill tone={STATUS_TONE[conv.status]}>{conv.status}</StatusPill>
                   {conv.ticketId && <span title={`Support ticket #${conv.ticketNumber ?? ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--accent-text)' }}><Ticket size={11} />#{conv.ticketNumber ?? '—'}</span>}
                   <span
                     style={{
@@ -678,8 +673,8 @@ export default function InboxPage() {
                 {!selectedConv.customerVerified && selectedConv.customerIdentityTrust === 'unverified' && <span title="Provided by the website; not verified" style={{ padding: '2px 6px', borderRadius: 999, background: 'var(--panel-2)', color: 'var(--ink-mute)', font: '10px var(--font-mono)' }}>Unverified</span>}
               </p>
               <p style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 2 }}>
-                Status: <span style={{ textTransform: 'capitalize' }}>{selectedConv.status}</span>
-                {' · '}Agent: {agentName(selectedConv.agentId)}
+                <StatusPill tone={STATUS_TONE[selectedConv.status]}>{selectedConv.status}</StatusPill>
+                <span style={{ marginLeft: 8 }}>Agent: {agentName(selectedConv.agentId)}</span>
               </p>
               {selectedConv.status === 'waiting' && selectedConv.escalationReason && (
                 <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>Escalated: {selectedConv.escalationReason}</p>
@@ -805,6 +800,13 @@ export default function InboxPage() {
                     {msg.role === 'user'
                       ? msg.content
                       : <MarkdownMessage content={msg.content} className={styles.markdown} />}
+                    {msg.role === 'assistant' && msg.metadata?.sources && msg.metadata.sources.length > 0 && (
+                      <MessageSources
+                        sources={msg.metadata.sources}
+                        model={msg.metadata.llmModel}
+                        tokens={(msg.metadata.promptTokens ?? 0) + (msg.metadata.completionTokens ?? 0) || undefined}
+                      />
+                    )}
                   </div>
                 </div>
               )

@@ -1,0 +1,57 @@
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ── Stat tiles ── */
+.tile { display: grid; gap: 4px; padding: 16px 18px; border-radius: var(--r-md); background: var(--panel); box-shadow: var(--shadow-card); transition: box-shadow 160ms ease-out; animation: kitIn 360ms ease-out both; animation-delay: calc(var(--i, 0) * 50ms); }
+.tile:hover { box-shadow: inset 0 0 0 1px var(--line-2); }
+.tileTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-mute); font-size: 12.5px; }
+.tileValue { color: var(--ink); font: 510 30px/1.1 var(--font-display); letter-spacing: -.025em; }
+.tileSub { font-style: normal; font-size: 12px; color: var(--ink-faint); }
+.tileSub[data-tone='good'] { color: var(--success); }
+
+/* ── Panels ── */
+.panel { margin-bottom: 20px; border-radius: var(--r-md); background: var(--panel); box-shadow: var(--shadow-card); overflow: hidden; animation: kitIn 360ms ease-out both; }
+.panelHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; box-shadow: inset 0 -1px var(--line); }
+.panelHead h2 { margin: 0; color: var(--ink); font: 510 14px var(--font-display); letter-spacing: -.011em; }
+.panelHead span { display: block; margin-top: 1px; color: var(--ink-faint); font-size: 12px; }
+
+/* ── List rows ── */
+.row { display: flex; align-items: center; gap: 14px; padding: 12px 18px; color: inherit; text-decoration: none; box-shadow: inset 0 1px var(--line); transition: background-color 150ms ease-out; animation: kitIn 320ms ease-out both; animation-delay: calc(var(--i, 0) * 45ms + 120ms); }
+.row:first-of-type { box-shadow: none; }
+.row:hover { background: var(--panel-2); }
+.row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rowMain { flex: 1; min-width: 0; }
+.rowMain p { display: flex; align-items: center; gap: 8px; margin: 0; overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 510; text-overflow: ellipsis; white-space: nowrap; }
+.rowMain p[data-plain='true'] { color: var(--ink-dim); font-weight: 400; }
+.rowMain span { display: block; margin-top: 1px; overflow: hidden; color: var(--ink-faint); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.rowMeta { display: flex; align-items: center; gap: 6px; flex: none; }
+.chevron { flex: none; color: var(--ink-faint); transition: transform 150ms ease-out, color 150ms; }
+.row:hover .chevron { color: var(--ink-mute); transform: translateX(2px); }
+@media (max-width: 640px) { .rowMeta > :not(:last-child) { display: none; } }
+
+/* ── Pills & chips ── */
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 500; white-space: nowrap; color: var(--ink-mute); box-shadow: inset 0 0 0 1px var(--line-2); }
+.pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill[data-tone='lime'] { color: var(--accent-text); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.pill[data-tone='lime']::before { background: var(--accent); }
+.pill[data-tone='green'] { color: var(--success); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 40%, transparent); }
+.pill[data-tone='red'] { color: var(--danger); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 40%, transparent); }
+.pill[data-tone='blue'] { color: var(--blue); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 40%, transparent); }
+.chip { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 4px; background: var(--panel-2); color: var(--ink-mute); font: 400 11px var(--font-mono); white-space: nowrap; }
+
+/* ── "How the agent answered" ── */
+.sources { margin-top: 8px; }
+.sourcesToggle { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 7px; padding: 2px 8px; border-radius: 6px; color: var(--ink-mute); font-size: 11.5px; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line); transition: color 150ms, background-color 150ms; }
+.sourcesToggle:hover { color: var(--ink); background: var(--panel-2); }
+.sourcesToggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sourcesDot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.sourcesTop { color: var(--ink-faint); padding-left: 7px; border-left: 1px solid var(--line-2); }
+.sourcesBody { margin-top: 8px; padding: 10px 12px; display: grid; gap: 7px; border-radius: 8px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); animation: kitIn 220ms ease-out both; }
+.score { display: grid; grid-template-columns: minmax(0, 150px) 1fr 34px; align-items: center; gap: 10px; color: var(--ink-mute); font-size: 11.5px; }
+.score span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score b { font: 400 11px var(--font-mono); text-align: right; }
+.scoreTrack { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.scoreTrack i { display: block; height: 100%; border-radius: 2px; background: var(--ink-dim); }
+.sourcesMeta { margin-top: 2px; color: var(--ink-faint); font: 400 11px var(--font-mono); }
+
+@keyframes kitIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tile, .panel, .sourcesBody, .row { animation: none; } }

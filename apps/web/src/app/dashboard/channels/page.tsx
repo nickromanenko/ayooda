@@ -7,6 +7,7 @@ import { Activity, BellRing, Bot, CheckCircle2, CircleAlert, Globe2, Loader2, Ma
 import { apiRequest, apiRequestOrThrow } from '@/lib/api'
 import { Loading } from '@/components/dashboard/Loading'
 import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
+import { CountUp, StatTile, StatusPill, type PillTone } from '@/components/dashboard/kit'
 import { AppSelect } from '@/components/ui/AppSelect'
 import { AppSwitch } from '@/components/ui/AppSwitch'
 import styles from './page.module.css'
@@ -31,6 +32,7 @@ interface AlertSettingsResponse { settings: AlertSettings; transports: { email: 
 
 const providerNames: Record<string, string> = { web_widget: 'Web widget', telegram: 'Telegram', email: 'Email', slack: 'Slack', sms: 'SMS' }
 const providerIcons = { web_widget: Globe2, telegram: Bot, email: Mail, slack: MessageSquare, sms: Smartphone }
+const statusTone: Record<Status, PillTone> = { healthy: 'green', failing: 'red', unchecked: 'neutral', inactive: 'neutral' }
 const statusLabels: Record<Status, string> = { healthy: 'Healthy', failing: 'Needs attention', unchecked: 'Not checked', inactive: 'Inactive' }
 
 function ago(value: string | null): string {
@@ -139,9 +141,10 @@ export default function ChannelReliabilityPage() {
       {error && <Notice title="Action could not be completed">{error}</Notice>}
 
       {summary && <section className={styles.summary} aria-label="Channel health summary">
-        {[['Connected', summary.total], ['Healthy', summary.healthy], ['Needs attention', summary.failing], ['Not checked', summary.unchecked]].map(([label, value]) => (
-          <div className={styles.metric} key={String(label)}><p className={styles.metricValue}>{value}</p><p className={styles.metricLabel}>{label}</p></div>
-        ))}
+        <StatTile index={0} label="Connected" value={<CountUp value={summary.total} />} />
+        <StatTile index={1} label="Healthy" value={<CountUp value={summary.healthy} />} tone={summary.healthy > 0 ? 'good' : 'neutral'} sub={summary.total > 0 ? `${Math.round((summary.healthy / summary.total) * 100)}% of channels` : undefined} />
+        <StatTile index={2} label="Needs attention" value={<CountUp value={summary.failing} />} sub={summary.failing > 0 ? 'Run a connection check' : 'All clear'} />
+        <StatTile index={3} label="Not checked" value={<CountUp value={summary.unchecked} />} />
       </section>}
 
       {alerts && <section className={styles.alertPanel} aria-labelledby="alert-settings-title">
@@ -192,7 +195,7 @@ export default function ChannelReliabilityPage() {
                 <div className={styles.cardTop}>
                   <div className={styles.providerIcon}><Icon size={18} strokeWidth={1.6} /></div>
                   <div className={styles.identity}><h2 className={styles.provider}>{providerNames[channel.type] ?? channel.type}</h2><p className={styles.agent}>{channel.agentName}</p></div>
-                  <span className={`${styles.status} ${styles[channel.status]}`}><span className={styles.statusDot} />{statusLabels[channel.status]}</span>
+                  <StatusPill tone={statusTone[channel.status]}>{statusLabels[channel.status]}</StatusPill>
                 </div>
 
                 <div className={styles.facts}>
