@@ -2,15 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { Plus, ChevronRight } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { apiRequest } from '@/lib/api'
 import type { AgentDoc } from '@ayooda/shared'
 import AgentAvatar from '@/components/dashboard/AgentAvatar'
 import NewAgentForm from '@/components/dashboard/NewAgentForm'
 import { EmptyState, Loading } from '@/components/dashboard/Loading'
 import { Notice, PageHeader } from '@/components/dashboard/DashboardPrimitives'
-import { card, label } from '@/components/dashboard/ui'
+import { Chip, ListRow, Panel } from '@/components/dashboard/kit'
 
 export default function AgentsPage() {
   const router = useRouter()
@@ -45,12 +44,12 @@ export default function AgentsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ maxWidth: 860, margin: '0 auto' }}>
       <PageHeader
         title="Agents"
         description="Open an agent to set its persona, knowledge, tools, escalation rules and where it’s deployed."
         action={!showNew && (
-          <button type="button" onClick={() => { setShowNew(true); setNotice('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: 'var(--r-sm)', padding: '10px 16px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          <button type="button" onClick={() => { setShowNew(true); setNotice('') }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap' }}>
             <Plus size={14} /> New agent
           </button>
         )}
@@ -63,29 +62,20 @@ export default function AgentsPage() {
       {showNew && <NewAgentForm onCreated={handleCreated} onCancel={() => setShowNew(false)} />}
 
       {!showNew && !loadError && (
-        <div style={card}>
-          <p style={label}>Your agents</p>
-          {agents.length === 0 && <EmptyState title="No agents yet" hint="Create your first agent to start adding knowledge and deploying support channels." action={<button type="button" className="btn btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> Create agent</button>} />}
-          {agents.map((a) => (
-            <Link
+        <Panel title="Your agents" sub={agents.length ? `${agents.length} agent${agents.length === 1 ? '' : 's'}` : undefined}>
+          {agents.length === 0 && <div style={{ padding: 18 }}><EmptyState title="No agents yet" hint="Create your first agent to start adding knowledge and deploying support channels." action={<button type="button" className="btn btn-primary" onClick={() => setShowNew(true)}><Plus size={14} /> Create agent</button>} /></div>}
+          {agents.map((a, i) => (
+            <ListRow
               key={a.id}
+              index={i}
               href={`/dashboard/agents/${a.id}`}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: '1px solid var(--line)', textDecoration: 'none' }}
-            >
-              <AgentAvatar name={a.name} photoURL={a.photoURL} seed={a.id} size={36} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>
-                  {a.name}
-                  {a.isDefault && <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--accent-text)' }}> · default</span>}
-                </p>
-                <p style={{ fontSize: 12, color: 'var(--ink-mute)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {a.description || a.llmModel}
-                </p>
-              </div>
-              <ChevronRight size={15} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} />
-            </Link>
+              lead={<AgentAvatar name={a.name} photoURL={a.photoURL} seed={a.id} size={36} />}
+              title={<>{a.name}{a.isDefault && <Chip>default</Chip>}</>}
+              sub={a.description || undefined}
+              meta={<Chip>{a.llmModel}</Chip>}
+            />
           ))}
-        </div>
+        </Panel>
       )}
     </div>
   )

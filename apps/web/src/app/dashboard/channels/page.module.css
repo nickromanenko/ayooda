@@ -7,9 +7,6 @@
 .button:active { scale: .96; }
 .button:disabled { cursor: wait; opacity: .55; }
 .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
-.metric { padding: 18px; border-radius: var(--r-md); background: var(--panel); box-shadow: var(--shadow-soft); }
-.metricValue { margin: 0; color: var(--ink); font: 600 28px/1 var(--font-display); font-variant-numeric: tabular-nums; }
-.metricLabel { margin: 8px 0 0; color: var(--ink-mute); font-size: 12px; }
 .notice { margin-bottom: 18px; padding: 12px 14px; border-radius: var(--r-sm); color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 24%, transparent); font-size: 13px; }
 .alertPanel { margin-bottom: 20px; padding: 20px; border-radius: var(--r-md); background: var(--panel); box-shadow: var(--shadow-soft); }
 .alertHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
@@ -45,20 +42,16 @@
 .empty { padding: 36px; border-radius: var(--r-md); color: var(--ink-mute); background: var(--panel); box-shadow: var(--shadow-soft); text-align: center; }
 .empty p { margin: 0 0 16px; font-size: 13px; line-height: 1.5; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.card { min-width: 0; padding: 20px; scroll-margin-top: 20px; border-radius: var(--r-md); background: var(--panel); box-shadow: var(--shadow-soft); }
+.card { min-width: 0; padding: 20px; scroll-margin-top: 20px; border-radius: var(--r-md); background: var(--panel); box-shadow: var(--shadow-card); transition: box-shadow 160ms ease-out; }
+.card:hover { box-shadow: inset 0 0 0 1px var(--line-2); }
 .cardTop { display: flex; align-items: flex-start; gap: 12px; }
 .providerIcon { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border-radius: var(--r-sm); color: var(--ink-dim); background: var(--panel-2); box-shadow: 0 0 0 1px var(--line); }
 .identity { min-width: 0; flex: 1; }
 .provider { margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; }
 .agent { margin: 3px 0 0; color: var(--ink-mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; font: 500 11px var(--font-mono); white-space: nowrap; }
-.statusDot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.healthy { color: var(--success); background: color-mix(in srgb, var(--success) 11%, transparent); }
-.failing { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
-.unchecked, .inactive { color: var(--ink-mute); background: var(--panel-2); }
 .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0; }
-.fact { min-width: 0; padding: 10px; border-radius: var(--r-sm); background: var(--bg-2); }
-.factValue { margin: 0; color: var(--ink); font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fact { min-width: 0; padding: 10px; border-radius: var(--r-sm); background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--line); }
+.factValue { margin: 0; color: var(--ink); font: 400 13px var(--font-mono); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .factLabel { margin: 5px 0 0; color: var(--ink-faint); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
 .failure { margin: 0 0 14px; padding: 10px 12px; border-radius: var(--r-sm); color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, transparent); font-size: 12px; line-height: 1.45; text-wrap: pretty; }
 .alertDelivery { margin: -4px 0 14px; color: var(--success); font-size: 11px; line-height: 1.45; text-wrap: pretty; }

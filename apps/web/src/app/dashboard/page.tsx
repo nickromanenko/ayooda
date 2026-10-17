@@ -2,11 +2,13 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import Link from 'next/link'
-import { MessageSquare, BookOpen, Bot, Zap, Radio, ChevronRight } from 'lucide-react'
+import { MessageSquare, BookOpen, Bot, Zap } from 'lucide-react'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin'
 import { ActivationChecklist, type ActivationStep } from '@/components/dashboard/ActivationChecklist'
 import { BillingBanner } from '@/components/dashboard/BillingBanner'
 import { PageHeader } from '@/components/dashboard/DashboardPrimitives'
+import { Chip, CountUp, ListRow, Panel, StatTile, StatusPill, type PillTone } from '@/components/dashboard/kit'
+import rows from './overview.module.css'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,13 +143,16 @@ async function loadOverview() {
   }
 }
 
-const panelStyle: React.CSSProperties = {
-  background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)',
-  borderRadius: 'var(--r-md)', padding: 24, marginBottom: 24,
-}
-const eyebrow: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em',
-  textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16,
+const STATUS_TONE: Record<string, PillTone> = { bot: 'lime', waiting: 'red', human: 'blue', resolved: 'neutral' }
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return ''
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.round(hours / 24)}d ago`
 }
 
 export default async function DashboardPage() {
@@ -156,31 +161,28 @@ export default async function DashboardPage() {
   const stats = [
     {
       label: 'Total conversations',
-      value: String(o.totalConversations),
+      value: <CountUp value={o.totalConversations} />,
       sub: o.avgMessages !== null ? `${o.avgMessages.toFixed(1)} messages avg` : undefined,
       icon: MessageSquare,
-      accent: 'var(--blue)',
     },
     {
       label: 'Automation rate',
-      value: o.automationRate !== null ? `${o.automationRate}%` : '—',
+      value: o.automationRate !== null ? <CountUp value={o.automationRate} suffix="%" /> : '—',
       sub: o.automationRate !== null ? 'resolved without takeover' : 'no resolved conversations yet',
       icon: Zap,
-      accent: 'var(--mint)',
+      tone: 'good' as const,
     },
     {
       label: 'Knowledge docs',
-      value: String(o.indexedDocCount),
+      value: <CountUp value={o.indexedDocCount} />,
       sub: `${o.chunkCount} chunks indexed`,
       icon: BookOpen,
-      accent: 'var(--accent)',
     },
     {
       label: 'Agents live',
       value: `${o.liveAgentCount}/${o.agents.length}`,
       sub: o.liveAgentCount > 0 ? 'deployed to a channel' : 'none deployed yet',
       icon: Bot,
-      accent: o.liveAgentCount > 0 ? 'var(--mint)' : 'var(--ink-mute)',
     },
   ]
 
@@ -219,66 +221,43 @@ export default async function DashboardPage() {
 
       <ActivationChecklist agentName={o.activation.agentName} steps={activationSteps} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
-        {stats.map((stat) => (
-          <div key={stat.label} style={{ background: 'var(--panel)', border: 0, boxShadow: 'var(--shadow-soft)', borderRadius: 'var(--r-md)', padding: '18px 20px' }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: `color-mix(in oklab, ${stat.accent} 15%, transparent)`, border: `1px solid color-mix(in oklab, ${stat.accent} 25%, transparent)`, display: 'grid', placeItems: 'center', marginBottom: 12, color: stat.accent }}>
-              <stat.icon size={16} />
-            </div>
-            <p style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', margin: 0, color: 'var(--ink)' }}>{stat.value}</p>
-            <p style={{ fontSize: 13, color: 'var(--ink-mute)', marginTop: 2 }}>{stat.label}</p>
-            {stat.sub && <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 2 }}>{stat.sub}</p>}
-          </div>
+      <div className={rows.tiles}>
+        {stats.map((stat, i) => (
+          <StatTile key={stat.label} index={i} label={stat.label} value={stat.value} sub={stat.sub} icon={<stat.icon size={14} aria-hidden />} tone={stat.tone} />
         ))}
       </div>
 
-      {/* Per-agent status — one row per agent, since "is it set up?" is a
-          question about a specific agent, not about the workspace. */}
+      {/* Per-agent status: "is it set up?" is a question about a specific agent, not the workspace. */}
       {o.agents.length > 0 && (
-        <div style={panelStyle}>
-          <div style={eyebrow}>Your agents</div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {o.agents.map((a, i) => (
-              <Link
-                key={a.id}
-                href={`/dashboard/agents/${a.id}`}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', borderTop: i > 0 ? '1px solid var(--line)' : 'none', textDecoration: 'none' }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, color: 'var(--ink)', margin: 0 }}>
-                    {a.name}
-                    {a.isDefault && <span style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'var(--accent-text)' }}> · default</span>}
-                  </p>
-                  <p style={{ fontSize: 11.5, color: 'var(--ink-mute)', margin: 0 }}>
-                    {a.indexedDocs} doc{a.indexedDocs === 1 ? '' : 's'} indexed
-                  </p>
-                </div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'var(--font-mono)', color: a.channels.length ? 'var(--mint)' : 'var(--ink-mute)', flexShrink: 0 }}>
-                  <Radio size={12} />
-                  {a.channels.length ? a.channels.join(' · ') : 'not deployed'}
-                </span>
-                <ChevronRight size={14} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} />
-              </Link>
-            ))}
-          </div>
-        </div>
+        <Panel title="Your agents" sub={`${o.liveAgentCount} of ${o.agents.length} live`}>
+          {o.agents.map((a, i) => (
+            <ListRow
+              key={a.id}
+              index={i}
+              href={`/dashboard/agents/${a.id}`}
+              title={<>{a.name}{a.isDefault && <Chip>default</Chip>}</>}
+              sub={`${a.indexedDocs} doc${a.indexedDocs === 1 ? '' : 's'} indexed · ${a.chunks.toLocaleString('en-US')} chunks`}
+              meta={<>{a.channels.map((c) => <Chip key={c}>{c}</Chip>)}<StatusPill tone={a.channels.length ? 'green' : 'neutral'}>{a.channels.length ? 'Live' : 'Not deployed'}</StatusPill></>}
+            />
+          ))}
+        </Panel>
       )}
 
       {/* Recent conversations */}
       {o.recent.length > 0 && (
-        <div style={panelStyle}>
-          <div style={eyebrow}>Recent conversations</div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {o.recent.map((conv, i) => (
-              <Link key={conv.id} href={`/dashboard/inbox?conversation=${encodeURIComponent(conv.id)}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', borderTop: i > 0 ? '1px solid var(--line)' : 'none', textDecoration: 'none' }}>
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--ink-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {conv.lastMessage || 'New conversation'}
-                </span>
-                <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-mute)', flexShrink: 0 }}>{conv.status}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
+        <Panel title="Recent conversations" action={<Link href="/dashboard/inbox" className={rows.link}>Open inbox</Link>}>
+          {o.recent.map((conv, i) => (
+            <ListRow
+              key={conv.id}
+              index={i}
+              plain
+              href={`/dashboard/inbox?conversation=${encodeURIComponent(conv.id)}`}
+              title={(conv.lastMessage || 'New conversation').replace(/[*_`#]/g, '')}
+              sub={timeAgo(conv.updatedAt)}
+              meta={<StatusPill tone={STATUS_TONE[conv.status] ?? 'neutral'}>{conv.status}</StatusPill>}
+            />
+          ))}
+        </Panel>
       )}
 
     </div>

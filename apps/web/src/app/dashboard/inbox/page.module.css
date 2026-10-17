@@ -80,11 +80,15 @@
   box-shadow: 0 0 0 1px var(--image-outline);
 }
 
+.message { animation: messageIn 260ms ease-out both; }
+@keyframes messageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .message { animation: none; } }
+
 .messageBubble {
   min-width: 0;
   max-width: 100%;
-  padding: 9px 12px;
-  border-radius: 16px;
+  padding: 9px 13px;
+  border-radius: 12px;
   font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -92,25 +96,22 @@
 }
 
 .userBubble {
-  border-top-right-radius: 4px;
   color: var(--control-primary-text);
   background: var(--control-primary);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--control-primary) 14%, transparent);
+  font-weight: 510;
   white-space: pre-wrap;
 }
 
 .assistantBubble {
-  border-top-left-radius: 4px;
   color: var(--ink-dim);
   background: var(--panel);
   box-shadow: var(--shadow-control);
 }
 
 .operatorBubble {
-  border-top-left-radius: 4px;
-  color: var(--control-primary-text);
-  background: var(--control-primary);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--control-primary) 14%, transparent);
+  color: var(--ink);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 45%, transparent);
 }
 
 .markdown { min-width: 0; }
