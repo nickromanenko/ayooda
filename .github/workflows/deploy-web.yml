@@ -50,6 +50,7 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=961350499645 \
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=1:961350499645:web:b31543aec7bb7dd28b5954 \
             --build-arg NEXT_PUBLIC_API_URL=https://api.ayooda.live \
+            --build-arg NEXT_PUBLIC_MIXPANEL_TOKEN=8a369be75a1879a51cc7fd8a7f368284 \
             -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
@@ -61,6 +62,6 @@ jobs:
             --region="$REGION" \
             --platform=managed \
             --allow-unauthenticated \
-            --set-env-vars "FIREBASE_PROJECT_ID=ayooda-1791f" \
-            --set-secrets "FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest" \
+            --set-env-vars "FIREBASE_PROJECT_ID=ayooda-1791f,BETTERSTACK_INGESTING_HOST=s2800241.us-west-2a.betterstackdata.com" \
+            --set-secrets "FIREBASE_SERVICE_ACCOUNT_KEY=firebase-service-account-key:latest,BETTERSTACK_SOURCE_TOKEN=betterstack-web-token:latest" \
             --quiet

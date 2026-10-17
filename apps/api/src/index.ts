@@ -1,7 +1,16 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { installBetterStackLogging } from '@ayooda/shared'
 import { getLangfuse } from './lib/langfuse'
+
+if (process.env.BETTERSTACK_SOURCE_TOKEN) {
+  installBetterStackLogging({
+    service: 'ayooda-api',
+    sourceToken: process.env.BETTERSTACK_SOURCE_TOKEN,
+    ingestingHost: process.env.BETTERSTACK_INGESTING_HOST ?? '',
+  })
+}
 
 const app = new Hono()
 

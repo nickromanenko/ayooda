@@ -2,7 +2,7 @@
 
 import mixpanel from 'mixpanel-browser'
 
-const MIXPANEL_TOKEN = '8a369be75a1879a51cc7fd8a7f368284'
+const MIXPANEL_TOKEN = process.env.NEXT_PUBLIC_MIXPANEL_TOKEN
 
 type AuthMethod = 'email' | 'google' | 'account_link'
 type AnalyticsContext = 'onboarding' | 'dashboard'
@@ -36,6 +36,10 @@ declare global {
 
 export function initializeProductAnalytics() {
   if (typeof window === 'undefined' || window.__ayoodaMixpanelInitialized) return
+  if (!MIXPANEL_TOKEN) {
+    console.warn('[mixpanel] NEXT_PUBLIC_MIXPANEL_TOKEN is not set; skipping initialization')
+    return
+  }
 
   try {
     mixpanel.init(MIXPANEL_TOKEN, {

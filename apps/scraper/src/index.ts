@@ -19,11 +19,20 @@ import { Pinecone } from '@pinecone-database/pinecone'
 import { GoogleGenerativeAI, type EmbedContentRequest } from '@google/generative-ai'
 import {
   deleteDocumentVectors,
+  installBetterStackLogging,
   isKnowledgeSyncInterval,
   knowledgeSyncRetryAt,
   nextKnowledgeSyncAt,
 } from '@ayooda/shared'
 import { extractText } from './extract'
+
+if (process.env.BETTERSTACK_SOURCE_TOKEN) {
+  installBetterStackLogging({
+    service: 'ayooda-scraper',
+    sourceToken: process.env.BETTERSTACK_SOURCE_TOKEN,
+    ingestingHost: process.env.BETTERSTACK_INGESTING_HOST ?? '',
+  })
+}
 
 // ---------------------------------------------------------------------------
 // Firebase Admin

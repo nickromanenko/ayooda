@@ -8,7 +8,7 @@ const layout = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8
 
 test('Mixpanel initializes once on the client with EU ingestion and requested capture settings', () => {
   assert.match(component, /^'use client'/)
-  assert.match(analytics, /8a369be75a1879a51cc7fd8a7f368284/)
+  assert.match(analytics, /process\.env\.NEXT_PUBLIC_MIXPANEL_TOKEN/)
   assert.match(analytics, /autocapture: true/)
   assert.match(analytics, /record_sessions_percent: 100/)
   assert.match(analytics, /api_host: 'https:\/\/api-eu\.mixpanel\.com'/)

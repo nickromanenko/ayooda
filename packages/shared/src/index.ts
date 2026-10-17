@@ -354,6 +354,7 @@ export * from './agent-roles'
 export * from './agent-templates'
 export * from './ticketing'
 export * from './mcp'
+export * from './betterstack-logger'
 
 export type ChatStreamEvent =
   | { type: 'chunk'; text: string }
