@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo, CSSProperties, ReactNode, ComponentType } from 'react'
+import { useState, useEffect, useRef, CSSProperties, ReactNode, ComponentType } from 'react'
 import Link from 'next/link'
 import { SiShopify, SiStripe, SiHubspot, SiNotion, SiZendesk, SiLinear, SiIntercom, SiZapier, SiGmail, SiAirtable, SiGraphql, SiModelcontextprotocol } from 'react-icons/si'
 import { Sparkles, Zap, Rocket, Webhook, Braces, Database, Boxes, Network, Send } from 'lucide-react'
 import { LANDING_LINKS } from '@/lib/landing-links'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
+import { ProductDemo } from '@/components/landing/ProductDemo'
+import { AyoodaMark } from '@/components/brand/AyoodaMark'
 
 // ─── Reveal ───────────────────────────────────────────────────────────────────
 
@@ -42,11 +44,7 @@ function Reveal({ children, delay = 0, style }: { children: ReactNode; delay?: n
 function Logo({ size = 22 }: { size?: number }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
-        <circle cx="12" cy="12" r="4" fill="var(--accent)" />
-        <path d="M2.5 12h6M15.5 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
+      <AyoodaMark size={size} />
       <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 18 }}>Ayooda</span>
     </div>
   )
@@ -135,164 +133,6 @@ function Nav() {
   )
 }
 
-// ─── Chat demo ────────────────────────────────────────────────────────────────
-
-type ChatMsg = { who: 'user' | 'ayooda' | 'tool'; text: string; delay: number; typing?: number }
-
-function ChatBubble({ m }: { m: ChatMsg }) {
-  const isUser = m.who === 'user'
-  const isTool = m.who === 'tool'
-  if (isTool) {
-    return (
-      <div style={{
-        alignSelf: 'flex-start',
-        fontFamily: 'var(--font-mono)', fontSize: 11.5,
-        color: 'var(--ink-mute)',
-        background: 'var(--bg-2)',
-        border: '1px dashed var(--line-2)',
-        padding: '6px 10px', borderRadius: 8,
-        animation: 'fade-up .4s ease',
-      }}>{m.text}</div>
-    )
-  }
-  return (
-    <div id="demo" tabIndex={-1} aria-label="Ayooda support conversation demo" style={{
-      alignSelf: isUser ? 'flex-end' : 'flex-start',
-      maxWidth: '76%', display: 'flex', gap: 10,
-      flexDirection: isUser ? 'row-reverse' : 'row',
-      animation: 'fade-up .4s ease',
-    }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: 50, flexShrink: 0,
-        background: isUser ? 'var(--panel-2)' : 'var(--accent)',
-        display: 'grid', placeItems: 'center',
-        fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
-        color: isUser ? 'var(--ink-dim)' : '#1a0e08',
-        border: '1px solid var(--line)',
-      }}>{isUser ? 'M' : 'A'}</div>
-      <div style={{
-        background: isUser ? 'var(--panel-2)' : 'var(--bg-2)',
-        border: '1px solid var(--line)',
-        padding: '10px 14px', borderRadius: 14,
-        borderTopLeftRadius: isUser ? 14 : 4,
-        borderTopRightRadius: isUser ? 4 : 14,
-        fontSize: 14.5, lineHeight: 1.5, color: 'var(--ink)',
-      }}>{m.text}</div>
-    </div>
-  )
-}
-
-function TypingIndicator() {
-  return (
-    <div style={{ alignSelf: 'flex-start', display: 'flex', gap: 10, alignItems: 'center' }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: 50,
-        background: 'var(--accent)', display: 'grid', placeItems: 'center',
-        fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: '#1a0e08',
-      }}>A</div>
-      <div style={{
-        padding: '12px 14px', borderRadius: 14, background: 'var(--bg-2)',
-        border: '1px solid var(--line)', display: 'flex', gap: 5,
-      }}>
-        {[0, 1, 2].map(i => (
-          <span key={i} style={{
-            width: 6, height: 6, borderRadius: 50, background: 'var(--ink-mute)',
-            animation: `typing-dot 1.1s ${i * 0.15}s infinite ease-in-out`,
-            display: 'inline-block',
-          }} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function ChatDemo() {
-  const script = useMemo<ChatMsg[]>(() => [
-    { who: 'user', text: "My order #4421 hasn't shipped yet — it's been 5 days.", delay: 900 },
-    { who: 'ayooda', typing: 1200, text: "Let me check that for you right now.", delay: 600 },
-    { who: 'tool', text: "→ orders.lookup(id: 4421)", delay: 900 },
-    { who: 'ayooda', typing: 1400, text: "Your order was held for address verification. I've confirmed the address on file and released it — it ships today via DHL Express, ETA Wed Apr 22.", delay: 400 },
-    { who: 'user', text: "Oh! Can you also update the delivery address?", delay: 700 },
-    { who: 'ayooda', typing: 1100, text: "Of course. What's the new address?", delay: 400 },
-  ], [])
-
-  const [step, setStep] = useState(0)
-  const [typing, setTyping] = useState(false)
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
-
-  useEffect(() => {
-    timers.current.forEach(clearTimeout)
-    timers.current = []
-
-    let elapsed = 0
-    let idx = 0
-    const queue = () => {
-      if (idx >= script.length) {
-        timers.current.push(setTimeout(() => { setStep(0); idx = 0; elapsed = 0; queue() }, 3500))
-        return
-      }
-      const item = script[idx]
-      if (item.typing) {
-        timers.current.push(setTimeout(() => setTyping(true), elapsed + item.delay))
-        timers.current.push(setTimeout(() => { setTyping(false); setStep(idx + 1) }, elapsed + item.delay + item.typing))
-        elapsed += item.delay + item.typing + 300
-      } else {
-        timers.current.push(setTimeout(() => setStep(idx + 1), elapsed + item.delay))
-        elapsed += item.delay + 600
-      }
-      idx++
-      queue()
-    }
-    queue()
-    return () => timers.current.forEach(clearTimeout)
-  }, [script])
-
-  const visible = script.slice(0, step)
-
-  return (
-    <div style={{
-      margin: '0 auto', maxWidth: 860,
-      padding: 14, borderRadius: 28,
-      background: 'linear-gradient(180deg, color-mix(in oklab, var(--panel) 90%, transparent), var(--panel))',
-      border: '1px solid var(--line)',
-      boxShadow: 'var(--shadow-card)',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 10px 10px', borderBottom: '1px solid var(--line)', marginBottom: 12,
-      }}>
-        <span style={{ width: 10, height: 10, borderRadius: 50, background: '#ff6057', display: 'inline-block' }} />
-        <span style={{ width: 10, height: 10, borderRadius: 50, background: '#ffbd2e', display: 'inline-block' }} />
-        <span style={{ width: 10, height: 10, borderRadius: 50, background: '#27c93f', display: 'inline-block' }} />
-        <div style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--ink-faint)' }}>
-          product walkthrough · representative workflow
-        </div>
-      </div>
-
-      <div style={{ height: 360, padding: '8px 14px 18px', display: 'flex', flexDirection: 'column', gap: 14, overflow: 'hidden', justifyContent: 'flex-end' }}>
-        {visible.map((m, i) => <ChatBubble key={i} m={m} />)}
-        {typing && <TypingIndicator />}
-      </div>
-
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 12px', margin: '0 6px 6px',
-        borderRadius: 14, background: 'var(--bg-2)', border: '1px solid var(--line)',
-      }}>
-        <div style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Type a message…</div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--panel-2)', display: 'grid', placeItems: 'center' }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="var(--ink-mute)" strokeWidth="1.5" strokeLinecap="round" /></svg>
-          </div>
-          <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7l5-5 5 5M7 2v11" stroke="#1a0e08" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
 function Hero() {
@@ -312,24 +152,16 @@ function Hero() {
       }} />
 
       <div className="container" style={{ position: 'relative' }}>
-        <Reveal>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <div className="pill">
-              <span className="dot" /> New — Model Context Protocol support
-            </div>
-          </div>
-        </Reveal>
-
         <h1 className="display" style={{
           fontSize: 'clamp(34px, 5.4vw, 72px)',
-          margin: '28px 0 22px', textAlign: 'center',
+          margin: '0 0 22px', textAlign: 'center',
           maxWidth: 1000, marginInline: 'auto', textWrap: 'balance' as CSSProperties['textWrap'],
         }}>
           <Reveal style={{ display: 'block' }}>
             Resolve routine tickets.
           </Reveal>
           <Reveal delay={120} style={{ display: 'block' }}>
-            Keep your team <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>focused.</em>
+            Keep your team <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>focused.</em>
           </Reveal>
         </h1>
 
@@ -362,7 +194,7 @@ function Hero() {
 
         <Reveal delay={560}>
           <div style={{ marginTop: 60 }}>
-            <ChatDemo />
+            <ProductDemo />
           </div>
         </Reveal>
       </div>
@@ -406,30 +238,79 @@ function LogoStrip() {
 // ─── Why ──────────────────────────────────────────────────────────────────────
 
 function Glyph({ kind }: { kind: string }) {
-  const s = { width: 40, height: 40, viewBox: '0 0 40 40', fill: 'none' as const }
   const k = 'var(--ink)'
+  const hair = { stroke: k, strokeWidth: 1.4, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  const dim = { ...hair, opacity: 0.32 }
+  const lime = { stroke: 'var(--accent)', strokeWidth: 1.8, strokeLinecap: 'round' as const }
   return (
-    <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--accent-soft)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
-      {kind === 'world' && <svg {...s}><circle cx="20" cy="20" r="12" stroke={k} strokeWidth="1.4" /><ellipse cx="20" cy="20" rx="5" ry="12" stroke={k} strokeWidth="1.4" /><path d="M8 20h24" stroke={k} strokeWidth="1.4" /></svg>}
-      {kind === 'long' && <svg {...s}><rect x="8" y="14" width="24" height="12" rx="2" stroke={k} strokeWidth="1.4" /><path d="M12 14v-3M20 14v-3M28 14v-3M12 29v-3M20 29v-3M28 29v-3" stroke={k} strokeWidth="1.4" strokeLinecap="round" /></svg>}
-      {kind === 'eye' && <svg {...s}><path d="M6 20c3-6 8-9 14-9s11 3 14 9c-3 6-8 9-14 9S9 26 6 20z" stroke={k} strokeWidth="1.4" /><circle cx="20" cy="20" r="3.5" fill="var(--accent)" /></svg>}
-      {kind === 'root' && <svg {...s}><path d="M20 6v14M20 20l-8 8M20 20l8 8M20 20l-10-2M20 20l10-2" stroke={k} strokeWidth="1.4" strokeLinecap="round" /><circle cx="20" cy="20" r="2.5" fill="var(--accent)" /></svg>}
-      {kind === 'balance' && <svg {...s}><circle cx="13" cy="20" r="6" stroke={k} strokeWidth="1.4" /><circle cx="27" cy="20" r="6" stroke={k} strokeWidth="1.4" strokeDasharray="2 2" /><path d="M7 20h12" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" /></svg>}
+    <div className="wg-tile" aria-hidden="true">
+      <svg className="wg" width="46" height="46" viewBox="0 0 40 40" fill="none">
+        {kind === 'world' && (
+          <>
+            <circle cx="20" cy="20" r="12" {...hair} />
+            <path d="M8 20h24M10 13.5c6 2.6 14 2.6 20 0M10 26.5c6-2.6 14-2.6 20 0" {...dim} />
+            <ellipse className="wg-meridian" cx="20" cy="20" rx="6" ry="12" {...hair} />
+            <ellipse className="wg-meridian wg-meridian-b" cx="20" cy="20" rx="6" ry="12" {...dim} />
+            <g className="wg-orbit"><circle cx="20" cy="3.6" r="2" fill="var(--accent)" /></g>
+          </>
+        )}
+        {kind === 'long' && (
+          <>
+            <path d={INFINITY} {...dim} />
+            <path className="wg-trace" d={INFINITY} pathLength={100} {...lime} />
+          </>
+        )}
+        {kind === 'eye' && (
+          <>
+            <g className="wg-lid">
+              <path d="M5 20c3.4-6.2 8.6-9.4 15-9.4s11.6 3.2 15 9.4c-3.4 6.2-8.6 9.4-15 9.4S8.4 26.2 5 20z" {...hair} />
+              <g className="wg-iris">
+                <circle cx="20" cy="20" r="6" {...dim} />
+                <circle cx="20" cy="20" r="2.8" fill="var(--accent)" />
+              </g>
+            </g>
+          </>
+        )}
+        {kind === 'root' && (
+          <>
+            <path d={ROOT_L} {...dim} /><path d={ROOT_M} {...dim} /><path d={ROOT_R} {...dim} />
+            <path className="wg-pulse" d={ROOT_L} pathLength={100} {...lime} />
+            <path className="wg-pulse wg-pulse-b" d={ROOT_M} pathLength={100} {...lime} />
+            <path className="wg-pulse wg-pulse-c" d={ROOT_R} pathLength={100} {...lime} />
+            {[8, 20, 32].map((x) => <circle key={x} cx={x} cy={x === 20 ? 33 : 31.5} r="2.2" fill="var(--panel-2)" {...hair} />)}
+            <circle className="wg-ring" cx="20" cy="9" r="3" {...lime} strokeWidth="1.2" />
+            <circle cx="20" cy="9" r="3" fill="var(--accent)" />
+          </>
+        )}
+        {kind === 'balance' && (
+          <>
+            <circle cx="20" cy="20" r="12.5" {...dim} />
+            <circle className="wg-arc" cx="20" cy="20" r="12.5" pathLength={100} {...lime} />
+            <path className="wg-check" d="M14 20.6l4.2 4.2L26.4 15.6" pathLength={20} {...hair} strokeWidth="1.8" />
+          </>
+        )}
+      </svg>
     </div>
   )
 }
+
+const INFINITY = 'M20 20c-3-5-6.5-6.5-9.5-6.5C7 13.5 5 16.5 5 20s2 6.5 5.5 6.5c3 0 6.5-1.5 9.5-6.5s6.5-6.5 9.5-6.5c3.5 0 5.5 3 5.5 6.5s-2 6.5-5.5 6.5c-3 0-6.5-1.5-9.5-6.5z'
+const ROOT_L = 'M8 31.5C8 21 20 22 20 12'
+const ROOT_M = 'M20 33V12'
+const ROOT_R = 'M32 31.5C32 21 20 22 20 12'
 
 function PillarCard({ title, body, glyph }: { title: string; body: string; glyph: string }) {
   const [hover, setHover] = useState(false)
   return (
     <div
+      className="pillar-card" tabIndex={0}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         padding: '22px 24px', borderRadius: 'var(--r-lg)', border: '1px solid var(--line)',
         background: hover ? 'var(--panel)' : 'transparent',
         transition: 'background .25s ease, transform .25s ease',
         transform: hover ? 'translateY(-2px)' : 'none',
-        display: 'grid', gridTemplateColumns: '48px 1fr', gap: 18, alignItems: 'start',
+        display: 'grid', gridTemplateColumns: '52px 1fr', gap: 20, alignItems: 'start',
       }}
     >
       <Glyph kind={glyph} />
@@ -461,7 +342,7 @@ function Why() {
             </Reveal>
             <Reveal delay={80}>
               <h2 className="display" style={{ fontSize: 'clamp(40px, 4.2vw, 58px)', margin: 0, textWrap: 'balance' as CSSProperties['textWrap'] }}>
-                An agent you can actually <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>trust</em> in production.
+                An agent you can actually <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>trust</em> in production.
               </h2>
             </Reveal>
             <Reveal delay={160}>
@@ -494,7 +375,7 @@ function BadgeShield({ kind }: { kind: string }) {
       clipPath: 'polygon(50% 0, 100% 18%, 100% 72%, 50% 100%, 0 72%, 0 18%)',
       display: 'grid', placeItems: 'center', flexShrink: 0,
     }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#1a0e08', letterSpacing: '0.08em' }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#08090a', letterSpacing: '0.08em' }}>
         {labels[kind]}
       </span>
     </div>
@@ -535,7 +416,7 @@ function SolutionsBand() {
         <Reveal>
           <h2 className="display" style={{ fontSize: 'clamp(40px, 5vw, 72px)', margin: 0, textAlign: 'center', textWrap: 'balance' as CSSProperties['textWrap'] }}>
             One agent. Five channels.<br />
-            <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>A thousand possibilities.</em>
+            <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>A thousand possibilities.</em>
           </h2>
         </Reveal>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginTop: 56 }}>
@@ -606,7 +487,7 @@ function FeatureMock({ kind }: { kind: string }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {["Describe your agent's role", 'Upload your knowledge', 'Set a tone of voice', 'Go live'].map((s, i) => (
             <div key={s} style={{ padding: '16px 18px', borderRadius: 12, border: '1px solid var(--line)', background: i <= 2 ? 'var(--panel)' : 'transparent', display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ width: 26, height: 26, borderRadius: 50, background: i <= 2 ? 'var(--accent)' : 'transparent', border: i <= 2 ? 'none' : '1px dashed var(--line-2)', color: '#1a0e08', fontSize: 12, fontWeight: 700, display: 'grid', placeItems: 'center' }}>{i <= 2 ? '✓' : i + 1}</span>
+              <span style={{ width: 26, height: 26, borderRadius: 50, background: i <= 2 ? 'var(--accent)' : 'transparent', border: i <= 2 ? 'none' : '1px dashed var(--line-2)', color: '#08090a', fontSize: 12, fontWeight: 700, display: 'grid', placeItems: 'center' }}>{i <= 2 ? '✓' : i + 1}</span>
               <span style={{ fontSize: 15, color: i <= 2 ? 'var(--ink)' : 'var(--ink-mute)' }}>{s}</span>
               {i === 2 && <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>in progress…</span>}
             </div>
@@ -749,7 +630,7 @@ function Features() {
         </Reveal>
         <Reveal delay={80}>
           <h2 className="display" style={{ fontSize: 'clamp(40px, 5vw, 68px)', margin: 0, maxWidth: 820, textWrap: 'balance' as CSSProperties['textWrap'] }}>
-            Everything you need. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Nothing you don&apos;t.</em>
+            Everything you need. <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>Nothing you don&apos;t.</em>
           </h2>
         </Reveal>
         <div className="landing-feature-layout" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 48, marginTop: 56 }}>
@@ -790,7 +671,7 @@ function StepIllustration({ idx }: { idx: number }) {
   if (idx === 0) return (
     <div style={{ ...size, display: 'flex', alignItems: 'flex-end', gap: 6, padding: 8, background: 'var(--bg-2)', borderRadius: 12, border: '1px solid var(--line)' }}>
       {['PDF', 'DOC', 'MD', 'CSV', 'URL'].map((t, i) => (
-        <div key={t} style={{ flex: 1, height: `${40 + i * 14}%`, background: i % 2 ? 'var(--accent)' : 'var(--accent-2)', opacity: 0.8 + i * 0.04, borderRadius: 6, display: 'grid', placeItems: 'center', fontFamily: 'var(--font-mono)', fontSize: 9, color: '#1a0e08', fontWeight: 700 }}>{t}</div>
+        <div key={t} style={{ flex: 1, height: `${40 + i * 14}%`, background: i % 2 ? 'var(--accent)' : 'var(--accent-2)', opacity: 0.8 + i * 0.04, borderRadius: 6, display: 'grid', placeItems: 'center', fontFamily: 'var(--font-mono)', fontSize: 9, color: '#08090a', fontWeight: 700 }}>{t}</div>
       ))}
     </div>
   )
@@ -817,7 +698,7 @@ function StepIllustration({ idx }: { idx: number }) {
   )
   return (
     <div style={{ ...size, padding: 10, background: 'var(--bg-2)', borderRadius: 12, border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-      <div style={{ width: 56, height: 56, borderRadius: 50, background: 'var(--accent)', display: 'grid', placeItems: 'center', animation: 'pulse-ring 2s infinite', color: '#1a0e08', fontWeight: 700 }}>A</div>
+      <div style={{ width: 56, height: 56, borderRadius: 50, background: 'var(--accent)', display: 'grid', placeItems: 'center', animation: 'pulse-ring 2s infinite', color: '#08090a', fontWeight: 700 }}>A</div>
       <div style={{ position: 'absolute', inset: 0, borderRadius: 12, border: '1px dashed var(--line-2)', animation: 'orbit-rotate 20s linear infinite' }} />
     </div>
   )
@@ -837,7 +718,7 @@ function HowItWorks() {
           <Reveal><div className="eyebrow"><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}How it works</div></Reveal>
           <Reveal delay={80}>
             <h2 className="display" style={{ fontSize: 'clamp(40px, 5vw, 64px)', margin: '18px 0 14px', maxWidth: 760, textWrap: 'balance' as CSSProperties['textWrap'] }}>
-              Four steps. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>From zero to live in an afternoon.</em>
+              Four steps. <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>From zero to live in an afternoon.</em>
             </h2>
           </Reveal>
           <Reveal delay={160}>
@@ -915,7 +796,7 @@ function Integrations() {
             <Reveal><div className="eyebrow" style={{ marginBottom: 16 }}><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Integrations</div></Reveal>
             <Reveal delay={80}>
               <h2 className="display" style={{ fontSize: 'clamp(36px, 4.4vw, 58px)', margin: 0, textWrap: 'balance' as CSSProperties['textWrap'] }}>
-                Works with your stack. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Not against it.</em>
+                Works with your stack. <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>Not against it.</em>
               </h2>
             </Reveal>
             <Reveal delay={160}>
@@ -936,7 +817,7 @@ function Integrations() {
                 width: 92, height: 92, borderRadius: 50,
                 background: 'radial-gradient(circle at 30% 30%, var(--accent-2), var(--accent))',
                 display: 'grid', placeItems: 'center',
-                fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, color: '#1a0e08',
+                fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, color: '#08090a',
                 boxShadow: '0 10px 50px rgba(245,165,36,0.4)',
                 animation: 'float 4s ease-in-out infinite',
                 zIndex: 3, position: 'relative',
@@ -1015,7 +896,7 @@ function OutcomePlaybook() {
           <Reveal><div className="eyebrow"><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Outcome playbook</div></Reveal>
           <Reveal delay={80}>
             <h2 className="display" style={{ fontSize: 'clamp(40px, 5vw, 64px)', margin: '18px 0 0', maxWidth: 760, textWrap: 'balance' as CSSProperties['textWrap'] }}>
-              Put the routine on autopilot. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Keep control of the rest.</em>
+              Put the routine on autopilot. <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>Keep control of the rest.</em>
             </h2>
           </Reveal>
         </div>
@@ -1052,7 +933,7 @@ const PLANS = [
     gradient: 'linear-gradient(135deg, #f5a524 0%, #b45309 100%)',
     gradientSoft: 'linear-gradient(180deg, rgba(245,165,36,0.14) 0%, transparent 100%)',
     borderActive: 'var(--accent)',
-    textColor: '#1a0e08',
+    textColor: '#08090a',
     aiCredit: 25, includedConvos: 500,
     feats: [
       'Organize and utilize customer information effectively',
@@ -1140,7 +1021,7 @@ function Pricing() {
           <Reveal><div className="eyebrow"><span style={{ color: 'var(--accent)' }}>◆</span>{'  '}Pricing</div></Reveal>
           <Reveal delay={80}>
             <h2 className="display" style={{ fontSize: 'clamp(40px, 5vw, 64px)', margin: '18px 0 14px', maxWidth: 760, textWrap: 'balance' as CSSProperties['textWrap'] }}>
-              No surprises. <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>No hidden fees.</em>
+              No surprises. <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>No hidden fees.</em>
             </h2>
           </Reveal>
           <Reveal delay={160}>
@@ -1242,7 +1123,7 @@ function FAQ() {
             <Reveal delay={80}>
               <h2 className="display" style={{ fontSize: 'clamp(36px, 4.4vw, 56px)', margin: 0, textWrap: 'balance' as CSSProperties['textWrap'] }}>
                 Got questions? <br />
-                <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>We&apos;ve got answers.</em>
+                <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>We&apos;ve got answers.</em>
               </h2>
             </Reveal>
             <Reveal delay={160}>
@@ -1273,7 +1154,7 @@ function FinalCTA() {
       <div className="container" style={{ position: 'relative', textAlign: 'center' }}>
         <Reveal>
           <h2 className="display" style={{ fontSize: 'clamp(48px, 6.6vw, 92px)', margin: 0, maxWidth: 900, marginInline: 'auto', textWrap: 'balance' as CSSProperties['textWrap'] }}>
-            Get started with <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>Ayooda</em> today.
+            Get started with <em style={{ fontStyle: 'normal', color: 'var(--ink-mute)' }}>Ayooda</em> today.
           </h2>
         </Reveal>
         <Reveal delay={100}>

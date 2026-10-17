@@ -33,6 +33,7 @@ import styles from './Sidebar.module.css'
 import { DASHBOARD_SEARCH_EVENT } from './DashboardSearch'
 import { DASHBOARD_ATTENTION_EVENT } from './DashboardAttention'
 import { normalizeDashboardHelpRoute } from '@/lib/knowledge-base'
+import { AyoodaMark } from '@/components/brand/AyoodaMark'
 
 // Knowledge, tools, escalation rules and deployment all configure one agent, so
 // they are reached through that agent's tabs rather than as siblings here.
@@ -224,11 +225,7 @@ export function Sidebar({ role, hasAgentAccess = false, isPlatformAdmin = false 
     <>
     <header className={styles.mobileHeader}>
       <Link href="/dashboard" className={styles.mobileLogo} aria-label="Ayooda dashboard">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
-          <circle cx="12" cy="12" r="4" fill="var(--accent)" />
-          <path d="M2.5 12h6M15.5 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
+        <AyoodaMark size={20} />
         Ayooda
       </Link>
       <div className={styles.mobileHeaderActions}>
@@ -279,11 +276,7 @@ export function Sidebar({ role, hasAgentAccess = false, isPlatformAdmin = false 
           display: 'inline-flex', alignItems: 'center', gap: 8,
           color: 'var(--ink)', textDecoration: 'none',
         }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden style={{ flexShrink: 0 }}>
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
-            <circle cx="12" cy="12" r="4" fill="var(--accent)" />
-            <path d="M2.5 12h6M15.5 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
+          <AyoodaMark size={20} style={{ flexShrink: 0 }} />
           {!collapsed && <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 16 }}>Ayooda</span>}
         </Link>
       </div>

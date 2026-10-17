@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import styles from './LegalPage.module.css'
+import { AyoodaMark } from '@/components/brand/AyoodaMark'
 
 export type LegalSection = {
   id: string
@@ -30,11 +31,7 @@ export function LegalPage({
         <div className="container">
           <nav className={styles.nav} aria-label="Legal page navigation">
             <Link href="/" className={styles.brand} aria-label="Ayooda home">
-              <svg className={styles.brandMark} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
-                <circle cx="12" cy="12" r="4" fill="var(--accent)" />
-                <path d="M2.5 12h6M15.5 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
+              <AyoodaMark className={styles.brandMark} />
               Ayooda
             </Link>
             <div className={styles.navActions}>
