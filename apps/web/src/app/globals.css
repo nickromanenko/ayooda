@@ -5,67 +5,67 @@
 :root {
   color-scheme: dark;
 
-  /* Surface */
-  --bg: #0b0c10;
-  --bg-2: #101217;
-  --panel: #15171d;
-  --panel-2: #1b1e26;
-  --line: rgba(255,255,255,0.08);
-  --line-2: rgba(255,255,255,0.14);
+  /* Surface — Linear "midnight precision instrument" */
+  --bg: #08090a;
+  --bg-2: #0f1011;
+  --panel: #0f1011;
+  --panel-2: #161718;
+  --line: #23252a;
+  --line-2: #383b3f;
 
   /* Type */
-  --ink: #f4f4f0;
-  --ink-dim: #c9c9c1;
-  --ink-mute: #8c8c84;
-  --ink-faint: #82827a;
+  --ink: #ffffff;
+  --ink-dim: #d0d6e0;
+  --ink-mute: #8a8f98;
+  --ink-faint: #767b84;
 
-  /* Accent — amber */
-  --accent: #f5a524;
-  --accent-2: #ffd27a;
-  --accent-text: #f5a524;
-  --accent-soft: rgba(245, 165, 36, 0.14);
+  /* Accent — acid lime (primary action only); text accents stay neutral */
+  --accent: #e4f222;
+  --accent-2: #eef76a;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(255, 255, 255, 0.06);
 
   /* Interactive controls */
   --control-primary: var(--accent);
   --control-primary-hover: var(--accent-2);
-  --control-primary-text: #1a0e08;
+  --control-primary-text: #08090a;
   --control-surface: var(--bg-2);
   --control-surface-hover: var(--panel-2);
   --control-secondary: transparent;
   --control-secondary-hover: var(--panel-2);
   --control-selected: var(--accent-soft);
   --control-selected-text: var(--accent-text);
-  --control-disabled: color-mix(in srgb, var(--accent) 72%, var(--panel));
-  --control-disabled-text: rgba(26, 14, 8, .72);
-  --tooltip-bg: #252832;
-  --tooltip-text: #f7f7f4;
+  --control-disabled: #23252a;
+  --control-disabled-text: #8a8f98;
+  --tooltip-bg: #23252a;
+  --tooltip-text: #ffffff;
   --toggle-knob: #ffffff;
 
   /* Secondary accents */
   --blue: #7aa2ff;
-  --mint: #8be3b5;
+  --mint: #3fc062;
   --violet: #b58bff;
   --ai: #818cf8;
-  --success: #86efac;
+  --success: #27a644;
   --warning: #fbbf24;
-  --danger: #f87171;
-  --brand-neutral: #f4f4f0;
+  --danger: #eb5757;
+  --brand-neutral: #ffffff;
 
-  /* Radii */
-  --r-sm: 10px;
-  --r-md: 16px;
-  --r-lg: 22px;
-  --r-xl: 32px;
+  /* Radii — 6px controls, 12px surfaces, pills */
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 12px;
+  --r-xl: 12px;
 
-  /* Shadows */
-  --shadow-soft: 0 1px 0 rgba(255,255,255,0.04) inset, 0 10px 40px rgba(0,0,0,0.35);
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.05) inset, 0 20px 60px rgba(0,0,0,0.45);
-  --shadow-control: 0 0 0 1px var(--line), 0 2px 8px rgba(0,0,0,0.18);
+  /* Elevation — hairline borders, not shadow stacks */
+  --shadow-soft: inset 0 0 0 1px #23252a, rgba(0, 0, 0, 0.4) 0 2px 4px;
+  --shadow-card: inset 0 0 0 1px #23252a;
+  --shadow-control: 0 0 0 1px #23252a;
   --image-outline: rgba(255, 255, 255, .1);
 
-  /* Fonts — set by next/font, fallbacks here. Montserrat everywhere. */
-  --font-sans: var(--font-montserrat, "Montserrat"), ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: var(--font-montserrat, "Montserrat"), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Fonts — Inter Variable everywhere; mono for IDs and technical metadata */
+  --font-sans: var(--font-inter, "Inter"), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: var(--font-inter, "Inter"), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-ui: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -192,7 +192,8 @@ html {
 
 body {
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11";
+  font-feature-settings: "cv01", "ss03", "zero";
+  letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   margin: 0;
@@ -226,19 +227,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 .display {
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.02;
+  font-weight: 510;
+  letter-spacing: -0.022em;
+  line-height: 1;
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 18px;
-  border-radius: 999px;
+  padding: 10px 16px;
+  border-radius: var(--r-sm);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 510;
+  letter-spacing: -0.011em;
   border: 1px solid var(--line-2);
   background: transparent;
   color: var(--ink);
@@ -247,17 +249,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   font-family: var(--font-sans);
   text-decoration: none;
 }
-.btn:hover { transform: translateY(-1px); }
 .btn:active:not(:disabled) { scale: .96; }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .btn:disabled { cursor: not-allowed; }
 .btn-primary {
   background: var(--accent);
-  color: #1a0e08;
+  color: #08090a;
   border-color: transparent;
-  font-weight: 600;
+  font-weight: 510;
 }
-.btn-primary:hover { background: var(--accent-2); color: #1a0e08; }
+.btn-primary:hover { background: var(--accent-2); color: #08090a; }
 .btn-ghost { border-color: var(--line); color: var(--ink-dim); }
 .btn-ghost:hover { border-color: var(--line-2); color: var(--ink); }
 
@@ -437,7 +438,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     left: 0;
     right: 0;
     padding: 8px;
-    border-radius: 20px;
+    border-radius: 12px;
     background: color-mix(in oklab, var(--panel) 96%, transparent);
     box-shadow: 0 0 0 1px var(--line), 0 18px 50px rgba(0, 0, 0, 0.36);
     backdrop-filter: blur(18px) saturate(130%);
@@ -643,7 +644,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
-::selection { background: var(--accent); color: #1a0e08; }
+::selection { background: var(--accent); color: #08090a; }
 
 /* ─── Background patterns ─── */
 .grid-bg {
@@ -834,4 +835,46 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .responsive-form-row > select,
   .responsive-form-row > textarea { width: 100% !important; }
   .responsive-form-row > button { min-width: 40px; min-height: 40px; align-self: flex-end; }
+}
+
+/* ─── Why pillars: animated glyphs (play on hover/focus; always on for touch) ─── */
+.wg-tile {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line-2), inset 0 12px 16px -12px rgba(255,255,255,.07);
+  display: grid;
+  place-items: center;
+}
+.wg * { transform-box: fill-box; transform-origin: center; animation-play-state: paused; }
+.pillar-card { outline: none; }
+.pillar-card:hover .wg *, .pillar-card:focus-visible .wg * { animation-play-state: running; }
+.pillar-card:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+@media (hover: none) { .wg * { animation-play-state: running; } }
+
+.wg-meridian { animation: wg-meridian 3.4s linear infinite; }
+.wg-meridian-b { animation-delay: -1.7s; }
+.wg .wg-orbit { transform-box: view-box; transform-origin: 20px 20px; animation: wg-spin 5s linear infinite; }
+.wg-trace { stroke-dasharray: 18 82; animation: wg-dash 2.6s linear infinite; }
+.wg-lid { animation: wg-blink 4.2s ease-in-out infinite; }
+.wg-iris { animation: wg-look 3s ease-in-out infinite alternate; }
+.wg-pulse { stroke-dasharray: 14 86; stroke-dashoffset: 14; animation: wg-rise 2.2s linear infinite; }
+.wg-pulse-b { animation-delay: -.73s; }
+.wg-pulse-c { animation-delay: -1.46s; }
+.wg-ring { animation: wg-ring 2.2s ease-out infinite; }
+.wg-arc { stroke-dasharray: 26 74; animation: wg-dash 3.2s linear infinite; }
+.wg-check { stroke-dasharray: 20; animation: wg-check 3.2s ease-in-out infinite; }
+
+@keyframes wg-meridian { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.06); } }
+@keyframes wg-spin { to { transform: rotate(360deg); } }
+@keyframes wg-dash { to { stroke-dashoffset: -100; } }
+@keyframes wg-blink { 0%, 88%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.08); } }
+@keyframes wg-look { 0% { transform: translateX(-2.6px); } 100% { transform: translateX(2.6px); } }
+@keyframes wg-rise { to { stroke-dashoffset: -86; } }
+@keyframes wg-ring { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
+@keyframes wg-check { 0%, 60% { stroke-dashoffset: 0; } 61% { stroke-dashoffset: 20; } 80%, 100% { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wg * { animation: none !important; }
 }

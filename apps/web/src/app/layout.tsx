@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
-import { Montserrat } from 'next/font/google'
+import { Inter } from 'next/font/google'
 import { JetBrains_Mono } from 'next/font/google'
 import { AuthProvider } from '@/components/providers/AuthProvider'
 import { MixpanelAnalytics } from '@/components/providers/MixpanelAnalytics'
@@ -8,10 +8,9 @@ import { AppInteractionProvider } from '@/components/ui/AppInteractionProvider'
 import { AyoodaSupportWidget } from '@/components/providers/AyoodaSupportWidget'
 import './globals.css'
 
-const montserrat = Montserrat({
-  variable: '--font-montserrat',
+const inter = Inter({
+  variable: '--font-inter',
   subsets: ['latin'],
-  style: ['normal', 'italic'],
 })
 
 const jetbrainsMono = JetBrains_Mono({
@@ -29,7 +28,7 @@ const themeScript = `(()=>{try{const key='ayooda.theme';const saved=localStorage
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-scroll-behavior="smooth" className={`${montserrat.variable} ${jetbrainsMono.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" data-scroll-behavior="smooth" className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <Script id="theme-init" strategy="beforeInteractive">{themeScript}</Script>
       </head>

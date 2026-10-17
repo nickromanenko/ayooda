@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
+import { AyoodaMark } from '@/components/brand/AyoodaMark'
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
@@ -23,11 +24,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 400 }}>
         {/* Logo */}
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 32, color: 'var(--ink)', textDecoration: 'none' }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6" />
-            <circle cx="12" cy="12" r="4" fill="var(--accent)" />
-            <path d="M2.5 12h6M15.5 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
+          <AyoodaMark size={22} />
           <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 18 }}>Ayooda</span>
         </Link>
 

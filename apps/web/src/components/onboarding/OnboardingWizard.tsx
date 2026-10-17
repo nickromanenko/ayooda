@@ -47,7 +47,7 @@ export function OnboardingWizard() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-mono)',
                   background: done || active ? 'var(--accent)' : 'var(--panel-2)',
-                  color: done || active ? '#1a0e08' : 'var(--ink-mute)',
+                  color: done || active ? '#08090a' : 'var(--ink-mute)',
                   boxShadow: active ? '0 0 0 4px var(--accent-soft)' : 'none',
                   transition: 'background-color .2s, color .2s, box-shadow .2s',
                 }}>

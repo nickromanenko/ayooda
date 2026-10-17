@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 const landingSource = readFileSync(new URL('../components/LandingPage.tsx', import.meta.url), 'utf8')
+const demoKitSource = readFileSync(new URL('../components/landing/demo-kit.tsx', import.meta.url), 'utf8')
 const metadataSource = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8')
 const publicMarketingCopy = `${landingSource}\n${metadataSource}`
 
@@ -21,7 +22,8 @@ test('public landing copy does not publish unsupported social proof or performan
 })
 
 test('scripted landing demo is identified as a representative walkthrough', () => {
-  assert.match(landingSource, /product walkthrough · representative workflow/i)
+  assert.match(landingSource, /<ProductDemo \/>/)
+  assert.match(demoKitSource, /Representative workflow/)
 })
 
 test('public landing copy does not promise unimplemented enterprise controls or hosting guarantees', () => {
